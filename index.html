@@ -1,16 +1,525 @@
-<!doctype html>
-<html lang="fa" dir="rtl" class="scroll-smooth">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>ژینو | Zheno - کیفیت واقعی، انتخاب ژینو</title>
-    <!-- Google Font Vazirmatn -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
-  </head>
-  <body class="bg-[#FAF8F5] text-slate-800 font-vazirmatn antialiased overflow-x-hidden selection:bg-amber-400 selection:text-amber-950">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
-  </body>
-</html>
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<meta name="description" content="ژینو | کیفیت واقعی، انتخاب ژینو">
+<title>ژینو | Zheno</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+font-family:Vazirmatn,sans-serif;
+background:#faf8f5;
+color:#29323a;
+overflow-x:hidden
+}
+a{text-decoration:none;color:inherit}
+button{font-family:inherit;cursor:pointer}
+.container{width:min(1180px,92%);margin:auto}
+
+header{
+position:sticky;top:0;z-index:50;
+background:rgba(250,248,245,.9);
+backdrop-filter:blur(15px);
+border-bottom:1px solid #eee5df
+}
+.nav{
+height:76px;display:flex;align-items:center;
+justify-content:space-between;gap:20px
+}
+.logo{
+font-size:27px;font-weight:900;color:#c9365b;
+letter-spacing:-1px
+}
+.logo span{font-size:13px;color:#777;display:block;font-weight:500}
+nav{display:flex;gap:28px}
+nav a{font-size:14px;font-weight:600;color:#555;transition:.2s}
+nav a:hover{color:#c9365b}
+.nav-btn{
+background:#c9365b;color:white;border:0;
+padding:11px 20px;border-radius:30px;font-weight:700
+}
+
+.hero{
+min-height:650px;
+display:grid;grid-template-columns:1fr 1fr;
+align-items:center;gap:40px;
+padding:70px 0;
+position:relative
+}
+.hero:before{
+content:"";position:absolute;width:450px;height:450px;
+background:#f6d8df;border-radius:50%;
+filter:blur(5px);right:-180px;top:40px;z-index:-1
+}
+.hero-text h1{
+font-size:clamp(42px,6vw,76px);
+line-height:1.15;font-weight:900;
+margin-bottom:22px
+}
+.hero-text h1 b{color:#c9365b}
+.hero-text p{
+font-size:18px;line-height:2;
+color:#6e7479;max-width:570px;margin-bottom:30px
+}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap}
+.primary{
+border:0;background:#c9365b;color:white;
+padding:15px 27px;border-radius:35px;
+font-weight:800;box-shadow:0 12px 30px #c9365b33
+}
+.secondary{
+border:1px solid #ddd0ca;background:white;
+padding:14px 25px;border-radius:35px;font-weight:700
+}
+.stats{
+display:flex;gap:30px;margin-top:38px;flex-wrap:wrap
+}
+.stat strong{font-size:25px;color:#c9365b;display:block}
+.stat span{font-size:12px;color:#888}
+
+.hero-art{position:relative;height:500px}
+.blob{
+position:absolute;width:390px;height:390px;
+border-radius:48% 52% 60% 40%;
+background:linear-gradient(145deg,#f4b8c7,#d94769);
+right:50%;top:50%;
+transform:translate(50%,-50%) rotate(-8deg);
+box-shadow:0 35px 70px #c9365b30
+}
+.jar{
+position:absolute;width:230px;height:300px;
+background:linear-gradient(135deg,#fff,#f7eeee);
+border-radius:25px 25px 45px 45px;
+right:50%;top:50%;
+transform:translate(50%,-45%) rotate(7deg);
+box-shadow:0 25px 50px #49202b2a;
+display:flex;align-items:center;justify-content:center;
+overflow:hidden
+}
+.jar:before{
+content:"ژینو";font-size:43px;font-weight:900;color:#c9365b;
+transform:rotate(-5deg)
+}
+.fruit{
+position:absolute;border-radius:50%;
+font-size:45px;display:grid;place-items:center;
+filter:drop-shadow(0 12px 10px #0002)
+}
+.f1{top:25px;right:20px}.f2{bottom:35px;left:20px}
+.f3{top:120px;left:0;font-size:35px}.f4{bottom:5px;right:50px;font-size:35px}
+
+section{padding:90px 0}
+.section-head{text-align:center;margin-bottom:45px}
+.section-head small{color:#c9365b;font-weight:800}
+.section-head h2{font-size:38px;margin:8px 0 10px;font-weight:900}
+.section-head p{color:#777;line-height:1.9}
+
+.filters{
+display:flex;justify-content:center;gap:10px;
+margin-bottom:35px;flex-wrap:wrap
+}
+.filter{
+border:1px solid #ddd2cd;background:white;
+padding:10px 22px;border-radius:30px;
+font-weight:700;color:#666
+}
+.filter.active,.filter:hover{background:#c9365b;color:white;border-color:#c9365b}
+
+.grid{
+display:grid;
+grid-template-columns:repeat(4,1fr);
+gap:20px
+}
+.card{
+background:white;border:1px solid #eee5df;
+border-radius:25px;padding:18px;
+transition:.3s;position:relative;overflow:hidden
+}
+.card:hover{
+transform:translateY(-8px);
+box-shadow:0 20px 45px #33211a12
+}
+.product-img{
+height:190px;border-radius:19px;
+display:flex;align-items:center;justify-content:center;
+font-size:75px;margin-bottom:18px;
+position:relative
+}
+.product-img:after{
+content:"";position:absolute;
+width:120px;height:120px;border-radius:50%;
+background:#ffffff33
+}
+.card h3{font-size:18px;margin-bottom:6px}
+.card p{font-size:12px;color:#888;margin-bottom:15px}
+.card button{
+width:100%;border:0;background:#f8edf0;
+color:#c9365b;padding:11px;border-radius:13px;font-weight:800
+}
+
+.raspberry{background:linear-gradient(135deg,#ffd6df,#ef7894)}
+.peach{background:linear-gradient(135deg,#ffe0bb,#f4a35e)}
+.strawberry{background:linear-gradient(135deg,#ffd7d7,#ee6970)}
+.pomegranate{background:linear-gradient(135deg,#f8c4cf,#bb294f)}
+.cherry{background:linear-gradient(135deg,#ffd0d5,#c63d59)}
+.pineapple{background:linear-gradient(135deg,#fff0a9,#e7c640)}
+.orange{background:linear-gradient(135deg,#ffd2a4,#ed842f)}
+.blueberry{background:linear-gradient(135deg,#d8d6ff,#7271ca)}
+.vanilla{background:linear-gradient(135deg,#fff7df,#e8d8ae)}
+.fruitmix{background:linear-gradient(135deg,#ffe2c8,#c9a05b)}
+.cocoa{background:linear-gradient(135deg,#e5c2ae,#79513d)}
+.melon{background:linear-gradient(135deg,#dff1ae,#8ebc65)}
+.banana{background:linear-gradient(135deg,#fff0a5,#e4bb36)}
+
+.flavor{
+background:#fff;
+border-radius:35px;
+padding:60px;
+display:grid;grid-template-columns:1fr 1fr;
+gap:50px;align-items:center;
+box-shadow:0 25px 70px #3b272012
+}
+.flavor h2{font-size:42px;font-weight:900;margin:12px 0 20px}
+.flavor p{color:#777;line-height:2}
+.flavor-list{display:flex;flex-wrap:wrap;gap:10px;margin-top:25px}
+.flavor-list span{
+background:#faf2f3;padding:10px 15px;
+border-radius:20px;font-size:13px;font-weight:600
+}
+.flavor-visual{
+height:330px;border-radius:30px;
+background:linear-gradient(135deg,#ffd7e0,#fff0e1);
+display:grid;place-items:center;font-size:120px
+}
+
+.about{
+display:grid;grid-template-columns:1fr 1fr;
+gap:60px;align-items:center
+}
+.about h2{font-size:40px;margin:12px 0 20px}
+.about p{color:#777;line-height:2}
+.features{display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:25px}
+.feature{
+background:white;padding:20px;border-radius:20px;
+border:1px solid #eee5df
+}
+.feature b{display:block;margin-bottom:6px}
+.feature span{font-size:12px;color:#888}
+.about-art{
+height:390px;border-radius:35px;
+background:linear-gradient(135deg,#f6c9d4,#e6a4b7);
+display:grid;place-items:center;font-size:140px;
+box-shadow:0 25px 60px #c9365b20
+}
+
+.contact{
+background:#29323a;color:white;border-radius:35px;
+padding:60px;display:grid;grid-template-columns:1fr 1fr;
+gap:50px
+}
+.contact h2{font-size:38px;margin-bottom:15px}
+.contact p{color:#c9c9c9;line-height:2}
+.form{display:grid;gap:12px}
+.form input,.form textarea{
+border:1px solid #ffffff22;background:#ffffff0d;
+color:white;padding:14px;border-radius:12px;
+font-family:inherit;outline:none
+}
+.form textarea{height:120px;resize:none}
+.form button{border:0;background:#e04c70;color:white;padding:14px;border-radius:12px;font-weight:800}
+
+footer{
+padding:35px 0;text-align:center;color:#888;font-size:13px
+}
+footer strong{color:#c9365b}
+
+.modal{
+position:fixed;inset:0;background:#0008;
+display:none;place-items:center;z-index:100;padding:20px
+}
+.modal.show{display:grid}
+.modal-box{
+background:white;border-radius:28px;padding:30px;
+width:min(500px,100%);position:relative;text-align:center
+}
+.close{
+position:absolute;top:12px;left:15px;
+border:0;background:#f4eeee;width:35px;height:35px;
+border-radius:50%;font-size:20px
+}
+.modal-icon{font-size:90px;margin:20px}
+.modal-box h2{margin-bottom:10px}
+.modal-box p{color:#777;line-height:1.9}
+
+.toast{
+position:fixed;bottom:25px;right:25px;
+background:#29323a;color:white;padding:14px 20px;
+border-radius:15px;display:none;z-index:200
+}
+
+.mobile-menu{display:none}
+@media(max-width:900px){
+.grid{grid-template-columns:repeat(2,1fr)}
+.hero{grid-template-columns:1fr;text-align:center}
+.hero-text p{margin-left:auto;margin-right:auto}
+.hero-actions,.stats{justify-content:center}
+.hero-art{height:400px}
+.flavor,.about,.contact{grid-template-columns:1fr}
+.flavor{padding:35px}
+.about-art{order:-1}
+nav{display:none}
+.nav-btn{display:none}
+.mobile-menu{display:block;border:0;background:white;font-size:25px}
+}
+@media(max-width:550px){
+section{padding:65px 0}
+.grid{grid-template-columns:1fr}
+.hero{padding-top:40px}
+.hero-art{transform:scale(.82);margin:-30px 0}
+.section-head h2{font-size:30px}
+.flavor h2,.about h2,.contact h2{font-size:30px}
+.contact{padding:30px}
+.features{grid-template-columns:1fr}
+}
+</style>
+</head>
+
+<body>
+
+<header>
+<div class="container nav">
+<div class="logo">ژینو <span>ZHENO</span></div>
+
+<nav>
+<a href="#home">خانه</a>
+<a href="#products">محصولات</a>
+<a href="#flavors">طعم‌ها</a>
+<a href="#about">درباره ژینو</a>
+<a href="#contact">تماس</a>
+</nav>
+
+<a class="nav-btn" href="#products">مشاهده محصولات</a>
+<button class="mobile-menu" onclick="alert('برای جابه‌جایی از منوی پایین صفحه استفاده کنید')">☰</button>
+</div>
+</header>
+
+<main>
+
+<section class="hero container" id="home">
+<div class="hero-text">
+<div style="color:#c9365b;font-weight:800;margin-bottom:12px">طعم واقعی، تجربه متفاوت ✨</div>
+<h1>برند غذایی <b>ژینو</b></h1>
+<p>
+کیفیت واقعی، انتخاب ژینو 😋<br>
+تجربه‌ای متفاوت و به‌یادماندنی از طعم واقعی میوه‌ها،
+ژله‌های کریستالی شفاف و کاستری‌های نرم و خوش‌طعم.
+</p>
+
+<div class="hero-actions">
+<a class="primary" href="#products">مشاهده محصولات</a>
+<a class="secondary" href="#about">درباره ژینو</a>
+</div>
+
+<div class="stats">
+<div class="stat"><strong>۱۵+</strong><span>طعم متنوع و اصیل</span></div>
+<div class="stat"><strong>۱۰۰٪</strong><span>تمرکز روی کیفیت</span></div>
+<div class="stat"><strong>ژینو</strong><span>انتخاب خوش‌طعم‌ها</span></div>
+</div>
+</div>
+
+<div class="hero-art">
+<div class="blob"></div>
+<div class="jar"></div>
+<div class="fruit f1">🍓</div>
+<div class="fruit f2">🍊</div>
+<div class="fruit f3">🍍</div>
+<div class="fruit f4">🫐</div>
+</div>
+</section>
+
+<section id="products">
+<div class="container">
+<div class="section-head">
+<small>دنیای ژینو</small>
+<h2>طعم‌هایی برای هر سلیقه</h2>
+<p>از طعم‌های میوه‌ای و تازه تا کاسترهای نرم و خوش‌عطر.</p>
+</div>
+
+<div class="filters">
+<button class="filter active" onclick="filterProducts('all',this)">همه</button>
+<button class="filter" onclick="filterProducts('jelly',this)">ژله</button>
+<button class="filter" onclick="filterProducts('custard',this)">کاستر</button>
+</div>
+
+<div class="grid" id="productGrid"></div>
+</div>
+</section>
+
+<section id="flavors">
+<div class="container">
+<div class="flavor">
+<div>
+<small style="color:#c9365b;font-weight:800">۱۵ طعم متفاوت</small>
+<h2>دنیای طعم‌های ژینو 🍓</h2>
+<p>
+ژینو مجموعه‌ای از طعم‌های متنوع را کنار هم آورده
+تا هر سلیقه‌ای بتواند طعم مورد علاقه خودش را پیدا کند.
+</p>
+<div class="flavor-list">
+<span>تمشک</span><span>هلو</span><span>توت‌فرنگی</span>
+<span>انار</span><span>آلبالو</span><span>آناناس</span>
+<span>پرتقال</span><span>بلوبری</span><span>وانیلی</span>
+<span>هفت میوه</span><span>کاکائو</span><span>طالبی</span>
+<span>موز</span>
+</div>
+</div>
+<div class="flavor-visual">🍓🍊🍍</div>
+</div>
+</div>
+</section>
+
+<section id="about">
+<div class="container about">
+<div>
+<small style="color:#c9365b;font-weight:800">درباره ژینو</small>
+<h2>ساده، خوش‌طعم، ماندگار.</h2>
+<p>
+ژینو با هدف ارائه محصولاتی خوش‌طعم و باکیفیت شکل گرفته است.
+ما تلاش می‌کنیم تنوع طعم، ظاهر جذاب و کیفیت را در کنار هم قرار دهیم
+تا هر بار انتخاب ژینو، یک تجربه خوشایند باشد.
+</p>
+
+<div class="features">
+<div class="feature">🍓 <b>طعم متنوع</b><span>برای سلیقه‌های مختلف</span></div>
+<div class="feature">✨ <b>ظاهر جذاب</b><span>تجربه‌ای چشم‌نواز</span></div>
+<div class="feature">⭐ <b>کیفیت</b><span>تمرکز روی محصول</span></div>
+<div class="feature">💗 <b>با عشق</b><span>برای دوستداران طعم</span></div>
+</div>
+</div>
+
+<div class="about-art">🍓</div>
+</div>
+</section>
+
+<section id="contact">
+<div class="container">
+<div class="contact">
+<div>
+<small style="color:#f08aa2;font-weight:800">ارتباط با ژینو</small>
+<h2>با ما در ارتباط باشید</h2>
+<p>
+برای همکاری، سفارش یا دریافت اطلاعات بیشتر،
+پیام خود را برای ما ارسال کنید.
+</p>
+</div>
+
+<form class="form" onsubmit="sendMessage(event)">
+<input placeholder="نام شما" required>
+<input type="email" placeholder="ایمیل" required>
+<textarea placeholder="پیام شما..." required></textarea>
+<button>ارسال پیام</button>
+</form>
+</div>
+</div>
+</section>
+
+</main>
+
+<footer>
+<div class="container">
+<strong>ژینو | Zheno</strong>
+<br>
+کیفیت واقعی، انتخاب ژینو 😋
+</div>
+</footer>
+
+<div class="modal" id="modal" onclick="closeModal(event)">
+<div class="modal-box">
+<button class="close" onclick="hideModal()">×</button>
+<div class="modal-icon" id="modalIcon"></div>
+<h2 id="modalTitle"></h2>
+<p id="modalText"></p>
+</div>
+</div>
+
+<div class="toast" id="toast">پیام شما ثبت شد 🌸</div>
+
+<script>
+const products=[
+["تمشک","jelly","🍓","raspberry"],
+["هلو","jelly","🍑","peach"],
+["توت‌فرنگی","jelly","🍓","strawberry"],
+["انار","jelly","🍎","pomegranate"],
+["آلبالو","jelly","🍒","cherry"],
+["آناناس","jelly","🍍","pineapple"],
+["پرتقال","jelly","🍊","orange"],
+["بلوبری","jelly","🫐","blueberry"],
+["وانیلی","custard","🍮","vanilla"],
+["پرتقالی","custard","🍊","orange"],
+["هفت میوه","custard","🍇","fruitmix"],
+["کاکائو","custard","🍫","cocoa"],
+["توت‌فرنگی","custard","🍓","strawberry"],
+["طالبی","custard","🍈","melon"],
+["موز","custard","🍌","banana"]
+];
+
+function renderProducts(type="all"){
+const grid=document.getElementById("productGrid");
+grid.innerHTML="";
+products.forEach((p,i)=>{
+if(type!=="all" && p[1]!==type)return;
+const card=document.createElement("div");
+card.className="card";
+card.innerHTML=`
+<div class="product-img ${p[3]}">${p[2]}</div>
+<h3>${p[1]==="jelly"?"ژله":"کاستر"} ${p[0]}</h3>
+<p>${p[1]==="jelly"?"طعم میوه‌ای و تازه":"نرم، خوش‌عطر و خوش‌طعم"}</p>
+<button onclick="showModal(${i})">مشاهده جزئیات</button>`;
+grid.appendChild(card);
+});
+}
+
+function filterProducts(type,btn){
+document.querySelectorAll(".filter").forEach(x=>x.classList.remove("active"));
+btn.classList.add("active");
+renderProducts(type);
+}
+
+function showModal(i){
+const p=products[i];
+document.getElementById("modalIcon").textContent=p[2];
+document.getElementById("modalTitle").textContent=(p[1]==="jelly"?"ژله ":"کاستر ")+p[0];
+document.getElementById("modalText").textContent=
+"یکی از طعم‌های متنوع ژینو؛ انتخابی خوش‌طعم برای دوستداران محصولات ژینو.";
+document.getElementById("modal").classList.add("show");
+}
+
+function hideModal(){
+document.getElementById("modal").classList.remove("show");
+}
+
+function closeModal(e){
+if(e.target.id==="modal")hideModal();
+}
+
+function sendMessage(e){
+e.preventDefault();
+e.target.reset();
+const toast=document.getElementById("toast");
+toast.style.display="block";
+setTimeout(()=>toast.style.display="none",2500);
+}
+
+renderProducts();
+</script>
+
+</body>
+  </html>
+  
