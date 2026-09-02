@@ -386,3 +386,402 @@ updateCount();
 </script>
 </body>
   </html> 
+<script>
+/* =========================
+   ZHENO - بخش سوم
+   اطلاعات فروش + ساختار ۳ تصویر
+   ========================= */
+
+const zhenoInfo = {
+  phone: "09931624622",
+  telegram: "https://t.me/+0qAvorUwSQEzNDc8",
+  weight: "۲۵۰ گرم"
+};
+
+/* قیمت واقعی محصولات */
+products.forEach(product => {
+  product.price = product.type === "jelly" ? 170000 : 150000;
+  product.weight = zhenoInfo.weight;
+
+  /*
+    تصویر اول:
+    پودر همان طعم.
+    
+    بعداً فقط آدرس powder را با تصویر
+    تفکیک‌شده همان طعم عوض می‌کنیم.
+  */
+  product.powder = "";
+
+  /*
+    تصویر دوم:
+    دسر ساده‌ای که از همان پودر تهیه شده.
+    
+    فعلاً از تصویر محصول استفاده می‌شود
+    و بعد برای هر طعم تصویر مخصوص قرار می‌گیرد.
+  */
+  product.simpleDessert = product.img;
+
+  /*
+    تصویر سوم:
+    همان تصاویر حرفه‌ای فعلی سایت.
+  */
+  product.professionalDessert = product.img;
+});
+
+
+/* ساخت تصویر نمایشی پودر تا زمانی که
+   تصویر واقعی هر طعم در سایت قرار بگیرد */
+function createPowderVisual(product){
+
+  const colors = {
+    "ژله توت‌فرنگی":"#e85b70",
+    "ژله آلبالو":"#8f1938",
+    "ژله پرتقال":"#ef851d",
+    "ژله لیمو":"#eadb58",
+    "ژله انبه":"#f3ae45",
+    "ژله بلوبری":"#536da8",
+    "ژله هلو":"#efa58b",
+    "کاستر وانیلی":"#eee0b8",
+    "کاستر شکلاتی":"#704126",
+    "کاستر موزی":"#e7ce77",
+    "کاستر توت‌فرنگی":"#e99cae",
+    "کاستر کاراملی":"#c98c4d",
+    "کاستر قهوه":"#8a573d",
+    "کاستر نارگیلی":"#eee9d8",
+    "کاستر موز و شکلات":"#8b5a39"
+  };
+
+  const color = colors[product.name] || "#d88";
+
+  return `
+    <div style="
+      height:310px;
+      border-radius:20px;
+      background:
+        radial-gradient(circle at 50% 35%, ${color} 0 18%, transparent 19%),
+        linear-gradient(145deg,#fffaf5,#f1e4d9);
+      display:flex;
+      flex-direction:column;
+      align-items:center;
+      justify-content:center;
+      position:relative;
+      overflow:hidden;
+      border:1px solid #eee2d9;
+    ">
+      <div style="
+        width:190px;
+        height:120px;
+        background:${color};
+        clip-path:polygon(50% 0,100% 100%,0 100%);
+        filter:drop-shadow(0 14px 12px rgba(0,0,0,.15));
+        opacity:.92;
+      "></div>
+
+      <strong style="
+        margin-top:18px;
+        font-size:24px;
+        color:#241b18;
+      ">پودر ${product.name}</strong>
+
+      <span style="
+        color:#756964;
+        margin-top:4px;
+      ">${product.weight}</span>
+    </div>
+  `;
+}
+
+
+/* نمایش حرفه‌ای محصول با سه تصویر */
+window.showProduct = function(id){
+
+  const product = products.find(x => x.id === id);
+
+  if(!product) return;
+
+  const powderImage = product.powder
+    ? `<img src="${product.powder}" alt="پودر ${product.name}" style="width:100%;height:310px;object-fit:cover;border-radius:20px">`
+    : createPowderVisual(product);
+
+  document.getElementById("modalContent").innerHTML = `
+
+    <div>
+
+      <div style="
+        font-size:12px;
+        color:#5b8f62;
+        font-weight:800;
+        margin-bottom:6px;
+      ">
+        ${product.tag}
+      </div>
+
+      <h2 style="margin:0 0 8px">
+        ${product.name}
+      </h2>
+
+      <p style="color:#756964;margin-top:0">
+        ${product.desc}
+      </p>
+
+      <!-- تصویر اول: پودر -->
+      <div style="margin-top:18px">
+
+        <div style="
+          font-weight:900;
+          margin-bottom:8px;
+        ">
+          ۱. پودر محصول
+        </div>
+
+        ${powderImage}
+
+      </div>
+
+
+      <!-- تصویر دوم: دسر ساده -->
+      <div style="margin-top:22px">
+
+        <div style="
+          font-weight:900;
+          margin-bottom:8px;
+        ">
+          ۲. دسر تهیه‌شده از پودر
+        </div>
+
+        <img
+          src="${product.simpleDessert}"
+          alt="دسر ${product.name}"
+          style="
+            width:100%;
+            height:260px;
+            object-fit:cover;
+            border-radius:20px;
+          "
+        >
+
+      </div>
+
+
+      <!-- تصویر سوم: دسر حرفه‌ای -->
+      <div style="margin-top:22px">
+
+        <div style="
+          font-weight:900;
+          margin-bottom:8px;
+        ">
+          ۳. تصویر حرفه‌ای
+        </div>
+
+        <img
+          src="${product.professionalDessert}"
+          alt="تصویر حرفه‌ای ${product.name}"
+          style="
+            width:100%;
+            height:260px;
+            object-fit:cover;
+            border-radius:20px;
+          "
+        >
+
+      </div>
+
+
+      <!-- مشخصات -->
+      <div style="
+        display:grid;
+        grid-template-columns:1fr 1fr;
+        gap:10px;
+        margin-top:20px;
+      ">
+
+        <div style="
+          background:#fffaf5;
+          border:1px solid #eee2d9;
+          border-radius:15px;
+          padding:13px;
+        ">
+          <small style="color:#756964">وزن</small>
+          <br>
+          <strong>${product.weight}</strong>
+        </div>
+
+        <div style="
+          background:#fffaf5;
+          border:1px solid #eee2d9;
+          border-radius:15px;
+          padding:13px;
+        ">
+          <small style="color:#756964">نوع بسته</small>
+          <br>
+          <strong>یک بسته</strong>
+        </div>
+
+      </div>
+
+
+      <div style="
+        display:flex;
+        align-items:center;
+        justify-content:space-between;
+        gap:15px;
+        margin-top:20px;
+      ">
+
+        <strong style="font-size:21px">
+          ${money(product.price)}
+        </strong>
+
+        <button
+          class="btn btn-primary"
+          onclick="addToCart(${product.id});closeModal()"
+        >
+          افزودن به سبد 🛒
+        </button>
+
+      </div>
+
+    </div>
+  `;
+
+  document.getElementById("modal").classList.add("show");
+};
+
+
+/* قیمت کارت‌های محصولات را دوباره با قیمت واقعی نمایش بده */
+function refreshZhenoPrices(){
+
+  document.querySelectorAll("#productsGrid .product").forEach(card => {
+
+    const title = card.querySelector("h3");
+
+    if(!title) return;
+
+    const product = products.find(
+      p => p.name === title.textContent.trim()
+    );
+
+    if(!product) return;
+
+    const price = card.querySelector(".price");
+
+    if(price){
+      price.textContent = money(product.price);
+    }
+
+  });
+
+}
+
+
+/* اطلاعات تماس */
+const contactBox = document.querySelector(".contact-items");
+
+if(contactBox){
+
+  contactBox.innerHTML = `
+
+    <a
+      class="contact-item"
+      href="tel:${zhenoInfo.phone}"
+    >
+      📞 <b>تماس با ژینو</b>
+      <br>
+      <span class="footer-muted">
+        ۰۹۹۳۱۶۲۴۶۲۲
+      </span>
+    </a>
+
+    <a
+      class="contact-item"
+      href="${zhenoInfo.telegram}"
+      target="_blank"
+      rel="noopener"
+    >
+      ✈️ <b>کانال تلگرام ژینو</b>
+      <br>
+      <span class="footer-muted">
+        مشاهده کانال و آخرین محصولات
+      </span>
+    </a>
+
+    <div class="contact-item">
+      💬 <b>پشتیبانی و سفارش</b>
+      <br>
+      <span class="footer-muted">
+        برای سفارش و دریافت اطلاعات با ما در تماس باشید.
+      </span>
+    </div>
+
+  `;
+
+}
+
+
+/* اطلاعات وزن روی کارت محصولات */
+function addWeightToCards(){
+
+  document.querySelectorAll("#productsGrid .product").forEach(card => {
+
+    const title = card.querySelector("h3");
+
+    if(!title) return;
+
+    const product = products.find(
+      p => p.name === title.textContent.trim()
+    );
+
+    if(!product) return;
+
+    const body = card.querySelector(".product-body");
+
+    if(!body || body.querySelector(".zheno-weight")) return;
+
+    const weight = document.createElement("div");
+
+    weight.className = "zheno-weight";
+
+    weight.style.cssText = `
+      font-size:11px;
+      color:#756964;
+      margin-top:5px;
+      font-weight:600;
+    `;
+
+    weight.textContent = `📦 ${product.weight} • یک بسته`;
+
+    const row = body.querySelector(".product-row");
+
+    if(row){
+      body.insertBefore(weight,row);
+    }
+
+  });
+
+}
+
+
+/* چون قیمت محصولات تغییر کرده،
+   کارت‌ها را دوباره رندر می‌کنیم */
+renderProducts();
+renderCart();
+updateCount();
+refreshZhenoPrices();
+addWeightToCards();
+
+
+/* بعد از هر فیلتر هم وزن را اضافه کن */
+document.querySelectorAll(".filter").forEach(button => {
+
+  button.addEventListener("click", () => {
+
+    setTimeout(() => {
+      refreshZhenoPrices();
+      addWeightToCards();
+    },50);
+
+  });
+
+});
+
+</script>
