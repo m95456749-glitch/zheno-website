@@ -353,3 +353,2225 @@ width:100%;height:150px;object-fit:cover;border-radius:14px;background:#f5f1ed
 }
 </style>
 </head>
+  <body>
+
+<header>
+  <div class="container nav">
+    <a class="logo" href="#home">
+      <span class="logo-mark">ژ</span> ژینو
+    </a>
+
+    <nav class="navlinks">
+      <a href="#home">خانه</a>
+      <a href="#products">محصولات</a>
+      <a href="#recipes">طرز تهیه</a>
+      <a href="#flavors">دنیای طعم‌ها</a>
+      <a href="#about">درباره ژینو</a>
+      <a href="#contact">تماس</a>
+    </nav>
+
+    <div class="nav-actions">
+      <button class="iconbtn menu" onclick="toggleMenu()" aria-label="منو">☰</button>
+      <button class="iconbtn" onclick="openCart()" aria-label="سبد خرید">
+        🛒
+        <span class="badge" id="count">0</span>
+      </button>
+    </div>
+  </div>
+</header>
+
+<main id="home">
+
+<section class="hero">
+  <div class="container hero-grid">
+
+    <div>
+      <span class="eyebrow">🍓 طعم واقعی، حس خوب</span>
+
+      <h1>
+        دنیایی از طعم،
+        <br>
+        <span>به سبک ژینو.</span>
+      </h1>
+
+      <p>
+        ژینو تجربه‌ای متفاوت از ژله‌های کریستالی و کاسترهای نرم و خوش‌طعم است؛
+        ساخته‌شده برای لحظه‌هایی که یک طعم خوب، همه‌چیز را بهتر می‌کند.
+      </p>
+
+      <div class="actions">
+        <a class="btn btn-primary" href="#products">
+          مشاهده محصولات ←
+        </a>
+
+        <a class="btn btn-light" href="#flavors">
+          کشف طعم‌ها
+        </a>
+      </div>
+
+      <div class="hero-points">
+        <span>✓ تنوع طعم</span>
+        <span>✓ کیفیت بالا</span>
+        <span>✓ بسته‌بندی جذاب</span>
+      </div>
+    </div>
+
+    <div class="hero-art">
+      <div class="blob"></div>
+
+      <div class="hero-card">
+        <img
+          src="jelly_blueberry.jpg"
+          alt="دسر ژله بلوبری ژینو"
+        >
+      </div>
+
+      <div class="float one">✨ انتخاب خوش‌طعم امروز</div>
+      <div class="float two">🍑 تازه، جذاب، دوست‌داشتنی</div>
+    </div>
+
+  </div>
+</section>
+
+
+<section class="section" id="products">
+  <div class="container">
+
+    <div class="section-head">
+      <div>
+        <div class="kicker">محصولات ژینو</div>
+        <h2>طعم مورد علاقه‌ات را پیدا کن</h2>
+      </div>
+
+      <p>
+        انتخاب کن، جزئیات را ببین و به سبدت اضافه کن.
+      </p>
+    </div>
+
+    <div class="filters">
+      <button class="filter active" data-filter="all">
+        همه
+      </button>
+
+      <button class="filter" data-filter="jelly">
+        ژله
+      </button>
+
+      <button class="filter" data-filter="custard">
+        کاستر
+      </button>
+    </div>
+
+    <div class="products" id="productsGrid"></div>
+
+  </div>
+</section>
+
+
+<!-- =========================
+     طرز تهیه
+========================= -->
+
+<section class="section" id="recipes">
+
+  <div class="container">
+
+    <div class="section-head">
+      <div>
+        <div class="kicker">راهنمای آماده‌سازی</div>
+
+        <h2>
+          طرز تهیه ژینو
+        </h2>
+      </div>
+
+      <p>
+        در چند مرحله ساده، دسر مورد علاقه‌ات را آماده کن.
+      </p>
+    </div>
+
+
+    <div class="recipes">
+
+
+      <!-- کاستر -->
+
+      <article class="recipe-card">
+
+        <div class="recipe-icon">
+          🍮
+        </div>
+
+        <h3>
+          طرز تهیه کاستر
+        </h3>
+
+        <p>
+          یک روش ساده برای آماده‌کردن کاستر نرم و خوش‌طعم ژینو.
+        </p>
+
+        <div class="recipe-steps">
+
+          <div class="recipe-step">
+            <span class="step-num">۱</span>
+
+            <div>
+              <b>
+                مخلوط کردن مواد
+              </b>
+
+              <div>
+                ۱ قاشق غذاخوری پودر کاستر را با
+                ۱ لیوان شیر و ۲ قاشق غذاخوری شکر
+                به‌خوبی مخلوط کنید.
+              </div>
+            </div>
+          </div>
+
+
+          <div class="recipe-step">
+            <span class="step-num">۲</span>
+
+            <div>
+              <b>
+                قرار دادن روی حرارت
+              </b>
+
+              <div>
+                مواد را روی حرارت ملایم قرار دهید
+                و مرتب هم بزنید تا مخلوط به غلظت
+                و قوام مناسب برسد.
+              </div>
+            </div>
+          </div>
+
+
+          <div class="recipe-step">
+            <span class="step-num">۳</span>
+
+            <div>
+              <b>
+                خنک کردن
+              </b>
+
+              <div>
+                پس از آماده شدن، کاستر را در ظرف
+                موردنظر بریزید و اجازه دهید خنک شود.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+
+        <div class="recipe-note">
+          🍮 <strong>نکته:</strong>
+          برای رسیدن به بافتی یکدست، هنگام پخت
+          مرتب هم بزنید.
+        </div>
+
+      </article>
+
+
+
+      <!-- ژله -->
+
+      <article class="recipe-card">
+
+        <div class="recipe-icon">
+          🍓
+        </div>
+
+        <h3>
+          طرز تهیه ژله
+        </h3>
+
+        <p>
+          آماده‌سازی ساده ژله ژینو برای یک دسر
+          شفاف، خوش‌رنگ و خوش‌طعم.
+        </p>
+
+        <div class="recipe-steps">
+
+          <div class="recipe-step">
+            <span class="step-num">۱</span>
+
+            <div>
+              <b>
+                مخلوط کردن
+              </b>
+
+              <div>
+                ۳ قاشق غذاخوری پودر ژله را با
+                ۱.۵ لیوان آب مخلوط کنید.
+                دمای آب تفاوتی ندارد و می‌توانید
+                از آب سرد یا گرم استفاده کنید.
+              </div>
+            </div>
+          </div>
+
+
+          <div class="recipe-step">
+            <span class="step-num">۲</span>
+
+            <div>
+              <b>
+                حرارت دادن
+              </b>
+
+              <div>
+                مواد را روی حرارت ملایم قرار دهید
+                و هم بزنید تا به جوش بیاید.
+              </div>
+            </div>
+          </div>
+
+
+          <div class="recipe-step">
+            <span class="step-num">۳</span>
+
+            <div>
+              <b>
+                خنک شدن
+              </b>
+
+              <div>
+                پس از جوش آمدن، ظرف را از روی
+                حرارت بردارید و اجازه دهید کمی خنک شود.
+              </div>
+            </div>
+          </div>
+
+
+          <div class="recipe-step">
+            <span class="step-num">۴</span>
+
+            <div>
+              <b>
+                قرار دادن در یخچال
+              </b>
+
+              <div>
+                سپس ژله را در ظرف موردنظر بریزید
+                و داخل یخچال قرار دهید تا کاملاً
+                خنک و آماده سرو شود.
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+
+        <div class="recipe-note">
+          🍓 <strong>نکته:</strong>
+          بعد از آماده‌سازی، اجازه دهید ژله
+          کاملاً خنک و آماده سرو شود.
+        </div>
+
+      </article>
+
+    </div>
+
+  </div>
+
+  </section>
+  <!-- =========================
+     دنیای طعم‌ها
+========================= -->
+
+<section class="section flavors-section" id="flavors">
+
+  <div class="container">
+
+    <div class="section-head">
+      <div>
+        <div class="kicker">دنیای طعم‌ها</div>
+        <h2>برای هر سلیقه، یک طعم ژینو 🍓</h2>
+      </div>
+
+      <p>
+        از طعم‌های میوه‌ای و هیجان‌انگیز ژله تا کاسترهای
+        نرم و خامه‌ای؛ انتخاب با توست.
+      </p>
+    </div>
+
+
+    <div class="flavor-showcase">
+
+      <div class="flavor-intro">
+
+        <span class="eyebrow">
+          ✨ طعم خودت را انتخاب کن
+        </span>
+
+        <h3>
+          رنگ‌ها را ببین،
+          <br>
+          طعم مورد علاقه‌ات را پیدا کن.
+        </h3>
+
+        <p>
+          ژینو مجموعه‌ای از طعم‌های متنوع را برای
+          لحظه‌های شیرین شما آماده کرده است.
+        </p>
+
+        <a href="#products" class="btn btn-primary">
+          مشاهده همه محصولات
+        </a>
+
+      </div>
+
+
+      <div class="flavor-grid">
+
+        <button class="flavor-chip">
+          <span class="flavor-dot anar"></span>
+          انار
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot strawberry"></span>
+          توت‌فرنگی
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot peach"></span>
+          هلو
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot raspberry"></span>
+          تمشک
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot blueberry"></span>
+          بلوبری
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot orange"></span>
+          پرتقال
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot pineapple"></span>
+          آناناس
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot cherry"></span>
+          آلبالو
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot banana"></span>
+          موز
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot melon"></span>
+          طالبی
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot cocoa"></span>
+          کاکائو
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot vanilla"></span>
+          وانیلی
+        </button>
+
+        <button class="flavor-chip">
+          <span class="flavor-dot seven"></span>
+          هفت‌میوه
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+
+<!-- =========================
+     گالری
+========================= -->
+
+<section class="section" id="gallery">
+
+  <div class="container">
+
+    <div class="section-head">
+
+      <div>
+        <div class="kicker">گالری ژینو</div>
+
+        <h2>
+          طعم‌هایی که قبل از چشیدن،
+          دیده می‌شوند ✨
+        </h2>
+      </div>
+
+      <p>
+        چند تصویر از دسرهای ژله‌ای و کاستری
+        برای دیدن نتیجه نهایی.
+      </p>
+
+    </div>
+
+
+    <div class="gallery-grid">
+
+
+      <!-- ژله بلوبری -->
+
+      <div class="gallery-item gallery-large">
+
+        <img
+          src="05_jelly_blueberry.jpg"
+          alt="ژله بلوبری ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>ژله بلوبری</strong>
+          <span>طعم خنک و میوه‌ای</span>
+        </div>
+
+      </div>
+
+
+      <!-- ژله تمشک -->
+
+      <div class="gallery-item">
+
+        <img
+          src="04_jelly_raspberry.jpg"
+          alt="ژله تمشک ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>ژله تمشک</strong>
+          <span>رنگ جذاب، طعم دلنشین</span>
+        </div>
+
+      </div>
+
+
+      <!-- ژله انار -->
+
+      <div class="gallery-item">
+
+        <img
+          src="01_jelly_anar.jpg"
+          alt="ژله انار ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>ژله انار</strong>
+          <span>یک انتخاب کلاسیک و خوش‌رنگ</span>
+        </div>
+
+      </div>
+
+
+      <!-- کاستر موز -->
+
+      <div class="gallery-item">
+
+        <img
+          src="09_custard_banana.jpg"
+          alt="کاستر موز ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>کاستر موز</strong>
+          <span>نرم و خامه‌ای</span>
+        </div>
+
+      </div>
+
+
+      <!-- کاستر کاکائو -->
+
+      <div class="gallery-item gallery-wide">
+
+        <img
+          src="12_custard_cocoa.jpg"
+          alt="کاستر کاکائو ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>کاستر کاکائو</strong>
+          <span>برای عاشقان طعم شکلاتی</span>
+        </div>
+
+      </div>
+
+
+      <!-- ژله توت فرنگی -->
+
+      <div class="gallery-item">
+
+        <img
+          src="02_jelly_strawberry.jpg"
+          alt="ژله توت فرنگی ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>ژله توت‌فرنگی</strong>
+          <span>شیرین و دوست‌داشتنی</span>
+        </div>
+
+      </div>
+
+
+      <!-- کاستر وانیلی -->
+
+      <div class="gallery-item">
+
+        <img
+          src="15_custard_vanilla.jpg"
+          alt="کاستر وانیلی ژینو"
+          loading="lazy"
+          onclick="openGallery(this.src,this.alt)"
+        >
+
+        <div class="gallery-caption">
+          <strong>کاستر وانیلی</strong>
+          <span>لطیف و خوش‌عطر</span>
+        </div>
+
+      </div>
+
+
+    </div>
+
+  </div>
+
+</section>
+
+
+
+<!-- =========================
+     درباره ژینو
+========================= -->
+
+<section class="section about-section" id="about">
+
+  <div class="container">
+
+    <div class="about-grid">
+
+      <div class="about-image">
+
+        <img
+          src="IMG_20260902_214806_971.jpg"
+          alt="محصولات و طعم‌های ژینو"
+          loading="lazy"
+        >
+
+      </div>
+
+
+      <div class="about-content">
+
+        <div class="kicker">
+          درباره ژینو
+        </div>
+
+        <h2>
+          ساده، خوش‌طعم،
+          <br>
+          با انتخاب‌های متنوع.
+        </h2>
+
+        <p>
+          ژینو با هدف ارائه طعم‌هایی متنوع و
+          دوست‌داشتنی شکل گرفته است؛ محصولاتی که
+          آماده‌سازی آن‌ها ساده باشد و نتیجه‌ای
+          خوش‌رنگ و خوش‌طعم به همراه داشته باشد.
+        </p>
+
+        <p>
+          از ژله‌های میوه‌ای و شفاف گرفته تا
+          کاسترهای نرم و خامه‌ای، ژینو تلاش می‌کند
+          برای هر سلیقه یک انتخاب جذاب داشته باشد.
+        </p>
+
+
+        <div class="about-points">
+
+          <div class="about-point">
+            <span>۱۵</span>
+            <div>
+              <strong>طعم متنوع</strong>
+              <small>ژله و کاستر</small>
+            </div>
+          </div>
+
+
+          <div class="about-point">
+            <span>۲۵۰</span>
+            <div>
+              <strong>گرم</strong>
+              <small>وزن هر بسته</small>
+            </div>
+          </div>
+
+
+          <div class="about-point">
+            <span>✓</span>
+            <div>
+              <strong>انتخاب آسان</strong>
+              <small>خرید از طریق سبد</small>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+      </section>
+  <!-- =====================================================
+     بخش ۴ — طرز تهیه + تماس + سبد خرید + پنجره‌ها + فوتر
+===================================================== -->
+
+<style>
+/* ---------- طرز تهیه ---------- */
+
+.recipe-section{
+  padding:80px 0;
+}
+
+.recipe-grid{
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:24px;
+  margin-top:35px;
+}
+
+.recipe-card{
+  position:relative;
+  overflow:hidden;
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:28px;
+  padding:30px;
+  box-shadow:0 15px 45px rgba(36,27,24,.06);
+  transition:.3s ease;
+}
+
+.recipe-card:hover{
+  transform:translateY(-5px);
+  box-shadow:0 20px 55px rgba(36,27,24,.10);
+}
+
+.recipe-icon{
+  width:58px;
+  height:58px;
+  display:grid;
+  place-items:center;
+  border-radius:18px;
+  background:#fff1eb;
+  font-size:30px;
+  margin-bottom:18px;
+}
+
+.recipe-card h3{
+  font-size:24px;
+  margin:0 0 18px;
+}
+
+.recipe-card ol{
+  margin:0;
+  padding-right:22px;
+}
+
+.recipe-card li{
+  margin-bottom:14px;
+  color:var(--muted);
+  line-height:1.9;
+}
+
+.recipe-note{
+  margin-top:20px;
+  padding:14px 16px;
+  border-radius:15px;
+  background:#fffaf5;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.8;
+}
+
+
+/* ---------- تماس ---------- */
+
+.contact-section{
+  padding:80px 0;
+}
+
+.contact-box{
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:30px;
+  padding:35px;
+  display:grid;
+  grid-template-columns:.85fr 1.15fr;
+  gap:35px;
+  box-shadow:0 15px 45px rgba(36,27,24,.05);
+}
+
+.contact-title h2{
+  margin-top:5px;
+  margin-bottom:15px;
+}
+
+.contact-title p{
+  color:var(--muted);
+  line-height:1.9;
+}
+
+.contact-items{
+  display:grid;
+  gap:12px;
+  margin-top:25px;
+}
+
+.contact-item{
+  display:flex;
+  align-items:center;
+  gap:13px;
+  padding:15px;
+  border-radius:17px;
+  background:#fffaf5;
+  border:1px solid var(--line);
+}
+
+.contact-item-icon{
+  width:42px;
+  height:42px;
+  flex:none;
+  display:grid;
+  place-items:center;
+  border-radius:13px;
+  background:#fff;
+  font-size:20px;
+}
+
+.contact-item strong{
+  display:block;
+  margin-bottom:3px;
+}
+
+.contact-item span{
+  color:var(--muted);
+  font-size:13px;
+}
+
+.contact-item a{
+  color:inherit;
+  text-decoration:none;
+}
+
+.contact-form{
+  display:grid;
+  gap:12px;
+}
+
+.contact-form label{
+  font-size:13px;
+  font-weight:800;
+}
+
+.contact-form input,
+.contact-form textarea{
+  width:100%;
+  border:1px solid var(--line);
+  background:#fffaf5;
+  border-radius:14px;
+  padding:14px 15px;
+  outline:none;
+  font-family:inherit;
+  font-size:14px;
+}
+
+.contact-form input:focus,
+.contact-form textarea:focus{
+  border-color:var(--accent);
+}
+
+.contact-form textarea{
+  min-height:135px;
+  resize:vertical;
+}
+
+
+/* ---------- سبد خرید ---------- */
+
+.drawer{
+  position:fixed;
+  inset:0;
+  z-index:100;
+  pointer-events:none;
+}
+
+.drawer-bg{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.52);
+  opacity:0;
+  transition:.25s;
+}
+
+.cart{
+  position:absolute;
+  top:0;
+  bottom:0;
+  left:0;
+  width:min(420px,92%);
+  background:#fff;
+  transform:translateX(-105%);
+  transition:.3s ease;
+  display:flex;
+  flex-direction:column;
+  box-shadow:10px 0 40px rgba(0,0,0,.12);
+}
+
+.drawer.open{
+  pointer-events:auto;
+}
+
+.drawer.open .drawer-bg{
+  opacity:1;
+}
+
+.drawer.open .cart{
+  transform:none;
+}
+
+.cart-head{
+  padding:20px;
+  border-bottom:1px solid var(--line);
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+}
+
+.cart-head h3{
+  margin:0;
+}
+
+.cart-close{
+  width:38px;
+  height:38px;
+  border:0;
+  border-radius:12px;
+  background:#f5eee8;
+  cursor:pointer;
+  font-size:20px;
+}
+
+.cart-list{
+  padding:15px;
+  overflow:auto;
+  flex:1;
+}
+
+.cart-empty{
+  min-height:260px;
+  display:grid;
+  place-items:center;
+  text-align:center;
+  color:var(--muted);
+}
+
+.cart-item{
+  display:grid;
+  grid-template-columns:65px 1fr auto;
+  gap:12px;
+  align-items:center;
+  padding:12px 0;
+  border-bottom:1px solid var(--line);
+}
+
+.cart-item img{
+  width:65px;
+  height:65px;
+  object-fit:cover;
+  border-radius:13px;
+}
+
+.cart-item h4{
+  margin:0 0 5px;
+  font-size:14px;
+}
+
+.cart-item small{
+  color:var(--muted);
+}
+
+.qty{
+  display:flex;
+  align-items:center;
+  gap:7px;
+  margin-top:7px;
+}
+
+.qty button{
+  width:27px;
+  height:27px;
+  border:0;
+  border-radius:8px;
+  background:#f5eee8;
+  cursor:pointer;
+  font-size:16px;
+}
+
+.cart-foot{
+  padding:18px;
+  border-top:1px solid var(--line);
+}
+
+.total{
+  display:flex;
+  justify-content:space-between;
+  font-weight:900;
+  margin-bottom:12px;
+}
+
+.total strong{
+  color:var(--accent);
+}
+
+
+/* ---------- پنجره جزئیات محصول ---------- */
+
+.modal{
+  position:fixed;
+  inset:0;
+  z-index:150;
+  display:none;
+  place-items:center;
+  padding:20px;
+  background:rgba(0,0,0,.55);
+}
+
+.modal.show{
+  display:grid;
+}
+
+.modal-box{
+  background:#fff;
+  width:min(700px,100%);
+  max-height:90vh;
+  overflow:auto;
+  border-radius:26px;
+  padding:22px;
+  position:relative;
+}
+
+.close{
+  position:absolute;
+  top:15px;
+  left:15px;
+  z-index:3;
+  width:38px;
+  height:38px;
+  border:0;
+  border-radius:12px;
+  background:#f5eee8;
+  cursor:pointer;
+  font-size:20px;
+}
+
+.modal-img{
+  width:100%;
+  height:310px;
+  object-fit:cover;
+  border-radius:20px;
+}
+
+.modal-info{
+  padding:20px 5px 5px;
+}
+
+.modal-info h2{
+  margin:0 0 8px;
+}
+
+.modal-meta{
+  display:flex;
+  flex-wrap:wrap;
+  gap:8px;
+  margin:12px 0;
+}
+
+.modal-meta span{
+  padding:7px 11px;
+  border-radius:10px;
+  background:#fffaf5;
+  border:1px solid var(--line);
+  font-size:12px;
+}
+
+.modal-info p{
+  color:var(--muted);
+  line-height:1.9;
+}
+
+
+/* ---------- گالری بزرگ ---------- */
+
+.gallery-modal{
+  position:fixed;
+  inset:0;
+  z-index:180;
+  display:none;
+  place-items:center;
+  padding:18px;
+  background:rgba(0,0,0,.82);
+}
+
+.gallery-modal.show{
+  display:grid;
+}
+
+.gallery-modal img{
+  max-width:95vw;
+  max-height:88vh;
+  object-fit:contain;
+  border-radius:20px;
+}
+
+.gallery-close{
+  position:fixed;
+  top:20px;
+  left:20px;
+  width:44px;
+  height:44px;
+  border:0;
+  border-radius:14px;
+  background:#fff;
+  cursor:pointer;
+  font-size:22px;
+}
+
+
+/* ---------- پیام ---------- */
+
+.toast{
+  position:fixed;
+  bottom:22px;
+  right:22px;
+  z-index:250;
+  background:#241b18;
+  color:#fff;
+  padding:13px 18px;
+  border-radius:14px;
+  transform:translateY(100px);
+  opacity:0;
+  transition:.3s ease;
+  max-width:calc(100% - 44px);
+  font-size:13px;
+}
+
+.toast.show{
+  transform:none;
+  opacity:1;
+}
+
+
+/* ---------- فوتر ---------- */
+
+footer{
+  margin-top:70px;
+  background:#241b18;
+  color:#fff;
+  padding:45px 0;
+}
+
+.footer-grid{
+  display:flex;
+  justify-content:space-between;
+  gap:30px;
+  flex-wrap:wrap;
+}
+
+.footer-muted{
+  color:#b9aaa3;
+  font-size:13px;
+  line-height:1.8;
+}
+
+.socials{
+  display:flex;
+  gap:8px;
+}
+
+.socials a{
+  width:42px;
+  height:42px;
+  border:1px solid rgba(255,255,255,.13);
+  border-radius:13px;
+  display:grid;
+  place-items:center;
+  color:#fff;
+  text-decoration:none;
+}
+
+
+/* ---------- موبایل ---------- */
+
+@media(max-width:900px){
+
+  .recipe-grid{
+    grid-template-columns:1fr;
+  }
+
+  .contact-box{
+    grid-template-columns:1fr;
+  }
+
+}
+
+@media(max-width:560px){
+
+  .recipe-section,
+  .contact-section{
+    padding:62px 0;
+  }
+
+  .recipe-card{
+    padding:23px;
+  }
+
+  .contact-box{
+    padding:22px;
+  }
+
+  .modal{
+    padding:10px;
+  }
+
+  .modal-box{
+    padding:15px;
+  }
+
+  .modal-img{
+    height:240px;
+  }
+
+}
+</style>
+
+
+<!-- =====================================================
+     طرز تهیه
+===================================================== -->
+
+<section class="section recipe-section" id="recipe">
+
+  <div class="container">
+
+    <div class="section-head">
+
+      <div>
+        <div class="kicker">روش آماده‌سازی</div>
+
+        <h2>
+          طرز تهیه، ساده و سریع 🍮
+        </h2>
+      </div>
+
+      <p>
+        با چند مرحله ساده، طعم دلخواهت را آماده و سرو کن.
+      </p>
+
+    </div>
+
+
+    <div class="recipe-grid">
+
+
+      <!-- کاستر -->
+
+      <article class="recipe-card">
+
+        <div class="recipe-icon">
+          🍮
+        </div>
+
+        <h3>
+          طرز تهیه کاستر
+        </h3>
+
+        <ol>
+
+          <li>
+            ۱ قاشق غذاخوری پودر کاستر را با
+            ۱ لیوان شیر و ۲ قاشق غذاخوری شکر
+            به‌خوبی مخلوط کنید.
+          </li>
+
+          <li>
+            مواد را روی حرارت ملایم قرار دهید
+            و مرتب هم بزنید تا مخلوط به غلظت
+            و قوام مناسب برسد.
+          </li>
+
+          <li>
+            پس از آماده شدن، کاستر را در ظرف
+            موردنظر بریزید و اجازه دهید خنک شود.
+          </li>
+
+        </ol>
+
+        <div class="recipe-note">
+          ✨ مناسب برای سرو در ظرف‌های تک‌نفره،
+          لیوانی و دسرهای خانگی.
+        </div>
+
+      </article>
+
+
+      <!-- ژله -->
+
+      <article class="recipe-card">
+
+        <div class="recipe-icon">
+          🍓
+        </div>
+
+        <h3>
+          طرز تهیه ژله
+        </h3>
+
+        <ol>
+
+          <li>
+            ۳ قاشق غذاخوری پودر ژله را با
+            ۱.۵ لیوان آب مخلوط کنید.
+            دمای آب تفاوتی ندارد و می‌توانید
+            از آب سرد یا گرم استفاده کنید.
+          </li>
+
+          <li>
+            مواد را روی حرارت ملایم قرار دهید
+            و هم بزنید تا به جوش بیاید.
+            پس از جوش آمدن، ظرف را از روی
+            حرارت بردارید و اجازه دهید کمی خنک شود.
+          </li>
+
+          <li>
+            سپس ژله را در ظرف موردنظر بریزید
+            و داخل یخچال قرار دهید تا کاملاً
+            خنک و آماده سرو شود.
+          </li>
+
+        </ol>
+
+        <div class="recipe-note">
+          ✨ می‌توانید ژله آماده‌شده را با میوه
+          و تزئین دلخواه سرو کنید.
+        </div>
+
+      </article>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+
+<!-- =====================================================
+     تماس با ژینو
+===================================================== -->
+
+<section class="section contact-section" id="contact">
+
+  <div class="container">
+
+    <div class="contact-box">
+
+
+      <div class="contact-title">
+
+        <div class="kicker">
+          ارتباط با ژینو
+        </div>
+
+        <h2>
+          سوالی داری؟
+          با ما در ارتباط باش 💬
+        </h2>
+
+        <p>
+          برای دریافت اطلاعات بیشتر درباره محصولات،
+          ثبت سفارش و ارتباط با ژینو می‌توانید
+          از راه‌های ارتباطی زیر استفاده کنید.
+        </p>
+
+
+        <div class="contact-items">
+
+
+          <div class="contact-item">
+
+            <div class="contact-item-icon">
+              📞
+            </div>
+
+            <div>
+              <strong>تماس</strong>
+
+              <span>
+                <a href="tel:09931624622">
+                  ۰۹۹۳۱۶۲۴۶۲۲
+                </a>
+              </span>
+            </div>
+
+          </div>
+
+
+          <div class="contact-item">
+
+            <div class="contact-item-icon">
+              ✈️
+            </div>
+
+            <div>
+              <strong>تلگرام</strong>
+
+              <span>
+                <a
+                  href="https://t.me/+0qAvorUwSQEzNDc8"
+                  target="_blank"
+                  rel="noopener"
+                >
+                  کانال ژینو
+                </a>
+              </span>
+            </div>
+
+          </div>
+
+
+          <div class="contact-item">
+
+            <div class="contact-item-icon">
+              🛍️
+            </div>
+
+            <div>
+              <strong>محصولات</strong>
+
+              <span>
+                ژله و کاستر ۲۵۰ گرمی
+              </span>
+            </div>
+
+          </div>
+
+
+        </div>
+
+      </div>
+
+
+      <form
+        class="contact-form"
+        onsubmit="submitForm(event)"
+      >
+
+        <label for="name">
+          نام
+        </label>
+
+        <input
+          id="name"
+          type="text"
+          placeholder="نام شما"
+          required
+        >
+
+
+        <label for="phone">
+          شماره تماس
+        </label>
+
+        <input
+          id="phone"
+          type="tel"
+          placeholder="شماره تماس"
+          required
+        >
+
+
+        <label for="message">
+          پیام
+        </label>
+
+        <textarea
+          id="message"
+          placeholder="پیام خود را بنویسید..."
+          required
+        ></textarea>
+
+
+        <button
+          class="btn btn-primary"
+          type="submit"
+        >
+          ارسال پیام
+        </button>
+
+      </form>
+
+    </div>
+
+  </div>
+
+</section>
+
+
+
+<!-- =====================================================
+     سبد خرید
+===================================================== -->
+
+<div
+  class="drawer"
+  id="cartDrawer"
+  aria-hidden="true"
+>
+
+  <div
+    class="drawer-bg"
+    onclick="closeCart()"
+  ></div>
+
+
+  <aside
+    class="cart"
+    aria-label="سبد خرید"
+  >
+
+    <div class="cart-head">
+
+      <h3>
+        سبد خرید 🛒
+      </h3>
+
+      <button
+        class="cart-close"
+        onclick="closeCart()"
+        aria-label="بستن"
+      >
+        ×
+      </button>
+
+    </div>
+
+
+    <div
+      class="cart-list"
+      id="cartList"
+    >
+
+      <div class="cart-empty">
+        <div>
+          🛒
+          <br><br>
+          سبد خرید شما خالی است.
+        </div>
+      </div>
+
+    </div>
+
+
+    <div class="cart-foot">
+
+      <div class="total">
+
+        <span>
+          مجموع:
+        </span>
+
+        <strong id="cartTotal">
+          ۰ تومان
+        </strong>
+
+      </div>
+
+
+      <button
+        class="btn btn-primary"
+        style="width:100%"
+        onclick="checkout()"
+      >
+        ادامه و ثبت سفارش
+      </button>
+
+    </div>
+
+  </aside>
+
+</div>
+
+
+
+<!-- =====================================================
+     پنجره جزئیات محصول
+===================================================== -->
+
+<div
+  class="modal"
+  id="productModal"
+  onclick="closeModalOnBackdrop(event)"
+>
+
+  <div class="modal-box">
+
+    <button
+      class="close"
+      onclick="closeModal()"
+      aria-label="بستن"
+    >
+      ×
+    </button>
+
+
+    <img
+      id="modalImg"
+      class="modal-img"
+      src=""
+      alt=""
+    >
+
+
+    <div class="modal-info">
+
+      <div class="tag" id="modalType">
+        محصول ژینو
+      </div>
+
+      <h2 id="modalTitle">
+        محصول
+      </h2>
+
+
+      <div class="modal-meta">
+
+        <span id="modalWeight">
+          ۲۵۰ گرم
+        </span>
+
+        <span id="modalPrice">
+          ۰ تومان
+        </span>
+
+      </div>
+
+
+      <p id="modalDescription">
+        محصول با کیفیت ژینو.
+      </p>
+
+
+      <button
+        class="btn btn-primary"
+        id="modalAddButton"
+        style="width:100%"
+      >
+        افزودن به سبد خرید
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+
+
+
+<!-- =====================================================
+     گالری بزرگ
+===================================================== -->
+
+<div
+  class="gallery-modal"
+  id="galleryModal"
+  onclick="closeGalleryOnBackdrop(event)"
+>
+
+  <button
+    class="gallery-close"
+    onclick="closeGallery()"
+    aria-label="بستن تصویر"
+  >
+    ×
+  </button>
+
+  <img
+    id="galleryModalImg"
+    src=""
+    alt=""
+  >
+
+</div>
+
+
+
+<!-- =====================================================
+     پیام
+===================================================== -->
+
+<div
+  class="toast"
+  id="toast"
+></div>
+
+
+
+<!-- =====================================================
+     فوتر
+===================================================== -->
+
+<footer>
+
+  <div class="container">
+
+    <div class="footer-grid">
+
+
+      <div>
+
+        <div class="logo">
+          <span class="logo-mark">ژ</span>
+          ژینو
+        </div>
+
+        <p class="footer-muted">
+          کیفیت واقعی، انتخاب ژینو 😋
+        </p>
+
+      </div>
+
+
+      <div>
+
+        <p class="footer-muted">
+          ژله و کاستر در طعم‌های متنوع
+          <br>
+          وزن هر بسته: ۲۵۰ گرم
+        </p>
+
+      </div>
+
+
+      <div class="socials">
+
+        <a
+          href="https://t.me/+0qAvorUwSQEzNDc8"
+          target="_blank"
+          rel="noopener"
+          aria-label="تلگرام"
+        >
+          ✈️
+        </a>
+
+        <a
+          href="tel:09931624622"
+          aria-label="تماس"
+        >
+          📞
+        </a>
+
+      </div>
+
+    </div>
+
+
+    <div
+      class="footer-muted"
+      style="margin-top:25px;border-top:1px solid rgba(255,255,255,.08);padding-top:20px"
+    >
+      © ژینو — تمامی حقوق محفوظ است.
+    </div>
+
+  </div>
+
+  </footer>
+  <div class="drawer" id="drawer">
+  <div class="drawer-bg" onclick="closeCart()"></div>
+
+  <aside class="cart">
+    <div class="cart-head">
+      <b>سبد خرید 🛒</b>
+      <button class="iconbtn" onclick="closeCart()">×</button>
+    </div>
+
+    <div class="cart-list" id="cartList"></div>
+
+    <div class="cart-foot">
+      <div class="total">
+        <span>جمع کل</span>
+        <span id="total">۰ تومان</span>
+      </div>
+
+      <button
+        class="btn btn-primary"
+        style="width:100%"
+        onclick="checkout()"
+      >
+        ادامه سفارش
+      </button>
+    </div>
+  </aside>
+</div>
+
+<div
+  class="modal"
+  id="modal"
+  onclick="if(event.target===this)closeModal()"
+>
+  <div class="modal-box">
+    <button class="close" onclick="closeModal()">×</button>
+    <div id="modalContent"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const products=[
+  ['1','انار','jelly','ژله','ترش‌وشیرین و پرانرژی','170000','01_jelly_anar.jpg','dessert_sour_cherry.jpg'],
+  ['2','توت‌فرنگی','jelly','ژله','یک انتخاب کلاسیک و خوش‌رنگ','170000','02_jelly_strawberry.jpg','dessert_strawberry_jelly.jpg'],
+  ['3','هلو','jelly','ژله','شیرین، لطیف و دوست‌داشتنی','170000','03_jelly_peach.jpg','dessert_peach.jpg'],
+  ['4','تمشک','jelly','ژله','میوه‌ای و جذاب','170000','04_jelly_raspberry.jpg','dessert_raspberry.jpg'],
+  ['5','بلوبری','jelly','ژله','خاص، میوه‌ای و خوش‌رنگ','170000','05_jelly_blueberry.jpg','dessert_blueberry.jpg'],
+  ['6','پرتقال','jelly','ژله','خنک و سرشار از حس مرکباتی','170000','06_jelly_orange.jpg','dessert_gallery.jpg'],
+  ['7','آناناس','jelly','ژله','استوایی و تازه','170000','07_jelly_pineapple.jpg','dessert_gallery.jpg'],
+  ['8','آلبالو','jelly','ژله','طعم عمیق و هیجان‌انگیز','170000','08_jelly_sour_cherry.jpg','dessert_sour_cherry.jpg'],
+  ['9','موز','custard','کاستر','نرم، شیرین و آشنا','150000','09_custard_banana.jpg','dessert_banana.jpg'],
+  ['10','طالبی','custard','کاستر','ملایم و تابستانی','150000','10_custard_melon.jpg','dessert_gallery.jpg'],
+  ['11','توت‌فرنگی','custard','کاستر','نرم و خوش‌طعم با عطر توت‌فرنگی','150000','11_custard_strawberry.jpg','dessert_strawberry_custard.jpg'],
+  ['12','کاکائو','custard','کاستر','غلیظ، لطیف و شکلاتی','150000','12_custard_cocoa.jpg','dessert_cocoa.jpg'],
+  ['13','هفت‌میوه','custard','کاستر','ترکیبی رنگارنگ برای عاشقان تنوع','150000','13_custard_seven_fruits.jpg','dessert_gallery.jpg'],
+  ['14','پرتقال','custard','کاستر','نرم و خوش‌عطر با حس پرتقال','150000','14_custard_orange.jpg','dessert_gallery.jpg'],
+  ['15','وانیلی','custard','کاستر','نرم و خامه‌ای با عطر وانیل','150000','15_custard_vanilla.jpg','dessert_vanilla.jpg']
+];
+
+let filter='all',
+cart=JSON.parse(localStorage.getItem('zhenoCart')||'[]');
+
+const grid=document.getElementById('productsGrid');
+
+function renderProducts(){
+  grid.innerHTML=products
+    .filter(p=>filter==='all'||p[2]===filter)
+    .map(p=>`
+      <article class="product">
+
+        <div class="product-img">
+          <img
+            src="${p[6]}"
+            alt="پودر ${p[1]}"
+            loading="lazy"
+            onerror="this.src='IMG_20260902_214806_971.jpg'"
+          >
+        </div>
+
+        <div class="product-body">
+          <span class="tag">${p[3]}</span>
+
+          <h3>${p[1]}</h3>
+
+          <p>${p[4]}</p>
+
+          <div style="
+            font-size:11px;
+            color:#756964;
+            margin-top:5px;
+            font-weight:600
+          ">
+            📦 ۲۵۰ گرم • یک بسته
+          </div>
+
+          <div class="product-row">
+            <span class="price">
+              ${Number(p[5]).toLocaleString('fa-IR')} تومان
+            </span>
+
+            <button
+              class="add"
+              onclick="addToCart('${p[0]}')"
+              aria-label="افزودن"
+            >
+              +
+            </button>
+          </div>
+
+          <button
+            class="btn btn-light"
+            style="width:100%;margin-top:10px;padding:8px"
+            onclick="showProduct('${p[0]}')"
+          >
+            جزئیات محصول
+          </button>
+
+        </div>
+      </article>
+    `)
+    .join('');
+}
+
+document.querySelectorAll('.filter').forEach(b=>{
+  b.onclick=()=>{
+    document
+      .querySelectorAll('.filter')
+      .forEach(x=>x.classList.remove('active'));
+
+    b.classList.add('active');
+
+    filter=b.dataset.filter;
+
+    renderProducts();
+  };
+});
+
+function save(){
+  localStorage.setItem(
+    'zhenoCart',
+    JSON.stringify(cart)
+  );
+
+  renderCart();
+
+  document.getElementById('count').textContent=
+    cart.reduce((s,x)=>s+x.qty,0);
+}
+
+function addToCart(id){
+  let x=cart.find(a=>a.id===id);
+
+  if(x){
+    x.qty++;
+  }else{
+    cart.push({
+      id,
+      qty:1
+    });
+  }
+
+  save();
+
+  toast('محصول به سبد اضافه شد ✓');
+}
+
+function renderCart(){
+
+  let el=document.getElementById('cartList');
+
+  if(!cart.length){
+
+    el.innerHTML=`
+      <div style="
+        text-align:center;
+        padding:55px 10px;
+        color:#756964
+      ">
+        سبد خریدت هنوز خالیه 🌱
+        <br>
+
+        <a
+          href="#products"
+          onclick="closeCart()"
+          style="
+            color:#e85b45;
+            font-weight:800
+          "
+        >
+          مشاهده محصولات
+        </a>
+      </div>
+    `;
+
+    document.getElementById('total').textContent='۰ تومان';
+
+    return;
+  }
+
+  let total=0;
+
+  el.innerHTML=cart.map(x=>{
+
+    let p=products.find(a=>a[0]===x.id);
+
+    total+=+p[5]*x.qty;
+
+    return `
+      <div class="cart-item">
+
+        <img
+          src="${p[6]}"
+          alt=""
+        >
+
+        <div>
+
+          <b>${p[1]}</b>
+
+          <div class="qty">
+
+            <button
+              onclick="changeQty('${p[0]}',-1)"
+            >
+              −
+            </button>
+
+            <span>${x.qty}</span>
+
+            <button
+              onclick="changeQty('${p[0]}',1)"
+            >
+              +
+            </button>
+
+          </div>
+
+        </div>
+
+        <b>
+          ${(+p[5]*x.qty).toLocaleString('fa-IR')}
+        </b>
+
+      </div>
+    `;
+
+  }).join('');
+
+  document.getElementById('total').textContent=
+    total.toLocaleString('fa-IR')+' تومان';
+}
+
+function changeQty(id,n){
+
+  let x=cart.find(a=>a.id===id);
+
+  x.qty+=n;
+
+  if(x.qty<=0){
+    cart=cart.filter(a=>a.id!==id);
+  }
+
+  save();
+}
+
+function openCart(){
+
+  document
+    .getElementById('drawer')
+    .classList.add('open');
+
+  renderCart();
+}
+
+function closeCart(){
+
+  document
+    .getElementById('drawer')
+    .classList.remove('open');
+}
+
+function showProduct(id){
+
+  let p=products.find(a=>a[0]===id);
+
+  document.getElementById('modalContent').innerHTML=`
+
+    <div class="modal-gallery">
+
+      <div>
+        <small>پودر محصول</small>
+
+        <img
+          class="modal-img"
+          src="${p[6]}"
+          alt="پودر ${p[1]} ژینو"
+          onerror="this.src='IMG_20260902_214806_971.jpg'"
+        >
+      </div>
+
+      <div>
+        <small>نمونه دسر</small>
+
+        <img
+          class="modal-img"
+          src="${p[7]}"
+          alt="دسر ${p[1]}"
+          onerror="this.src='dessert_gallery.jpg'"
+        >
+      </div>
+
+      <div>
+        <small>نمای حرفه‌ای</small>
+
+        <img
+          class="modal-img"
+          src="${p[7]}"
+          alt="نمای حرفه‌ای ${p[1]}"
+          onerror="this.src='dessert_gallery.jpg'"
+        >
+      </div>
+
+    </div>
+
+    <span class="tag">
+      ${p[3]}
+    </span>
+
+    <h2>${p[1]}</h2>
+
+    <p>${p[4]}</p>
+
+    <p>
+      هر بسته ۲۵۰ گرم است.
+      قیمت:
+      ${Number(p[5]).toLocaleString('fa-IR')}
+      تومان.
+    </p>
+
+    <button
+      class="btn btn-primary"
+      onclick="addToCart('${p[0]}');closeModal();openCart()"
+    >
+      افزودن به سبد 🛒
+    </button>
+  `;
+
+  document
+    .getElementById('modal')
+    .classList.add('show');
+}
+
+function closeModal(){
+
+  document
+    .getElementById('modal')
+    .classList.remove('show');
+}
+
+function checkout(){
+
+  if(!cart.length){
+    return toast('سبد خرید خالی است');
+  }
+
+  toast(
+    'سبد آماده سفارش است؛ اتصال پرداخت در مرحله بعد فعال می‌شود.'
+  );
+}
+
+function submitForm(e){
+
+  e.preventDefault();
+
+  e.target.reset();
+
+  toast('پیام شما ثبت شد ✓');
+}
+
+function toast(t){
+
+  let x=document.getElementById('toast');
+
+  x.textContent=t;
+
+  x.classList.add('show');
+
+  setTimeout(
+    ()=>x.classList.remove('show'),
+    2500
+  );
+}
+
+function toggleMenu(){
+
+  let n=document.querySelector('.navlinks');
+
+  n.style.display=
+    n.style.display==='flex'
+      ?'none'
+      :'flex';
+
+  n.style.position='absolute';
+  n.style.top='66px';
+  n.style.right='10px';
+  n.style.left='10px';
+  n.style.background='#fff';
+  n.style.padding='18px';
+  n.style.borderRadius='18px';
+  n.style.flexDirection='column';
+  n.style.boxShadow='var(--shadow)';
+}
+
+renderProducts();
+
+save();
+</script>
+
+<script>
+/* ZHENO LOCAL IMAGE SAFETY */
+
+document.addEventListener(
+  'error',
+  function(e){
+
+    const img=e.target;
+
+    if(
+      img &&
+      img.tagName==='IMG' &&
+      !img.dataset.fallback
+    ){
+
+      img.dataset.fallback='1';
+
+      img.style.objectFit='contain';
+
+      img.style.background='#f5eee8';
+    }
+
+  },
+  true
+);
+</script>
+
+</body>
+  </html>
