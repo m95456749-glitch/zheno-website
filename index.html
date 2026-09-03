@@ -41,3 +41,991 @@
 </body>
 
 </html>
+<body>
+  <!-- =========================================
+     HEADER / NAVBAR
+     ========================================= -->
+
+<header class="header" id="header">
+
+  <div class="container nav-container">
+
+    <!-- Logo -->
+    <a href="#home" class="logo">
+      <span class="logo-icon">ژ</span>
+      <span class="logo-text">ژینو</span>
+    </a>
+
+    <!-- Desktop Navigation -->
+    <nav class="nav" id="mainNav">
+
+      <a href="#home" class="nav-link active">
+        خانه
+      </a>
+
+      <a href="#products" class="nav-link">
+        محصولات
+      </a>
+
+      <a href="#recipes" class="nav-link">
+        طرز تهیه
+      </a>
+
+      <a href="#gallery" class="nav-link">
+        گالری
+      </a>
+
+      <a href="#about" class="nav-link">
+        درباره ما
+      </a>
+
+      <a href="#contact" class="nav-link">
+        تماس با ما
+      </a>
+
+    </nav>
+
+    <!-- Header Actions -->
+    <div class="nav-actions">
+
+      <!-- Cart -->
+      <button
+        class="cart-button"
+        id="cartButton"
+        type="button"
+        aria-label="سبد خرید"
+      >
+        <i class="fa-solid fa-cart-shopping"></i>
+
+        <span
+          class="cart-count"
+          id="cartCount"
+        >۰</span>
+      </button>
+
+      <!-- Mobile Menu Button -->
+      <button
+        class="menu-toggle"
+        id="menuToggle"
+        type="button"
+        aria-label="باز کردن منو"
+      >
+        <i class="fa-solid fa-bars"></i>
+      </button>
+
+    </div>
+
+  </div>
+
+</header>
+
+<!-- =========================================
+     MOBILE MENU
+     ========================================= -->
+
+<div
+  class="mobile-menu"
+  id="mobileMenu"
+  aria-hidden="true"
+>
+
+  <div class="mobile-menu-header">
+
+    <strong>منوی ژینو</strong>
+
+    <button
+      class="mobile-menu-close"
+      id="mobileMenuClose"
+      type="button"
+      aria-label="بستن منو"
+    >
+      <i class="fa-solid fa-xmark"></i>
+    </button>
+
+  </div>
+
+  <nav class="mobile-nav">
+
+    <a href="#home" class="mobile-nav-link">
+      خانه
+    </a>
+
+    <a href="#products" class="mobile-nav-link">
+      محصولات
+    </a>
+
+    <a href="#recipes" class="mobile-nav-link">
+      طرز تهیه
+    </a>
+
+    <a href="#gallery" class="mobile-nav-link">
+      گالری
+    </a>
+
+    <a href="#about" class="mobile-nav-link">
+      درباره ما
+    </a>
+
+    <a href="#contact" class="mobile-nav-link">
+      تماس با ما
+    </a>
+
+  </nav>
+
+</div>
+<!-- =========================================
+     HERO SECTION
+     ========================================= -->
+
+<main>
+
+  <section class="hero" id="home">
+
+    <div class="container hero-content">
+
+      <!-- Hero Text -->
+      <div class="hero-text-col">
+
+        <span class="badge badge-primary">
+          برند غذایی ژینو
+        </span>
+
+        <h1>
+          کیفیت واقعی،
+          <span class="text-gradient">انتخاب ژینو</span>
+          😋
+        </h1>
+
+        <p>
+          ژینو تجربه‌ای متفاوت و به‌یادماندنی از طعم واقعی میوه‌ها،
+          ژله‌های کریستالی شفاف و کاسترهای نرم و خامه‌ای را
+          به سفره‌های شما می‌آورد.
+        </p>
+
+        <div class="hero-badges">
+
+          <span class="badge">
+            ۱۵ طعم متنوع
+          </span>
+
+          <span class="badge">
+            با کیفیت صادراتی
+          </span>
+
+          <span class="badge">
+            اشتهابرانگیز و لذیذ
+          </span>
+
+        </div>
+
+        <div class="hero-buttons">
+
+          <a
+            href="#products"
+            class="btn btn-primary"
+          >
+            مشاهده محصولات
+            <i class="fa-solid fa-arrow-left"></i>
+          </a>
+
+          <a
+            href="#about"
+            class="btn btn-outline"
+          >
+            درباره ژینو
+          </a>
+
+        </div>
+
+      </div>
+
+      <!-- Hero Image -->
+      <div class="hero-image">
+
+        <img
+          src="IMG_20260902_214806_971.jpg"
+          alt="محصولات برند ژینو"
+        >
+
+      </div>
+
+    </div>
+
+  </section>
+<!-- =========================================
+     PRODUCTS SECTION
+     ========================================= -->
+
+<section class="products-section" id="products">
+
+  <div class="container">
+
+    <div class="section-heading">
+
+      <span class="badge badge-primary">
+        محصولات ژینو
+      </span>
+
+      <h2>
+        طعم مورد علاقه‌ات را انتخاب کن
+      </h2>
+
+      <p>
+        ژله و کاستر ژینو در طعم‌های متنوع و با کیفیت بالا،
+        برای یک تجربه خوشمزه و متفاوت.
+      </p>
+
+    </div>
+
+    <!-- Product Filters -->
+    <div class="product-filters">
+
+      <button
+        class="filter-btn active"
+        type="button"
+        data-filter="all"
+      >
+        همه محصولات
+      </button>
+
+      <button
+        class="filter-btn"
+        type="button"
+        data-filter="jelly"
+      >
+        ژله
+      </button>
+
+      <button
+        class="filter-btn"
+        type="button"
+        data-filter="custard"
+      >
+        کاستر
+      </button>
+
+    </div>
+
+    <!-- Search -->
+    <div class="product-search">
+
+      <i class="fa-solid fa-magnifying-glass"></i>
+
+      <input
+        type="search"
+        id="productSearch"
+        placeholder="جستجوی طعم موردنظر..."
+        aria-label="جستجوی محصولات"
+      >
+
+    </div>
+
+    <!-- Products are rendered by JavaScript -->
+    <div
+      class="products-grid"
+      id="productsGrid"
+    ></div>
+
+  </div>
+
+</section>
+<!-- =========================================
+     RECIPES SECTION
+     ========================================= -->
+
+<section class="recipes-section" id="recipes">
+
+  <div class="container">
+
+    <div class="section-heading">
+
+      <span class="badge badge-primary">
+        طرز تهیه
+      </span>
+
+      <h2>
+        آماده‌سازی آسان و خوشمزه
+      </h2>
+
+      <p>
+        با چند مرحله ساده، ژله و کاستر ژینو را آماده و نوش جان کنید.
+      </p>
+
+    </div>
+
+    <div class="recipes-grid">
+
+      <!-- Jelly Recipe -->
+      <article class="recipe-card">
+
+        <div class="recipe-icon">
+          🍓
+        </div>
+
+        <div class="recipe-content">
+
+          <h3>
+            طرز تهیه ژله
+          </h3>
+
+          <p>
+            ۳ قاشق غذاخوری پودر ژله را با ۱.۵ لیوان آب مخلوط کنید.
+            دمای آب تفاوتی ندارد و می‌توانید از آب سرد یا گرم استفاده کنید.
+          </p>
+
+          <p>
+            مواد را روی حرارت ملایم قرار دهید و هم بزنید تا به جوش بیاید.
+            پس از جوش آمدن، ظرف را از روی حرارت بردارید و اجازه دهید کمی خنک شود.
+          </p>
+
+          <p>
+            سپس ژله را در ظرف موردنظر بریزید و داخل یخچال قرار دهید
+            تا کاملاً خنک و آماده سرو شود. 🍓✨
+          </p>
+
+        </div>
+
+      </article>
+
+      <!-- Custard Recipe -->
+      <article class="recipe-card">
+
+        <div class="recipe-icon">
+          🍮
+        </div>
+
+        <div class="recipe-content">
+
+          <h3>
+            طرز تهیه کاستر
+          </h3>
+
+          <p>
+            ۱ قاشق غذاخوری پودر کاستر را با ۱ لیوان شیر
+            و ۲ قاشق غذاخوری شکر به‌خوبی مخلوط کنید.
+          </p>
+
+          <p>
+            مواد را روی حرارت ملایم قرار دهید و مرتب هم بزنید
+            تا مخلوط به غلظت و قوام مناسب برسد.
+          </p>
+
+          <p>
+            پس از آماده شدن، کاستر را در ظرف موردنظر بریزید
+            و اجازه دهید خنک شود. 🍮✨
+          </p>
+
+        </div>
+
+      </article>
+
+    </div>
+
+  </div>
+
+  </section>
+  <!-- =========================================
+     GALLERY SECTION
+     ========================================= -->
+
+<section class="gallery-section" id="gallery">
+
+  <div class="container">
+
+    <div class="section-heading">
+
+      <span class="badge badge-primary">
+        گالری ژینو
+      </span>
+
+      <h2>
+        یک نگاه، یک هوس 😋
+      </h2>
+
+      <p>
+        گوشه‌ای از دنیای خوشمزه و رنگارنگ ژینو
+      </p>
+
+    </div>
+
+    <!-- Gallery images will be connected to data.js later -->
+    <div
+      class="gallery-grid"
+      id="galleryGrid"
+    ></div>
+
+  </div>
+
+</section>
+<!-- =========================================
+     ABOUT SECTION
+     ========================================= -->
+
+<section class="about-section" id="about">
+
+  <div class="container">
+
+    <div class="about-content">
+
+      <div class="about-text">
+
+        <span class="badge badge-primary">
+          درباره ژینو
+        </span>
+
+        <h2>
+          برند غذایی ژینو
+        </h2>
+
+        <p>
+          سلام!🤍
+          <br><br>
+          اینجا دنیای طعم‌های خوشمزه و دوست‌داشتنیه! 🍓✨
+          <br><br>
+          ژینو با هدف ارائه محصولاتی خوش‌طعم، باکیفیت و آماده برای لذت بردن شما شکل گرفته؛
+          از ژله‌های رنگارنگ و هیجان‌انگیز گرفته تا کاسترهای نرم و لطیف.
+          <br><br>
+          ما در ژینو تلاش می‌کنیم تجربه‌ای ساده، خوشمزه و متفاوت برات بسازیم؛
+          <br>
+          انتخاب کن، آماده کن و از طعمش لذت ببر! 😉
+        </p>
+
+      </div>
+
+
+      <div class="about-stats">
+
+        <div class="stat-card">
+
+          <span class="stat-number">
+            ۱۵
+          </span>
+
+          <span class="stat-label">
+            طعم متنوع
+          </span>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <span class="stat-number">
+            ۲۵۰
+          </span>
+
+          <span class="stat-label">
+            گرم هر بسته
+          </span>
+
+        </div>
+
+
+        <div class="stat-card">
+
+          <span class="stat-number">
+            ۲
+          </span>
+
+          <span class="stat-label">
+            دسته محصول
+          </span>
+
+        </div>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+<!-- =========================================
+     CONTACT SECTION
+     ========================================= -->
+
+<section class="contact-section" id="contact">
+
+  <div class="container">
+
+    <div class="section-heading">
+
+      <span class="badge badge-primary">
+        ارتباط با ژینو
+      </span>
+
+      <h2>
+        با ما در ارتباط باشید 🤍
+      </h2>
+
+      <p>
+        برای ثبت سفارش و دریافت اطلاعات بیشتر با ما در ارتباط باشید.
+      </p>
+
+    </div>
+
+
+    <div class="contact-content">
+
+      <!-- Contact Information -->
+      <div class="contact-info">
+
+        <div class="contact-card">
+
+          <div class="contact-icon">
+            <i class="fas fa-phone"></i>
+          </div>
+
+          <div class="contact-details">
+
+            <h3>
+              شماره تماس
+            </h3>
+
+            <a href="tel:09931624622">
+              ۰۹۹۳۱۶۲۴۶۲۲
+            </a>
+
+          </div>
+
+        </div>
+
+
+        <div class="contact-card">
+
+          <div class="contact-icon">
+            <i class="fab fa-telegram"></i>
+          </div>
+
+          <div class="contact-details">
+
+            <h3>
+              تلگرام
+            </h3>
+
+            <a
+              href="https://t.me/+0qAvorUwSQEzNDc8"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              ارتباط در تلگرام
+            </a>
+
+          </div>
+
+        </div>
+
+      </div>
+
+
+      <!-- Contact Form -->
+      <div class="contact-form-wrapper">
+
+        <form
+          class="contact-form"
+          id="contactForm"
+        >
+
+          <div class="form-group">
+
+            <label for="contactName">
+              نام شما
+            </label>
+
+            <input
+              type="text"
+              id="contactName"
+              name="name"
+              placeholder="نام خود را وارد کنید"
+              required
+            >
+
+          </div>
+
+
+          <div class="form-group">
+
+            <label for="contactPhone">
+              شماره تماس
+            </label>
+
+            <input
+              type="tel"
+              id="contactPhone"
+              name="phone"
+              placeholder="شماره تماس خود را وارد کنید"
+              required
+            >
+
+          </div>
+
+
+          <div class="form-group">
+
+            <label for="contactMessage">
+              پیام شما
+            </label>
+
+            <textarea
+              id="contactMessage"
+              name="message"
+              rows="5"
+              placeholder="پیام خود را بنویسید..."
+              required
+            ></textarea>
+
+          </div>
+
+
+          <button
+            type="submit"
+            class="btn btn-primary contact-submit-btn"
+          >
+            <i class="fab fa-telegram"></i>
+            ارسال پیام
+          </button>
+
+        </form>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</section>
+<!-- =========================================
+     CART DRAWER
+     ========================================= -->
+
+<div
+  class="cart-overlay"
+  id="cartOverlay"
+>
+
+  <div
+    class="cart-drawer"
+    id="cartDrawer"
+  >
+
+    <div class="cart-header">
+
+      <h3>
+        سبد خرید 🛒
+      </h3>
+
+      <button
+        type="button"
+        class="cart-close"
+        id="cartClose"
+        aria-label="بستن سبد خرید"
+      >
+        <i class="fas fa-times"></i>
+      </button>
+
+    </div>
+
+
+    <div
+      class="cart-items"
+      id="cartItems"
+    >
+      <!-- Cart items will be rendered by script.js -->
+    </div>
+
+
+    <div class="cart-footer">
+
+      <div class="cart-summary">
+
+        <div class="cart-summary-row">
+
+          <span>
+            جمع کل
+          </span>
+
+          <strong
+            class="cart-total"
+            id="cartTotal"
+          >
+            ۰ تومان
+          </strong>
+
+        </div>
+
+      </div>
+
+
+      <button
+        type="button"
+        class="btn btn-primary cart-checkout-btn"
+        id="cartCheckout"
+      >
+        <i class="fas fa-shopping-bag"></i>
+        ادامه و ثبت سفارش
+      </button>
+
+    </div>
+
+  </div>
+
+</div>
+<!-- =========================================
+     PRODUCT MODAL
+     ========================================= -->
+
+<div
+  class="product-modal"
+  id="productModal"
+  aria-hidden="true"
+>
+
+  <div class="product-modal-overlay" id="productModalOverlay"></div>
+
+  <div class="product-modal-content">
+
+    <button
+      type="button"
+      class="product-modal-close"
+      id="productModalClose"
+      aria-label="بستن"
+    >
+      <i class="fas fa-times"></i>
+    </button>
+
+
+    <div class="product-modal-body">
+
+      <div class="product-modal-image-wrapper">
+
+        <img
+          src=""
+          alt="محصول ژینو"
+          class="product-modal-image"
+          id="productModalImage"
+        >
+
+      </div>
+
+
+      <div class="product-modal-info">
+
+        <span
+          class="badge"
+          id="productModalBadge"
+        >
+          ژینو
+        </span>
+
+        <h2 id="productModalName">
+          نام محصول
+        </h2>
+
+        <p
+          class="product-modal-description"
+          id="productModalDescription"
+        >
+          توضیحات محصول
+        </p>
+
+
+        <div class="product-modal-meta">
+
+          <div class="product-meta-item">
+
+            <span>
+              وزن:
+            </span>
+
+            <strong id="productModalWeight">
+              ۲۵۰ گرم
+            </strong>
+
+          </div>
+
+
+          <div class="product-meta-item">
+
+            <span>
+              قیمت:
+            </span>
+
+            <strong id="productModalPrice">
+              ۰ تومان
+            </strong>
+
+          </div>
+
+        </div>
+
+
+        <button
+          type="button"
+          class="btn btn-primary btn-modal-add"
+          id="productModalAdd"
+        >
+          <i class="fas fa-cart-plus"></i>
+          افزودن به سبد خرید
+        </button>
+
+      </div>
+
+    </div>
+
+  </div>
+
+</div>
+<!-- =========================================
+     GALLERY LIGHTBOX
+     ========================================= -->
+
+<div
+  class="lightbox"
+  id="lightbox"
+  aria-hidden="true"
+>
+
+  <div
+    class="lightbox-overlay"
+    id="lightboxOverlay"
+  ></div>
+
+
+  <div class="lightbox-content">
+
+    <button
+      type="button"
+      class="lightbox-close"
+      id="lightboxClose"
+      aria-label="بستن تصویر"
+    >
+      <i class="fas fa-times"></i>
+    </button>
+
+
+    <img
+      src=""
+      alt="تصویر گالری ژینو"
+      class="lightbox-image"
+      id="lightboxImage"
+    />
+
+  </div>
+
+</div>
+<!-- =========================================
+     TOAST NOTIFICATION
+     ========================================= -->
+
+<div
+  class="toast"
+  id="toast"
+  role="status"
+  aria-live="polite"
+>
+  <div class="toast-icon">
+    <i class="fas fa-check-circle"></i>
+  </div>
+
+  <div class="toast-content">
+
+    <strong id="toastTitle">
+      انجام شد
+    </strong>
+
+    <p id="toastMessage">
+      عملیات با موفقیت انجام شد.
+    </p>
+
+  </div>
+
+</div>
+<!-- =========================================
+     FOOTER
+     ========================================= -->
+
+<footer class="footer">
+
+  <div class="container">
+
+    <div class="footer-content">
+
+      <div class="footer-brand">
+
+        <h3>
+          ژینو
+        </h3>
+
+        <p>
+          طعمی متفاوت، کیفیتی ماندگار 🤍
+        </p>
+
+      </div>
+
+
+      <div class="footer-links">
+
+        <a href="#home">
+          خانه
+        </a>
+
+        <a href="#products">
+          محصولات
+        </a>
+
+        <a href="#recipes">
+          طرز تهیه
+        </a>
+
+        <a href="#about">
+          درباره ژینو
+        </a>
+
+        <a href="#contact">
+          تماس با ما
+        </a>
+
+      </div>
+
+
+      <div class="footer-contact">
+
+        <a href="tel:09931624622">
+          <i class="fas fa-phone"></i>
+          ۰۹۹۳۱۶۲۴۶۲۲
+        </a>
+
+        <a
+          href="https://t.me/+0qAvorUwSQEzNDc8"
+          target="_blank"
+          rel="noopener noreferrer"
+        >
+          <i class="fab fa-telegram"></i>
+          تلگرام ژینو
+        </a>
+
+      </div>
+
+    </div>
+
+
+    <div class="footer-bottom">
+
+      <p>
+        © تمامی حقوق برای برند ژینو محفوظ است.
+      </p>
+
+    </div>
+
+  </div>
+
+</footer>
+</main>
+<!-- =========================================
+     JAVASCRIPT
+     ========================================= -->
+
+<script src="data.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
