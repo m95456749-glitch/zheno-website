@@ -1,73 +1,373 @@
 @import "tailwindcss";
 
+/* ============================================================
+   ZHINO — luxury design system
+   Palette: deep burgundy wine · warm dark neutrals · cream/ivory
+   Accents: antique gold, restrained fruit jewel tones (per flavor)
+   Display latin: Marcellus · Persian: Vazirmatn
+   ============================================================ */
+
 @theme {
   --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  --font-display: 'Marcellus', 'Vazirmatn', Georgia, serif;
+
+  /* near-black plum for the deepest surfaces */
+  --color-noir: #170609;
+
+  /* burgundy / wine scale */
+  --color-wine-950: #200a10;
+  --color-wine-900: #360f1b;
+  --color-wine-800: #4c1624;
+  --color-wine-700: #64202f;
+  --color-wine-600: #7d2c3e;
+  --color-wine-500: #96414f;
+
+  /* cream / ivory */
+  --color-cream-50: #fbf7f0;
+  --color-cream-100: #f5eee1;
+  --color-cream-200: #ebe0cc;
+  --color-cream-300: #ddcbab;
+
+  /* antique gold */
+  --color-gold-300: #e9d5a7;
+  --color-gold-400: #d8b878;
+  --color-gold-500: #c09a4e;
+  --color-gold-600: #9c7a39;
+  --color-gold-700: #795c29;
+
+  /* warm neutrals for text */
+  --color-espresso: #2b1d18;
+  --color-mocha: #6f5a4f;
+  --color-mocha-light: #97847a;
 }
 
 body {
   font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
 }
 
-/* Custom smooth glassmorphism utility */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 248, 240, 0.6);
+/* ------------------------------------------------------------
+   Base polish
+   ------------------------------------------------------------ */
+
+::selection {
+  background: var(--color-gold-300);
+  color: var(--color-wine-950);
 }
 
-.glass-dark {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+:focus-visible {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
 /* Custom scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #FAF8F5;
+  background: var(--color-cream-100);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #F3D5B5;
+  background: linear-gradient(var(--color-wine-700), var(--color-wine-900));
   border-radius: 9999px;
+  border: 2px solid var(--color-cream-100);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #E8B98A;
+  background: linear-gradient(var(--color-wine-600), var(--color-wine-800));
 }
 
-/* Pulse glow animation */
-@keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-8px) rotate(1deg); }
+/* ------------------------------------------------------------
+   Cinematic film grain (tiny inline SVG, no extra requests)
+   ------------------------------------------------------------ */
+
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.05;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.animate-float {
-  animation: float 5s ease-in-out infinite;
+/* ------------------------------------------------------------
+   Hero — layered background
+   When public/images/hero-bg.jpg exists it is painted over the
+   silk gradient; if absent the CSS treatment below stands in,
+   so the Hero is never broken.
+   ------------------------------------------------------------ */
+
+.hero-silk {
+  background-color: var(--color-wine-950);
+  background-image:
+    radial-gradient(58% 90% at 78% 18%, rgba(125, 44, 62, 0.55) 0%, rgba(125, 44, 62, 0) 62%),
+    radial-gradient(70% 120% at 12% 88%, rgba(76, 22, 36, 0.9) 0%, rgba(76, 22, 36, 0) 60%),
+    conic-gradient(from 210deg at 62% 46%, #200a10 0deg, #4c1624 70deg, #64202f 150deg, #360f1b 250deg, #200a10 360deg);
 }
 
-@keyframes pulse-soft {
-  0%, 100% { opacity: 0.9; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.02); }
+.hero-photo {
+  background-image: var(--hero-img, none);
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: 50% 62%;
 }
 
-.animate-pulse-soft {
-  animation: pulse-soft 4s ease-in-out infinite;
+@media (min-width: 1024px) {
+  .hero-photo {
+    background-position: 66% center;
+  }
 }
 
-/* Page/section entrance */
+/* soft flowing "silk" ribbons, purely decorative */
+.hero-silk::before {
+  content: '';
+  position: absolute;
+  inset: -20%;
+  background-image:
+    radial-gradient(42% 58% at 30% 34%, rgba(216, 184, 120, 0.09) 0%, rgba(216, 184, 120, 0) 60%),
+    radial-gradient(50% 70% at 72% 68%, rgba(150, 65, 79, 0.4) 0%, rgba(150, 65, 79, 0) 62%);
+  transform: rotate(-6deg);
+  filter: blur(2px);
+}
+
+/* ------------------------------------------------------------
+   Buttons — refined, two-tone luxury
+   ------------------------------------------------------------ */
+
+.btn-lux {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 0.85rem;
+  padding: 0.9rem 2rem;
+  font-weight: 600;
+  font-size: 0.95rem;
+  line-height: 1;
+  transition:
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    background-color 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+.btn-lux:active {
+  transform: scale(0.98);
+}
+
+.btn-gold {
+  background-image: linear-gradient(120deg, var(--color-gold-400) 0%, var(--color-gold-500) 55%, var(--color-gold-300) 100%);
+  color: var(--color-wine-950);
+  box-shadow:
+    0 12px 30px -12px rgba(192, 154, 78, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.btn-gold:hover {
+  background-image: linear-gradient(120deg, var(--color-gold-300) 0%, var(--color-gold-400) 60%, var(--color-gold-300) 100%);
+  transform: translateY(-1px);
+}
+
+.btn-wine {
+  background-color: var(--color-wine-900);
+  color: var(--color-cream-50);
+  box-shadow:
+    0 14px 30px -14px rgba(32, 10, 16, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.btn-wine:hover {
+  background-color: var(--color-wine-800);
+  transform: translateY(-1px);
+}
+
+.btn-line-light {
+  border: 1px solid rgba(251, 247, 240, 0.35);
+  color: var(--color-cream-50);
+  background: rgba(251, 247, 240, 0.04);
+  backdrop-filter: blur(6px);
+}
+
+.btn-line-light:hover {
+  border-color: var(--color-gold-400);
+  color: var(--color-gold-300);
+  background: rgba(216, 184, 120, 0.08);
+  transform: translateY(-1px);
+}
+
+.btn-line-dark {
+  border: 1px solid rgba(43, 29, 24, 0.18);
+  color: var(--color-espresso);
+  background: transparent;
+}
+
+.btn-line-dark:hover {
+  border-color: var(--color-wine-700);
+  color: var(--color-wine-800);
+  background: rgba(100, 32, 47, 0.05);
+  transform: translateY(-1px);
+}
+
+/* ------------------------------------------------------------
+   Editorial type helpers
+   ------------------------------------------------------------ */
+
+.kicker {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.42em;
+  font-size: 0.68rem;
+  color: var(--color-gold-700);
+}
+
+.kicker-dark {
+  color: var(--color-gold-400);
+}
+
+/* thin ornamental rule with a diamond node */
+.rule-lux {
+  display: inline-block;
+  width: 3.5rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-gold-500), transparent);
+  position: relative;
+}
+
+.rule-lux::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--color-gold-500);
+}
+
+/* ------------------------------------------------------------
+   Surfaces — quiet cards, no plastic rounding
+   ------------------------------------------------------------ */
+
+.card-lux {
+  background: #fffdf9;
+  border: 1px solid rgba(43, 29, 24, 0.08);
+  box-shadow:
+    0 1px 2px rgba(43, 29, 24, 0.04),
+    0 18px 40px -28px rgba(43, 29, 24, 0.25);
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
+}
+
+.card-lux:hover {
+  border-color: rgba(192, 154, 78, 0.45);
+  box-shadow:
+    0 1px 2px rgba(43, 29, 24, 0.04),
+    0 30px 55px -30px rgba(54, 15, 27, 0.35);
+  transform: translateY(-4px);
+}
+
+.panel-lux {
+  background: #fffdf9;
+  border: 1px solid rgba(43, 29, 24, 0.08);
+  box-shadow:
+    0 1px 2px rgba(43, 29, 24, 0.04),
+    0 24px 48px -32px rgba(43, 29, 24, 0.3);
+}
+
+/* hairline gold frame used around hero focal + key panels */
+.frame-lux {
+  position: relative;
+}
+
+.frame-lux::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(216, 184, 120, 0.5);
+  border-radius: inherit;
+  transform: translate(1.1rem, 1.1rem);
+  pointer-events: none;
+}
+
+html[dir='rtl'] .frame-lux::before {
+  transform: translate(1.1rem, 1.1rem);
+}
+
+/* frosted panel for the light scroll state of the header */
+.frost {
+  background: rgba(251, 247, 240, 0.86);
+  backdrop-filter: blur(14px) saturate(1.3);
+  -webkit-backdrop-filter: blur(14px) saturate(1.3);
+  border-bottom: 1px solid rgba(54, 15, 27, 0.08);
+  box-shadow: 0 10px 30px -22px rgba(32, 10, 16, 0.35);
+}
+
+/* ------------------------------------------------------------
+   Motion — restrained entrances
+   ------------------------------------------------------------ */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--rise-delay, 0s);
+}
+
+/* cinematic wipe for the hero focal image */
+@keyframes veil-up {
+  from {
+    clip-path: inset(12% 6% 12% 6%);
+    opacity: 0.4;
+  }
+  to {
+    clip-path: inset(0% 0% 0% 0%);
+    opacity: 1;
+  }
+}
+
+.veil-up {
+  animation: veil-up 1s 0.25s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+/* slow drift for hero focal (very subtle) */
+@keyframes drift {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-7px);
+  }
+}
+
+.drift {
+  animation: drift 7s ease-in-out infinite;
+}
+
+/* legacy entrance kept for existing usages */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-up {
-  animation: fade-up 0.5s ease both;
+  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* Toast entrance */
@@ -77,15 +377,69 @@ body {
 }
 
 .animate-toast-in {
-  animation: toast-in 0.25s ease both;
+  animation: toast-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Respect users who prefer reduced motion */
+/* scroll-triggered sections (armed by JS only when IO is available) */
+.reveal-armed {
+  opacity: 0;
+  transform: translateY(22px);
+  transition:
+    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* gold shimmer sweep on hero CTA hover */
+.sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.sheen::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  left: -60%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.7s ease;
+  pointer-events: none;
+}
+
+.sheen:hover::after {
+  left: 120%;
+}
+
+/* ------------------------------------------------------------
+   Accessibility — motion preferences are honored everywhere
+   ------------------------------------------------------------ */
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-float,
-  .animate-pulse-soft,
-  .animate-fade-up,
-  .animate-toast-in {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .rise,
+  .veil-up,
+  .reveal-armed {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
+
+  .card-lux:hover {
+    transform: none;
   }
 }

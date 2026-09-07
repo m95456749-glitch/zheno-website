@@ -1,6 +1,7 @@
 // ============================================================
 // ZHINO — data-driven product visual
-// Renders the flavor color + motif stored in the product catalog.
+// Renders the flavor color + motif stored in the product catalog
+// as a jewel-toned, softly lit plate (no external images).
 // ============================================================
 
 interface Props {
@@ -19,16 +20,19 @@ export default function ProductVisual({ color, emoji, name, className = '', emoj
       className={`relative overflow-hidden ${className}`}
       style={{
         backgroundColor: color,
-        background: `linear-gradient(135deg, ${color} 0%, color-mix(in srgb, ${color} 55%, black) 135%)`,
+        backgroundImage: `radial-gradient(115% 85% at 26% 16%, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 52%), radial-gradient(130% 100% at 74% 96%, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0) 58%), linear-gradient(152deg, ${color} 0%, color-mix(in srgb, ${color} 66%, black) 72%, color-mix(in srgb, ${color} 40%, black) 100%)`,
       }}
     >
-      {/* decorative glow circles */}
-      <div className="absolute -left-8 -top-8 h-32 w-32 rounded-full bg-white/15" aria-hidden="true" />
-      <div className="absolute -bottom-10 -right-10 h-40 w-40 rounded-full bg-white/10" aria-hidden="true" />
-      <div className="absolute left-1/2 top-1/2 h-40 w-40 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white/10 blur-2xl" aria-hidden="true" />
+      {/* studio light pools */}
+      <div className="absolute left-1/2 top-1/2 h-[55%] w-[62%] -translate-x-1/2 -translate-y-[58%] rounded-full bg-white/12 blur-2xl" aria-hidden="true" />
+      {/* pedestal shadow under the motif */}
+      <div className="absolute bottom-[16%] left-1/2 h-6 w-2/5 -translate-x-1/2 rounded-[100%] bg-black/25 blur-md" aria-hidden="true" />
       {/* flavor motif */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span className={`${emojiClassName} drop-shadow-lg transition-transform duration-300 group-hover:scale-110`} aria-hidden="true">
+        <span
+          className={`${emojiClassName} drop-shadow-[0_10px_16px_rgba(0,0,0,0.45)] transition-transform duration-500 ease-out group-hover:scale-108 group-hover:-translate-y-1`}
+          aria-hidden="true"
+        >
           {emoji}
         </span>
       </div>
@@ -36,11 +40,13 @@ export default function ProductVisual({ color, emoji, name, className = '', emoj
       <div
         className="pointer-events-none absolute inset-0"
         aria-hidden="true"
-        style={{ background: 'linear-gradient(105deg, rgba(255,255,255,0.28) 0%, rgba(255,255,255,0) 40%)' }}
+        style={{ background: 'linear-gradient(108deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0) 36%)' }}
       />
-      {/* brand ribbon */}
-      <div className="absolute bottom-2 right-3 rounded-full bg-black/25 px-2.5 py-0.5 text-[11px] font-bold text-white backdrop-blur-sm">
-        ژینو
+      {/* hairline inner rim */}
+      <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10" aria-hidden="true" />
+      {/* brand mark */}
+      <div className="absolute bottom-2.5 right-3 font-display text-[0.58rem] uppercase tracking-[0.35em] text-cream-50/75">
+        Zhino
       </div>
     </div>
   );
