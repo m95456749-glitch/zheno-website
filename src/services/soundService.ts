@@ -13,13 +13,24 @@ type SoundType =
 
 const SOUND_PREF_KEY = 'zhino_sound_enabled';
 
+interface WindowWithWebkitAudio {
+  webkitAudioContext?: typeof AudioContext;
+}
+
 class SoundService {
   private context: AudioContext | null = null;
   private enabled: boolean;
 
   constructor() {
-    const stored = localStorage.getItem(SOUND_PREF_KEY);
-    this.enabled = stored === null ? true : stored === 'true';
+    this.enabled = true;
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        const stored = localStorage.getItem(SOUND_PREF_KEY);
+        this.enabled = stored === null ? true : stored === 'true';
+      }
+    } catch {
+      this.enabled = true;
+    }
   }
 
   isEnabled(): boolean {
@@ -28,7 +39,13 @@ class SoundService {
 
   setEnabled(val: boolean) {
     this.enabled = val;
-    localStorage.setItem(SOUND_PREF_KEY, String(val));
+    try {
+      if (typeof window !== 'undefined' && window.localStorage) {
+        localStorage.setItem(SOUND_PREF_KEY, String(val));
+      }
+    } catch {
+      // Storage unavailable — preference still applies in memory
+    }
   }
 
   toggle(): boolean {
@@ -36,11 +53,25 @@ class SoundService {
     return this.enabled;
   }
 
-  private getContext(): AudioContext {
-    if (!this.context) {
-      this.context = new (window.AudioContext || (window as any).webkitAudioContext)();
+  private getContext(): AudioContext | null {
+    try {
+      if (typeof window === 'undefined') return null;
+      const Ctor =
+        window.AudioContext ??
+        (window as unknown as WindowWithWebkitAudio).webkitAudioContext;
+      if (!Ctor) return null;
+      if (!this.context) {
+        this.context = new Ctor();
+      }
+      // Browsers start AudioContext suspended until a user gesture; resume so
+      // the first tap still produces feedback instead of silence.
+      if (this.context.state === 'suspended') {
+        void this.context.resume().catch(() => undefined);
+      }
+      return this.context;
+    } catch {
+      return null;
     }
-    return this.context;
   }
 
   private playTone(
@@ -48,10 +79,11 @@ class SoundService {
     duration: number,
     type: OscillatorType = 'sine',
     gain = 0.15,
-    delay = 0
+    delay = 0,
   ) {
     try {
       const ctx = this.getContext();
+      if (!ctx) return;
       const oscillator = ctx.createOscillator();
       const gainNode = ctx.createGain();
 
@@ -62,7 +94,7 @@ class SoundService {
       oscillator.frequency.setValueAtTime(frequency, ctx.currentTime + delay);
       oscillator.frequency.exponentialRampToValueAtTime(
         frequency * 0.95,
-        ctx.currentTime + delay + duration
+        ctx.currentTime + delay + duration,
       );
 
       gainNode.gain.setValueAtTime(0, ctx.currentTime + delay);

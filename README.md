@@ -62,3 +62,16 @@ src/
 - RTL (راست به چپ)
 - فارسی / Persian
 - فونت Vazirmatn
+
+## استقرار در GitHub Pages
+
+- آدرس انتشار: `https://<user>.github.io/zheno-website/`
+- در `vite.config.ts` مقدار `base` برابر `/zheno-website/` تنظیم شده است.
+- استقرار با GitHub Actions انجام می‌شود (`.github/workflows/deploy.yml`):
+  `npm ci` ← `npm run build` ← انتشار پوشه `dist`.
+- در تنظیمات مخزن: Settings ← Pages ← Source باید روی **GitHub Actions** باشد.
+- فایل `dist/404.html` به‌صورت خودکار از `index.html` ساخته می‌شود تا رفرش
+  صفحه‌های داخلی (مثل `/products/...` یا `/cart`) صفحه خالی برنگرداند.
+- فایل `public/.nojekyll` از پردازش Jekyll روی خروجی جلوگیری می‌کند.
+- حالت بدون بکند: اگر `VITE_API_BASE_URL` خالی باشد، تسویه‌حساب به‌صورت
+  محلی ثبت و تأیید می‌شود؛ با اتصال بکند، کاربر به درگاه پرداخت هدایت می‌شود.
