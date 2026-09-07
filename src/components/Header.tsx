@@ -1,9 +1,11 @@
 // ============================================================
-// ZHINO — site header (sticky glass nav + cart badge + sound toggle)
+// ZHINO — site header
+// Transparent overlay on the home Hero; frosted cream elsewhere
+// and after scroll. Sticky cart + sound toggle + mobile sheet.
 // ============================================================
 
-import { useState } from 'react';
-import { Link, NavLink } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useCartContext } from '../context/CartContext';
 import { soundService } from '../services/soundService';
 import { formatNumber } from '../utils/format';
@@ -12,8 +14,9 @@ import { cn } from '../utils/cn';
 const NAV_ITEMS = [
   { to: '/', label: 'خانه', end: true },
   { to: '/products', label: 'محصولات', end: false },
-  { to: '/recipes', label: 'دستورها', end: true },
-  { to: '/about', label: 'درباره ما', end: true },
+  { to: '/#flavors', label: 'طعم‌ها', end: false, hashScroll: true },
+  { to: '/recipes', label: 'دستور تهیه', end: true },
+  { to: '/about', label: 'درباره', end: true },
   { to: '/contact', label: 'تماس', end: true },
 ];
 
@@ -21,6 +24,28 @@ export default function Header() {
   const { totalItems } = useCartContext();
   const [menuOpen, setMenuOpen] = useState(false);
   const [soundOn, setSoundOn] = useState(() => soundService.isEnabled());
+  const [scrolled, setScrolled] = useState(false);
+  const { pathname } = useLocation();
+  const isHome = pathname === '/';
+
+  // The overlay (transparent) state only applies on the home hero, at top.
+  useEffect(() => {
+    if (!isHome) {
+      setScrolled(false);
+      return;
+    }
+    const onScroll = () => setScrolled(window.scrollY > 28);
+    onScroll();
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [isHome]);
+
+  // close the mobile sheet whenever the route changes
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  const overlay = isHome && !scrolled && !menuOpen;
 
   const toggleSound = () => {
     const next = soundService.toggle();
@@ -29,36 +54,79 @@ export default function Header() {
   };
 
   return (
-    <header className="glass-panel sticky top-0 z-40 shadow-sm shadow-stone-200/50">
+    <header
+      className={cn(
+        'fixed inset-x-0 top-0 z-50 transition-[background-color,box-shadow,border-color] duration-500',
+        overlay ? 'bg-transparent' : 'frost',
+      )}
+    >
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         {/* brand */}
-        <Link to="/" className="flex items-center gap-2.5" aria-label="ژینو — صفحه اصلی">
-          <span className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-orange-600 text-xl font-black text-white shadow-md shadow-amber-200">
+        <Link to="/" className="group flex items-center gap-3" aria-label="ژینو — صفحه اصلی">
+          <span
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-xl text-lg font-extrabold ring-1 transition duration-300',
+              overlay
+                ? 'bg-wine-900/60 text-gold-300 ring-gold-400/40 backdrop-blur-md group-hover:ring-gold-300/70'
+                : 'bg-wine-900 text-gold-300 ring-gold-500/30 group-hover:ring-gold-400/60',
+            )}
+          >
             ژ
           </span>
-          <span className="leading-tight">
-            <span className="block text-lg font-black text-slate-800">ژینو</span>
-            <span className="block text-[11px] font-semibold text-amber-700">کیفیت واقعی، انتخاب ژینو</span>
+          <span className="leading-none">
+            <span className={cn('block text-lg font-bold transition-colors', overlay ? 'text-cream-50' : 'text-wine-950')}>
+              ژینو
+            </span>
+            <span
+              className={cn(
+                'mt-1 block font-display text-[0.62rem] uppercase tracking-[0.42em] transition-colors',
+                overlay ? 'text-gold-300/90' : 'text-gold-700',
+              )}
+            >
+              Zhino
+            </span>
           </span>
         </Link>
 
         {/* desktop nav */}
-        <nav className="hidden items-center gap-1 md:flex" aria-label="ناوبری اصلی">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) =>
-                cn(
-                  'rounded-full px-4 py-2 text-sm font-bold transition',
-                  isActive ? 'bg-amber-100 text-amber-900' : 'text-slate-600 hover:bg-stone-100 hover:text-slate-900',
-                )
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+        <nav className="hidden items-center gap-0.5 md:flex" aria-label="ناوبری اصلی">
+          {NAV_ITEMS.map((item) =>
+            item.hashScroll ? (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={cn(
+                  'relative px-3.5 py-2 text-[0.82rem] font-medium transition-colors',
+                  'after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-center after:scale-x-0 after:bg-gold-400 after:transition-transform after:duration-300 hover:after:scale-x-100',
+                  overlay ? 'text-cream-100/80 hover:text-gold-300' : 'text-mocha hover:text-wine-800',
+                )}
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                className={({ isActive }) =>
+                  cn(
+                    'relative px-3.5 py-2 text-[0.82rem] font-medium transition-colors',
+                    'after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-center after:transition-transform after:duration-300',
+                    isActive ? 'after:scale-x-100' : 'after:scale-x-0 hover:after:scale-x-100',
+                    overlay
+                      ? isActive
+                        ? 'text-gold-300 after:bg-gold-300'
+                        : 'text-cream-100/85 after:bg-gold-300/70 hover:text-gold-200'
+                      : isActive
+                        ? 'text-wine-900 after:bg-wine-700'
+                        : 'text-mocha after:bg-gold-500 hover:text-wine-800',
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ),
+          )}
         </nav>
 
         {/* actions */}
@@ -69,7 +137,12 @@ export default function Header() {
             aria-label={soundOn ? 'بی‌صدا کردن' : 'روشن کردن صدا'}
             aria-pressed={soundOn}
             title={soundOn ? 'بی‌صدا کردن' : 'روشن کردن صدا'}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-slate-600 transition hover:bg-amber-100 hover:text-amber-800"
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full ring-1 transition duration-300',
+              overlay
+                ? 'text-cream-100/90 ring-cream-50/20 hover:bg-cream-50/10 hover:text-gold-300 hover:ring-gold-300/50'
+                : 'text-mocha ring-espresso/10 hover:bg-wine-900/5 hover:text-wine-800 hover:ring-gold-500/40',
+            )}
           >
             {soundOn ? (
               <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5" aria-hidden="true">
@@ -87,7 +160,12 @@ export default function Header() {
           <Link
             to="/cart"
             aria-label={`سبد خرید، ${formatNumber(totalItems)} کالا`}
-            className="relative flex h-10 items-center gap-2 rounded-full bg-slate-900 px-4 text-sm font-bold text-white shadow-md transition hover:bg-slate-800"
+            className={cn(
+              'relative flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition duration-300',
+              overlay
+                ? 'bg-cream-50/10 text-cream-50 ring-1 ring-gold-300/40 backdrop-blur-md hover:bg-gold-400/15 hover:ring-gold-300/70'
+                : 'bg-wine-900 text-cream-50 shadow-md shadow-wine-900/20 hover:bg-wine-800',
+            )}
           >
             <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5" aria-hidden="true">
               <path
@@ -102,7 +180,7 @@ export default function Header() {
             </svg>
             <span className="hidden sm:inline">سبد خرید</span>
             {totalItems > 0 && (
-              <span className="absolute -left-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-amber-400 px-1 text-xs font-black text-amber-950 shadow">
+              <span className="absolute -left-1.5 -top-1.5 flex h-6 min-w-6 items-center justify-center rounded-full bg-gold-400 px-1 text-[0.7rem] font-extrabold text-wine-950 shadow ring-2 ring-cream-50">
                 {formatNumber(totalItems)}
               </span>
             )}
@@ -114,38 +192,57 @@ export default function Header() {
             onClick={() => setMenuOpen((v) => !v)}
             aria-label={menuOpen ? 'بستن منو' : 'باز کردن منو'}
             aria-expanded={menuOpen}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-slate-700 transition hover:bg-amber-100 md:hidden"
+            className={cn(
+              'flex h-10 w-10 items-center justify-center rounded-full ring-1 transition md:hidden',
+              overlay
+                ? 'text-cream-50 ring-cream-50/25 hover:bg-cream-50/10'
+                : 'text-wine-900 ring-espresso/10 hover:bg-wine-900/5',
+            )}
           >
             <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5" aria-hidden="true">
               {menuOpen ? (
-                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M5 5l10 10M15 5L5 15" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               ) : (
-                <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                <path d="M3 6h14M3 10h14M3 14h14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
               )}
             </svg>
           </button>
         </div>
       </div>
 
-      {/* mobile nav */}
+      {/* mobile nav sheet */}
       {menuOpen && (
-        <nav className="border-t border-stone-200/60 bg-white/95 px-4 pb-4 pt-2 backdrop-blur md:hidden" aria-label="ناوبری موبایل">
-          {NAV_ITEMS.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={() => setMenuOpen(false)}
-              className={({ isActive }) =>
-                cn(
-                  'block rounded-2xl px-4 py-3 text-sm font-bold transition',
-                  isActive ? 'bg-amber-100 text-amber-900' : 'text-slate-600 hover:bg-stone-100',
-                )
-              }
-            >
-              {item.label}
-            </NavLink>
-          ))}
+        <nav
+          className="page-plate dark-surface grain relative border-t border-gold-400/25 px-4 pb-6 pt-3 md:hidden"
+          aria-label="ناوبری موبایل"
+        >
+          {NAV_ITEMS.map((item) =>
+            item.hashScroll ? (
+              <Link
+                key={item.to}
+                to={item.to}
+                onClick={() => setMenuOpen(false)}
+                className="block rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-gold-300"
+              >
+                {item.label}
+              </Link>
+            ) : (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={() => setMenuOpen(false)}
+                className={({ isActive }) =>
+                  cn(
+                    'flex items-center justify-between rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-gold-300',
+                    isActive ? 'bg-cream-50/8 text-gold-300' : '',
+                  )
+                }
+              >
+                {item.label}
+              </NavLink>
+            ),
+          )}
         </nav>
       )}
     </header>

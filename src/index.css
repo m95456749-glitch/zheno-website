@@ -1,91 +1,579 @@
 @import "tailwindcss";
 
+/* ============================================================
+   ZHINO — luxury design system v2
+   Identity: burgundy-dominant cinematic plates, arched dessert
+   framing, restaurant-menu typography, hairline gold rules.
+   Persian: Vazirmatn (light display weights) · latin: Marcellus
+   ============================================================ */
+
 @theme {
   --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  --font-display: 'Marcellus', 'Vazirmatn', Georgia, serif;
+
+  /* near-black plum */
+  --color-noir: #15060a;
+
+  /* burgundy / wine */
+  --color-wine-950: #1f090f;
+  --color-wine-900: #33101a;
+  --color-wine-800: #471725;
+  --color-wine-700: #5e2133;
+  --color-wine-600: #772a40;
+  --color-wine-500: #8f3b50;
+
+  /* cream / ivory */
+  --color-cream-50: #faf6ee;
+  --color-cream-100: #f4ecdf;
+  --color-cream-200: #e9dcc6;
+  --color-cream-300: #d9c4a2;
+
+  /* antique gold */
+  --color-gold-300: #ecd9ac;
+  --color-gold-400: #dcbc7d;
+  --color-gold-500: #c39c51;
+  --color-gold-600: #9e7a38;
+  --color-gold-700: #77592a;
+
+  /* warm text neutrals */
+  --color-espresso: #291b16;
+  --color-mocha: #6d584d;
+  --color-mocha-light: #947f72;
 }
 
 body {
   font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
 }
 
-/* Custom smooth glassmorphism utility */
-.glass-panel {
-  background: rgba(255, 255, 255, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 248, 240, 0.6);
+::selection {
+  background: var(--color-gold-300);
+  color: var(--color-wine-950);
 }
 
-.glass-dark {
-  background: rgba(15, 23, 42, 0.75);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+:focus-visible {
+  outline: 2px solid var(--color-gold-500);
+  outline-offset: 2px;
+  border-radius: 4px;
 }
 
-/* Custom scrollbar styling */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 9px;
+  height: 9px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #FAF8F5;
+  background: var(--color-cream-100);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #F3D5B5;
+  background: linear-gradient(var(--color-wine-700), var(--color-wine-900));
   border-radius: 9999px;
+  border: 2px solid var(--color-cream-100);
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: #E8B98A;
+  background: linear-gradient(var(--color-wine-600), var(--color-wine-800));
 }
 
-/* Pulse glow animation */
-@keyframes float {
-  0%, 100% { transform: translateY(0px) rotate(0deg); }
-  50% { transform: translateY(-8px) rotate(1deg); }
+/* ------------------------------------------------------------
+   Film grain — cinematic texture on all dark surfaces
+   ------------------------------------------------------------ */
+
+.grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.055;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-.animate-float {
-  animation: float 5s ease-in-out infinite;
+/* ------------------------------------------------------------
+   Hero backdrop layers
+   IMAGE 1 slot: public/images/hero-bg.jpg (set via --hero-img).
+   Beneath it a slow-burning burgundy silk; above it scrims.
+   ------------------------------------------------------------ */
+
+.hero-silk {
+  background-color: var(--color-wine-950);
+  background-image:
+    radial-gradient(60% 80% at 70% 12%, rgba(143, 59, 80, 0.5) 0%, rgba(143, 59, 80, 0) 60%),
+    radial-gradient(80% 120% at 8% 96%, rgba(71, 23, 37, 0.95) 0%, rgba(71, 23, 37, 0) 55%),
+    conic-gradient(from 195deg at 58% 42%, #1f090f 0deg, #33101a 60deg, #5e2133 140deg, #471725 245deg, #1f090f 360deg);
 }
 
-@keyframes pulse-soft {
-  0%, 100% { opacity: 0.9; transform: scale(1); }
-  50% { opacity: 1; transform: scale(1.02); }
+.hero-silk::before {
+  content: '';
+  position: absolute;
+  inset: -15%;
+  background-image:
+    radial-gradient(45% 60% at 28% 30%, rgba(220, 188, 125, 0.07) 0%, rgba(220, 188, 125, 0) 60%),
+    radial-gradient(55% 70% at 76% 72%, rgba(143, 59, 80, 0.32) 0%, rgba(143, 59, 80, 0) 62%);
+  transform: rotate(-7deg);
 }
 
-.animate-pulse-soft {
-  animation: pulse-soft 4s ease-in-out infinite;
+.hero-photo {
+  background-image: var(--hero-img, none);
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: 50% 60%;
+  opacity: 0.9;
 }
 
-/* Page/section entrance */
+@media (min-width: 1024px) {
+  .hero-photo {
+    background-position: 62% center;
+  }
+}
+
+/* very slow ken-burns on the hero photo layer */
+@keyframes slow-burn {
+  from {
+    transform: scale(1.015);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+.slow-burn {
+  animation: slow-burn 26s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+/* ------------------------------------------------------------
+   Arched dessert framing — the brand's silhouette motif
+   ------------------------------------------------------------ */
+
+.arch {
+  border-radius: 11rem 11rem 1.25rem 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .arch {
+    border-radius: 8rem 8rem 1rem 1rem;
+  }
+}
+
+.arch-sm {
+  border-radius: 7rem 7rem 0.875rem 0.875rem;
+}
+
+/* ------------------------------------------------------------
+   Buttons
+   ------------------------------------------------------------ */
+
+.btn-lux {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  border-radius: 9999px;
+  padding: 0.85rem 1.9rem;
+  font-weight: 600;
+  font-size: 0.92rem;
+  line-height: 1;
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease,
+    background-color 0.3s ease,
+    background-image 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
+}
+
+.btn-lux:active {
+  transform: scale(0.97);
+}
+
+.btn-gold {
+  background-image: linear-gradient(115deg, var(--color-gold-300) 0%, var(--color-gold-400) 45%, var(--color-gold-500) 100%);
+  color: var(--color-wine-950);
+  box-shadow:
+    0 14px 34px -14px rgba(195, 156, 81, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.btn-gold:hover {
+  transform: translateY(-2px);
+  background-image: linear-gradient(115deg, #f2e3be 0%, var(--color-gold-300) 50%, var(--color-gold-400) 100%);
+}
+
+.btn-wine {
+  background-color: var(--color-wine-900);
+  color: var(--color-cream-50);
+  box-shadow:
+    0 16px 32px -18px rgba(31, 9, 15, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
+}
+
+.btn-wine:hover {
+  background-color: var(--color-wine-800);
+  transform: translateY(-2px);
+}
+
+.btn-line-light {
+  border: 1px solid rgba(250, 246, 238, 0.32);
+  color: var(--color-cream-50);
+  background: rgba(250, 246, 238, 0.03);
+}
+
+.btn-line-light:hover {
+  border-color: var(--color-gold-400);
+  color: var(--color-gold-300);
+  background: rgba(220, 188, 125, 0.08);
+  transform: translateY(-2px);
+}
+
+.btn-line-dark {
+  border: 1px solid rgba(41, 27, 22, 0.18);
+  color: var(--color-espresso);
+  background: transparent;
+}
+
+.btn-line-dark:hover {
+  border-color: var(--color-wine-600);
+  color: var(--color-wine-800);
+  background: rgba(94, 33, 51, 0.05);
+  transform: translateY(-2px);
+}
+
+/* gold sheen sweep */
+.sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.sheen::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  left: -60%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.65s ease;
+  pointer-events: none;
+}
+
+.sheen:hover::after {
+  left: 125%;
+}
+
+/* ------------------------------------------------------------
+   Editorial typography helpers
+   ------------------------------------------------------------ */
+
+.kicker {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.4em;
+  font-size: 0.64rem;
+  color: var(--color-gold-700);
+}
+
+.kicker-dark {
+  color: var(--color-gold-400);
+}
+
+/* giant ghost wordmark behind section titles */
+.ghost-mark {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(195, 156, 81, 0.16);
+  user-select: none;
+  pointer-events: none;
+}
+
+.dark-surface .ghost-mark {
+  -webkit-text-stroke: 1px rgba(236, 217, 172, 0.14);
+}
+
+/* hairline rule with gold diamond */
+.rule-lux {
+  display: inline-block;
+  width: 3.75rem;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--color-gold-500), transparent);
+  position: relative;
+}
+
+.rule-lux::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  transform: translate(-50%, -50%) rotate(45deg);
+  background: var(--color-gold-500);
+}
+
+/* ------------------------------------------------------------
+   Surfaces
+   ------------------------------------------------------------ */
+
+/* quiet cream card — the hairline top does the speaking */
+.card-lux {
+  position: relative;
+  background: #fffdf8;
+  border: 1px solid rgba(41, 27, 22, 0.07);
+  box-shadow: 0 24px 48px -40px rgba(31, 9, 15, 0.35);
+  transition:
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.card-lux::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-gold-500) 30%, var(--color-gold-400) 70%, transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+}
+
+.card-lux:hover {
+  transform: translateY(-3px);
+  box-shadow: 0 38px 64px -38px rgba(31, 9, 15, 0.42);
+  border-color: rgba(195, 156, 81, 0.4);
+}
+
+.card-lux:hover::before {
+  opacity: 1;
+}
+
+.panel-lux {
+  background: #fffdf8;
+  border: 1px solid rgba(41, 27, 22, 0.07);
+  box-shadow: 0 28px 56px -44px rgba(31, 9, 15, 0.35);
+}
+
+/* framed offset hairline (hero focal, key plates) */
+.frame-lux {
+  position: relative;
+}
+
+.frame-lux::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(220, 188, 125, 0.55);
+  border-radius: inherit;
+  transform: translate(1rem, 1rem);
+  pointer-events: none;
+}
+
+/* frosted bar for the scrolled / inner-page header */
+.frost {
+  background: rgba(250, 246, 238, 0.88);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid rgba(51, 16, 26, 0.09);
+  box-shadow: 0 10px 30px -24px rgba(31, 9, 15, 0.4);
+}
+
+/* deep-wine plate used as the header of every inner page */
+.page-plate {
+  background-color: var(--color-wine-950);
+  background-image:
+    radial-gradient(90% 130% at 85% -20%, rgba(143, 59, 80, 0.5) 0%, rgba(143, 59, 80, 0) 55%),
+    radial-gradient(70% 120% at 10% 115%, rgba(31, 9, 15, 0.9) 0%, rgba(31, 9, 15, 0) 60%),
+    linear-gradient(160deg, var(--color-wine-900) 0%, var(--color-wine-950) 100%);
+}
+
+/* ------------------------------------------------------------
+   Menu-list rows (#flavors section) — restaurant index
+   ------------------------------------------------------------ */
+
+.menu-row {
+  position: relative;
+  transition: transform 0.25s ease;
+}
+
+.menu-row .leader {
+  flex: 1;
+  border-bottom: 1px dotted rgba(41, 27, 22, 0.28);
+  margin: 0 0.75rem 0.35rem;
+  min-width: 1.5rem;
+}
+
+.dark-surface .menu-row .leader {
+  border-bottom-color: rgba(250, 246, 238, 0.22);
+}
+
+.menu-row:hover {
+  transform: translateX(-4px);
+}
+
+/* ------------------------------------------------------------
+   Flavor-name ticker (hero base / transitions)
+   ------------------------------------------------------------ */
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* LTR content wrapper inside RTL doc still scrolls fine; we animate a
+   duplicated strip and rely on physical translateX. */
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker 46s linear infinite;
+}
+
+.ticker-mask:hover .ticker-track {
+  animation-play-state: paused;
+}
+
+/* ------------------------------------------------------------
+   Motion — entrances
+   ------------------------------------------------------------ */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.rise {
+  animation: rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation-delay: var(--rise-delay, 0s);
+}
+
+@keyframes arch-unveil {
+  from {
+    clip-path: inset(14% 8% 14% 8% round 11rem);
+    opacity: 0.3;
+  }
+  to {
+    clip-path: inset(0% 0% 0% 0% round 11rem);
+    opacity: 1;
+  }
+}
+
+.arch-unveil {
+  animation: arch-unveil 1.1s 0.3s cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+
+@keyframes drift {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+.drift {
+  animation: drift 8s ease-in-out infinite;
+}
+
+@keyframes scroll-cue {
+  0% {
+    transform: translateY(-100%);
+  }
+  55% {
+    transform: translateY(110%);
+  }
+  100% {
+    transform: translateY(110%);
+  }
+}
+
+.scroll-cue-line {
+  animation: scroll-cue 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-up {
-  animation: fade-up 0.5s ease both;
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Toast entrance */
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(16px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
 }
 
 .animate-toast-in {
-  animation: toast-in 0.25s ease both;
+  animation: toast-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Respect users who prefer reduced motion */
+/* IO-driven section reveals (armed by JS only) */
+.reveal-armed {
+  opacity: 0;
+  transform: translateY(26px);
+  transition:
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.reveal-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* horizontal snap rail (featured products on mobile) */
+.snap-rail {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
+}
+
+.snap-rail::-webkit-scrollbar {
+  display: none;
+}
+
+.snap-rail > * {
+  scroll-snap-align: start;
+}
+
+/* ------------------------------------------------------------
+   Reduced motion — everything calm, nothing hidden
+   ------------------------------------------------------------ */
+
 @media (prefers-reduced-motion: reduce) {
-  .animate-float,
-  .animate-pulse-soft,
-  .animate-fade-up,
-  .animate-toast-in {
-    animation: none;
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+
+  .rise,
+  .arch-unveil,
+  .reveal-armed {
+    opacity: 1 !important;
+    transform: none !important;
+    clip-path: none !important;
+  }
+
+  .card-lux:hover,
+  .menu-row:hover {
+    transform: none;
   }
 }

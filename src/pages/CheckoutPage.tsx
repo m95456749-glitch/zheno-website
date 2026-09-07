@@ -18,15 +18,16 @@ import { initiatePayment, verifyPayment } from '../services/api';
 import { soundService } from '../services/soundService';
 import { cn } from '../utils/cn';
 import FreeShippingProgress from '../components/FreeShippingProgress';
+import PagePlate from '../components/PagePlate';
 import type { Address, CheckoutStep, Customer, ShippingMethod } from '../types';
 
 type FormStep = Exclude<CheckoutStep, 'cart'>;
 
-const STEPS: { id: FormStep; label: string }[] = [
-  { id: 'customer', label: 'مشخصات' },
-  { id: 'address', label: 'نشانی' },
-  { id: 'payment', label: 'پرداخت' },
-  { id: 'confirmation', label: 'تأیید' },
+const STEPS: { id: FormStep; label: string; en: string }[] = [
+  { id: 'customer', label: 'مشخصات', en: 'Details' },
+  { id: 'address', label: 'نشانی', en: 'Address' },
+  { id: 'payment', label: 'پرداخت', en: 'Payment' },
+  { id: 'confirmation', label: 'تأیید', en: 'Confirm' },
 ];
 
 /** Convert Persian/Arabic digits to Latin so validation accepts typed input. */
@@ -38,9 +39,14 @@ function toEnglishDigits(value: string): string {
 
 const inputClass = (hasError: boolean) =>
   cn(
-    'w-full rounded-2xl border-2 bg-white px-4 py-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:font-normal placeholder:text-slate-400',
-    hasError ? 'border-red-300 focus:border-red-400' : 'border-stone-200 focus:border-amber-400',
+    'w-full rounded-xl border-2 bg-white px-4 py-3 text-sm font-semibold text-espresso outline-none transition placeholder:font-normal placeholder:text-mocha-light',
+    hasError
+      ? 'border-red-300 focus:border-red-400'
+      : 'border-espresso/12 focus:border-gold-500 hover:border-gold-500/60',
   );
+
+const fieldLabelClass = 'mb-1.5 block text-xs font-bold text-wine-900';
+const fieldErrorClass = 'mt-1.5 text-[0.68rem] font-bold text-red-700';
 
 export default function CheckoutPage() {
   const { items, subtotal, isShippingFree, clearCart } = useCartContext();
@@ -188,31 +194,26 @@ export default function CheckoutPage() {
 
   if (step === 'confirmation' && orderId) {
     return (
-      <div className="mx-auto max-w-xl px-4 pt-14 text-center sm:px-6">
-        <div className="animate-fade-up rounded-3xl bg-white p-8 shadow-md shadow-stone-200/60 sm:p-10">
-          <span className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-100">
+      <div className="mx-auto max-w-xl px-4 pt-20 text-center sm:px-6">
+        <div className="animate-fade-up panel-lux rounded-2xl p-8 sm:p-10">
+          <span className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 ring-1 ring-emerald-300/60">
             <svg viewBox="0 0 24 24" fill="none" className="h-10 w-10" aria-hidden="true">
-              <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#059669" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M5 12.5l4.5 4.5L19 7.5" stroke="#047857" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </span>
-          <h1 className="text-xl font-black text-slate-800">سفارش شما با موفقیت ثبت شد</h1>
-          <p className="mt-2 text-sm leading-7 text-slate-500">
+          <p className="kicker font-display">Order Confirmed</p>
+          <h1 className="mt-2.5 text-xl font-bold text-wine-950">سفارش شما با موفقیت ثبت شد</h1>
+          <p className="mt-2.5 text-sm leading-8 text-mocha">
             از خرید شما سپاسگزاریم! سفارش شما در حال آماده‌سازی است.
           </p>
-          <p className="mt-4 rounded-2xl bg-stone-50 px-4 py-3 text-sm font-extrabold text-slate-700" dir="ltr">
+          <p className="mt-5 rounded-xl bg-cream-100 px-4 py-3 font-display text-sm tracking-[0.2em] text-wine-900 ring-1 ring-gold-500/30" dir="ltr">
             {orderId}
           </p>
-          <div className="mt-6 flex flex-col gap-3 sm:flex-row">
-            <Link
-              to="/products"
-              className="flex-1 rounded-2xl bg-amber-500 px-6 py-3.5 text-sm font-extrabold text-white transition hover:bg-amber-600"
-            >
+          <div className="mt-7 flex flex-col gap-3 sm:flex-row">
+            <Link to="/products" className="btn-lux btn-wine flex-1 rounded-xl">
               ادامه خرید
             </Link>
-            <Link
-              to="/"
-              className="flex-1 rounded-2xl bg-stone-100 px-6 py-3.5 text-sm font-extrabold text-slate-700 transition hover:bg-stone-200"
-            >
+            <Link to="/" className="btn-lux btn-line-dark flex-1 rounded-xl">
               بازگشت به خانه
             </Link>
           </div>
@@ -222,45 +223,53 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
-      <h1 className="text-center text-2xl font-black text-slate-900">تسویه حساب</h1>
-
+    <div>
+      <PagePlate
+        kicker="Checkout"
+        title="تسویه حساب"
+        lead="سه گامِ کوتاه تا میزِ دسر — سریع، مطمئن، بدون شلوغی."
+        ghost="Checkout"
+      />
+      <div className="mx-auto max-w-6xl px-4 pb-8 pt-9 sm:px-6">
       {/* step indicator */}
-      <ol className="mx-auto mt-6 flex max-w-xl items-center" aria-label="مراحل تسویه">
+      <ol className="mx-auto flex max-w-xl items-start" aria-label="مراحل تسویه">
         {STEPS.map((s, i) => (
           <li key={s.id} className={cn('flex items-center', i < STEPS.length - 1 && 'flex-1')}>
             <div className="flex flex-col items-center gap-1.5">
               <span
                 className={cn(
-                  'flex h-9 w-9 items-center justify-center rounded-full text-sm font-black',
-                  i < stepIndex && 'bg-emerald-500 text-white',
-                  i === stepIndex && 'bg-amber-500 text-white shadow-md shadow-amber-200',
-                  i > stepIndex && 'bg-stone-200 text-slate-500',
+                  'flex h-10 w-10 items-center justify-center rounded-full font-display text-sm transition duration-300',
+                  i < stepIndex && 'bg-emerald-600 text-white ring-4 ring-emerald-100',
+                  i === stepIndex && 'bg-wine-900 text-gold-300 ring-4 ring-gold-400/25 shadow-lg shadow-wine-900/25',
+                  i > stepIndex && 'bg-cream-100 text-mocha ring-1 ring-espresso/10',
                 )}
                 aria-current={i === stepIndex ? 'step' : undefined}
               >
                 {i < stepIndex ? '✓' : formatNumber(i + 1)}
               </span>
-              <span className={cn('text-[11px] font-bold', i === stepIndex ? 'text-amber-700' : 'text-slate-400')}>
+              <span className={cn('text-[0.68rem] font-bold', i === stepIndex ? 'text-wine-900' : 'text-mocha-light')}>
                 {s.label}
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={cn('mx-2 mb-6 h-0.5 flex-1 rounded', i < stepIndex ? 'bg-emerald-400' : 'bg-stone-200')} aria-hidden="true" />
+              <div className={cn('mx-2 mt-[0.625rem] h-0.5 flex-1 rounded', i < stepIndex ? 'bg-emerald-500' : 'bg-cream-200')} aria-hidden="true" />
             )}
           </li>
         ))}
       </ol>
 
-      <div className="mt-8 grid gap-6 lg:grid-cols-[1fr_360px]">
+      <div className="mt-9 grid gap-6 lg:grid-cols-[1fr_360px]">
         {/* form */}
-        <div className="h-fit rounded-3xl bg-white p-5 shadow-md shadow-stone-200/60 sm:p-6">
+        <div className="panel-lux h-fit rounded-2xl p-5 sm:p-7">
           {step === 'customer' && (
-            <div className="animate-fade-up space-y-4">
-              <h2 className="font-extrabold text-slate-800">مشخصات تحویل‌گیرنده</h2>
+            <div className="animate-fade-up space-y-5">
+              <h2 className="flex items-baseline gap-3 text-lg font-bold text-wine-950">
+                مشخصات تحویل‌گیرنده
+                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-gold-600">Details</span>
+              </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="firstName" className="mb-1.5 block text-xs font-bold text-slate-600">نام *</label>
+                  <label htmlFor="firstName" className={fieldLabelClass}>نام *</label>
                   <input
                     id="firstName"
                     value={customer.firstName}
@@ -269,10 +278,10 @@ export default function CheckoutPage() {
                     className={inputClass(Boolean(fieldErrors.firstName))}
                     autoComplete="given-name"
                   />
-                  {fieldErrors.firstName && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.firstName}</p>}
+                  {fieldErrors.firstName && <p className={fieldErrorClass}>{fieldErrors.firstName}</p>}
                 </div>
                 <div>
-                  <label htmlFor="lastName" className="mb-1.5 block text-xs font-bold text-slate-600">نام خانوادگی *</label>
+                  <label htmlFor="lastName" className={fieldLabelClass}>نام خانوادگی *</label>
                   <input
                     id="lastName"
                     value={customer.lastName}
@@ -281,12 +290,12 @@ export default function CheckoutPage() {
                     className={inputClass(Boolean(fieldErrors.lastName))}
                     autoComplete="family-name"
                   />
-                  {fieldErrors.lastName && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.lastName}</p>}
+                  {fieldErrors.lastName && <p className={fieldErrorClass}>{fieldErrors.lastName}</p>}
                 </div>
               </div>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="phone" className="mb-1.5 block text-xs font-bold text-slate-600">شماره موبایل *</label>
+                  <label htmlFor="phone" className={fieldLabelClass}>شماره موبایل *</label>
                   <input
                     id="phone"
                     value={customer.phone}
@@ -297,10 +306,10 @@ export default function CheckoutPage() {
                     className={cn(inputClass(Boolean(fieldErrors.phone)), 'text-left')}
                     autoComplete="tel"
                   />
-                  {fieldErrors.phone && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.phone}</p>}
+                  {fieldErrors.phone && <p className={fieldErrorClass}>{fieldErrors.phone}</p>}
                 </div>
                 <div>
-                  <label htmlFor="email" className="mb-1.5 block text-xs font-bold text-slate-600">ایمیل (اختیاری)</label>
+                  <label htmlFor="email" className={fieldLabelClass}>ایمیل (اختیاری)</label>
                   <input
                     id="email"
                     value={customer.email}
@@ -311,13 +320,13 @@ export default function CheckoutPage() {
                     className={cn(inputClass(Boolean(fieldErrors.email)), 'text-left')}
                     autoComplete="email"
                   />
-                  {fieldErrors.email && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.email}</p>}
+                  {fieldErrors.email && <p className={fieldErrorClass}>{fieldErrors.email}</p>}
                 </div>
               </div>
               <button
                 type="button"
                 onClick={goNext}
-                className="w-full rounded-2xl bg-amber-500 px-6 py-4 text-sm font-extrabold text-white shadow-lg shadow-amber-200 transition hover:bg-amber-600 active:scale-[0.99]"
+                className="btn-lux btn-wine w-full rounded-xl text-base"
               >
                 ادامه به مرحله نشانی
               </button>
@@ -325,11 +334,14 @@ export default function CheckoutPage() {
           )}
 
           {step === 'address' && (
-            <div className="animate-fade-up space-y-4">
-              <h2 className="font-extrabold text-slate-800">نشانی ارسال</h2>
+            <div className="animate-fade-up space-y-5">
+              <h2 className="flex items-baseline gap-3 text-lg font-bold text-wine-950">
+                نشانی ارسال
+                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-gold-600">Address</span>
+              </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="province" className="mb-1.5 block text-xs font-bold text-slate-600">استان *</label>
+                  <label htmlFor="province" className={fieldLabelClass}>استان *</label>
                   <input
                     id="province"
                     value={address.province}
@@ -338,10 +350,10 @@ export default function CheckoutPage() {
                     className={inputClass(Boolean(fieldErrors.province))}
                     autoComplete="address-level1"
                   />
-                  {fieldErrors.province && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.province}</p>}
+                  {fieldErrors.province && <p className={fieldErrorClass}>{fieldErrors.province}</p>}
                 </div>
                 <div>
-                  <label htmlFor="city" className="mb-1.5 block text-xs font-bold text-slate-600">شهر *</label>
+                  <label htmlFor="city" className={fieldLabelClass}>شهر *</label>
                   <input
                     id="city"
                     value={address.city}
@@ -350,11 +362,11 @@ export default function CheckoutPage() {
                     className={inputClass(Boolean(fieldErrors.city))}
                     autoComplete="address-level2"
                   />
-                  {fieldErrors.city && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.city}</p>}
+                  {fieldErrors.city && <p className={fieldErrorClass}>{fieldErrors.city}</p>}
                 </div>
               </div>
               <div>
-                <label htmlFor="street" className="mb-1.5 block text-xs font-bold text-slate-600">نشانی دقیق *</label>
+                <label htmlFor="street" className={fieldLabelClass}>نشانی دقیق *</label>
                 <textarea
                   id="street"
                   value={address.address}
@@ -364,10 +376,10 @@ export default function CheckoutPage() {
                   className={cn(inputClass(Boolean(fieldErrors.address)), 'resize-none')}
                   autoComplete="street-address"
                 />
-                {fieldErrors.address && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.address}</p>}
+                {fieldErrors.address && <p className={fieldErrorClass}>{fieldErrors.address}</p>}
               </div>
               <div>
-                <label htmlFor="postalCode" className="mb-1.5 block text-xs font-bold text-slate-600">کد پستی *</label>
+                <label htmlFor="postalCode" className={fieldLabelClass}>کد پستی *</label>
                 <input
                   id="postalCode"
                   value={address.postalCode}
@@ -378,20 +390,20 @@ export default function CheckoutPage() {
                   className={cn(inputClass(Boolean(fieldErrors.postalCode)), 'text-left sm:max-w-xs')}
                   autoComplete="postal-code"
                 />
-                {fieldErrors.postalCode && <p className="mt-1 text-[11px] font-bold text-red-600">{fieldErrors.postalCode}</p>}
+                {fieldErrors.postalCode && <p className={fieldErrorClass}>{fieldErrors.postalCode}</p>}
               </div>
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 pt-1 sm:flex-row">
                 <button
                   type="button"
                   onClick={goBack}
-                  className="rounded-2xl bg-stone-100 px-6 py-4 text-sm font-extrabold text-slate-700 transition hover:bg-stone-200 sm:w-40"
+                  className="btn-lux btn-line-dark rounded-xl sm:w-40"
                 >
                   بازگشت
                 </button>
                 <button
                   type="button"
                   onClick={goNext}
-                  className="flex-1 rounded-2xl bg-amber-500 px-6 py-4 text-sm font-extrabold text-white shadow-lg shadow-amber-200 transition hover:bg-amber-600 active:scale-[0.99]"
+                  className="btn-lux btn-wine flex-1 rounded-xl text-base"
                 >
                   ادامه به مرحله پرداخت
                 </button>
@@ -400,8 +412,11 @@ export default function CheckoutPage() {
           )}
 
           {step === 'payment' && (
-            <div className="animate-fade-up space-y-4">
-              <h2 className="font-extrabold text-slate-800">روش ارسال و پرداخت</h2>
+            <div className="animate-fade-up space-y-5">
+              <h2 className="flex items-baseline gap-3 text-lg font-bold text-wine-950">
+                روش ارسال و پرداخت
+                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-gold-600">Payment</span>
+              </h2>
               <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="روش ارسال">
                 <button
                   type="button"
@@ -409,13 +424,15 @@ export default function CheckoutPage() {
                   aria-checked={shippingMethod === 'standard'}
                   onClick={() => setShippingMethod('standard')}
                   className={cn(
-                    'rounded-2xl border-2 p-4 text-right transition',
-                    shippingMethod === 'standard' ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-amber-300',
+                    'rounded-xl border-2 p-4 text-right transition duration-300',
+                    shippingMethod === 'standard'
+                      ? 'border-gold-500 bg-gold-400/10 shadow-md shadow-gold-500/10'
+                      : 'border-espresso/12 hover:border-gold-500/50 hover:bg-cream-100/60',
                   )}
                 >
-                  <span className="block text-sm font-extrabold text-slate-800">ارسال استاندارد</span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    {isShippingFree ? 'رایگان' : formatPrice(SHIPPING_COST_STANDARD)}
+                  <span className="block text-sm font-bold text-wine-950">ارسال استاندارد</span>
+                  <span className="mt-1.5 block text-xs text-mocha">
+                    {isShippingFree ? <span className="font-bold text-emerald-700">رایگان</span> : formatPrice(SHIPPING_COST_STANDARD)}
                   </span>
                 </button>
                 <button
@@ -424,33 +441,37 @@ export default function CheckoutPage() {
                   aria-checked={shippingMethod === 'express'}
                   onClick={() => setShippingMethod('express')}
                   className={cn(
-                    'rounded-2xl border-2 p-4 text-right transition',
-                    shippingMethod === 'express' ? 'border-amber-500 bg-amber-50' : 'border-stone-200 hover:border-amber-300',
+                    'rounded-xl border-2 p-4 text-right transition duration-300',
+                    shippingMethod === 'express'
+                      ? 'border-gold-500 bg-gold-400/10 shadow-md shadow-gold-500/10'
+                      : 'border-espresso/12 hover:border-gold-500/50 hover:bg-cream-100/60',
                   )}
                 >
-                  <span className="block text-sm font-extrabold text-slate-800">ارسال سریع</span>
-                  <span className="mt-1 block text-xs text-slate-500">
-                    {isShippingFree ? 'رایگان' : formatPrice(SHIPPING_COST_EXPRESS)}
+                  <span className="block text-sm font-bold text-wine-950">ارسال سریع</span>
+                  <span className="mt-1.5 block text-xs text-mocha">
+                    {isShippingFree ? <span className="font-bold text-emerald-700">رایگان</span> : formatPrice(SHIPPING_COST_EXPRESS)}
                   </span>
                 </button>
               </div>
 
-              <p className="rounded-2xl bg-stone-50 px-4 py-3 text-xs leading-6 text-slate-500">
+              <p className="rounded-xl bg-cream-100 px-4 py-3.5 text-xs leading-6 text-mocha ring-1 ring-espresso/8">
                 {apiConfigured
                   ? 'پس از ثبت سفارش، برای پرداخت امن به درگاه بانکی منتقل می‌شوید.'
                   : 'درگاه پرداخت اینترنتی هنوز متصل نشده است؛ سفارش شما به‌صورت آزمایشی ثبت و نمایش داده می‌شود.'}
               </p>
 
               {gatewayError && (
-                <p className="rounded-2xl bg-red-50 px-4 py-3 text-xs font-bold leading-6 text-red-600">{gatewayError}</p>
+                <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-xs font-bold leading-6 text-red-700 ring-1 ring-red-200">
+                  {gatewayError}
+                </p>
               )}
 
-              <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="flex flex-col gap-3 pt-1 sm:flex-row">
                 <button
                   type="button"
                   onClick={goBack}
                   disabled={placing}
-                  className="rounded-2xl bg-stone-100 px-6 py-4 text-sm font-extrabold text-slate-700 transition hover:bg-stone-200 disabled:opacity-50 sm:w-40"
+                  className="btn-lux btn-line-dark rounded-xl disabled:opacity-50 sm:w-40"
                 >
                   بازگشت
                 </button>
@@ -458,7 +479,7 @@ export default function CheckoutPage() {
                   type="button"
                   onClick={placeOrder}
                   disabled={placing || lines.length === 0}
-                  className="flex-1 rounded-2xl bg-emerald-600 px-6 py-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-200 transition hover:bg-emerald-700 active:scale-[0.99] disabled:cursor-wait disabled:opacity-60"
+                  className="btn-lux btn-gold sheen flex-1 rounded-xl text-base disabled:cursor-wait disabled:opacity-60"
                 >
                   {placing ? 'در حال ثبت سفارش…' : `پرداخت و ثبت سفارش · ${formatPrice(total)}`}
                 </button>
@@ -468,36 +489,40 @@ export default function CheckoutPage() {
         </div>
 
         {/* summary */}
-        <aside className="h-fit space-y-4 rounded-3xl bg-white p-5 shadow-md shadow-stone-200/60 lg:sticky lg:top-24">
-          <h2 className="font-extrabold text-slate-800">خلاصه سفارش</h2>
+        <aside className="panel-lux h-fit space-y-4 rounded-2xl p-5 lg:sticky lg:top-24 lg:p-6">
+          <h2 className="flex items-center justify-between text-base font-bold text-wine-950">
+            خلاصه سفارش
+            <span className="rule-lux !w-10" aria-hidden="true" />
+          </h2>
           <FreeShippingProgress subtotal={subtotal} />
-          <ul className="max-h-64 space-y-2.5 overflow-auto border-t border-stone-100 pt-4 text-xs">
+          <ul className="max-h-64 space-y-2.5 overflow-auto border-t border-espresso/10 pt-4 text-xs">
             {lines.map((line) => (
               <li key={line.key} className="flex items-center justify-between gap-2">
-                <span className="min-w-0 truncate font-semibold text-slate-600">
-                  {line.name} <span className="text-slate-400">({line.weight} × {formatNumber(line.qty)})</span>
+                <span className="min-w-0 truncate font-semibold text-espresso">
+                  {line.name} <span className="text-mocha-light">({line.weight} × {formatNumber(line.qty)})</span>
                 </span>
-                <span className="shrink-0 font-bold text-slate-800">{formatPrice(line.lineTotal)}</span>
+                <span className="shrink-0 font-bold text-wine-900">{formatPrice(line.lineTotal)}</span>
               </li>
             ))}
           </ul>
-          <dl className="space-y-2.5 border-t border-stone-100 pt-4 text-sm">
+          <dl className="space-y-3 border-t border-espresso/10 pt-4 text-sm">
             <div className="flex justify-between">
-              <dt className="font-semibold text-slate-500">جمع اقلام</dt>
-              <dd className="font-bold text-slate-800">{formatPrice(subtotal)}</dd>
+              <dt className="text-mocha">جمع اقلام</dt>
+              <dd className="font-bold text-espresso">{formatPrice(subtotal)}</dd>
             </div>
             <div className="flex justify-between">
-              <dt className="font-semibold text-slate-500">هزینه ارسال</dt>
-              <dd className="font-bold text-slate-800">
-                {effectiveShipping === 0 ? <span className="text-emerald-600">رایگان</span> : formatPrice(effectiveShipping)}
+              <dt className="text-mocha">هزینه ارسال</dt>
+              <dd className="font-bold text-espresso">
+                {effectiveShipping === 0 ? <span className="text-emerald-700">رایگان</span> : formatPrice(effectiveShipping)}
               </dd>
             </div>
-            <div className="flex justify-between border-t border-stone-100 pt-3 text-base">
-              <dt className="font-extrabold text-slate-800">جمع کل</dt>
-              <dd className="font-black text-amber-700">{formatPrice(total)}</dd>
+            <div className="flex items-baseline justify-between border-t border-espresso/10 pt-4">
+              <dt className="font-bold text-wine-950">جمع کل</dt>
+              <dd className="text-xl font-extrabold text-wine-900">{formatPrice(total)}</dd>
             </div>
           </dl>
         </aside>
+      </div>
       </div>
     </div>
   );

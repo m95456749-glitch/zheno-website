@@ -1,69 +1,78 @@
 // ============================================================
 // ZHINO — recipes page (data-driven from src/data/recipes.ts)
+// Editorial presentation: numbered spread, quiet chrome.
 // ============================================================
 
 import { RECIPES } from '../data/recipes';
 import type { Recipe } from '../data/recipes';
 import { cn } from '../utils/cn';
+import PagePlate from '../components/PagePlate';
 
 const DIFFICULTY_STYLE: Record<Recipe['difficulty'], string> = {
-  'آسان': 'bg-emerald-100 text-emerald-800',
-  'متوسط': 'bg-amber-100 text-amber-800',
-  'حرفه‌ای': 'bg-rose-100 text-rose-800',
+  'آسان': 'text-emerald-800 bg-emerald-50 ring-emerald-200/70',
+  'متوسط': 'text-gold-700 bg-gold-400/15 ring-gold-500/30',
+  'حرفه‌ای': 'text-wine-800 bg-wine-900/5 ring-wine-700/25',
 };
 
-function RecipeCard({ recipe }: { recipe: Recipe }) {
+function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
+  const number = String(index + 1).padStart(2, '0');
   return (
-    <article className="overflow-hidden rounded-3xl bg-white shadow-md shadow-stone-200/60">
-      <div className="flex items-center gap-4 p-5 sm:p-6">
-        <span className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-4xl" aria-hidden="true">
+    <article className="panel-lux overflow-hidden rounded-2xl">
+      <div className="flex items-start gap-4 p-6 sm:gap-6 sm:p-8">
+        <span className="hidden shrink-0 font-display text-4xl leading-none text-gold-500/60 sm:block sm:text-5xl" aria-hidden="true">
+          {number}
+        </span>
+        <span
+          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cream-100 to-cream-200 text-4xl ring-1 ring-gold-500/25 sm:h-20 sm:w-20 sm:text-5xl"
+          aria-hidden="true"
+        >
           {recipe.emoji}
         </span>
-        <div className="min-w-0">
-          <h2 className="text-lg font-black text-slate-900">{recipe.title}</h2>
-          <p className="mt-0.5 text-xs text-slate-500">{recipe.subtitle}</p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
-              {recipe.category === 'jelly' ? 'پودر ژله' : 'پودر کاستارد'}
-            </span>
-            <span className={cn('rounded-full px-2.5 py-1 text-[11px] font-bold', DIFFICULTY_STYLE[recipe.difficulty])}>
-              {recipe.difficulty}
-            </span>
-            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-[0.6rem] uppercase tracking-[0.38em] text-gold-700">
+            {recipe.category === 'jelly' ? 'Jelly Dessert' : 'Custard Dessert'}
+          </p>
+          <h2 className="mt-2 text-lg font-bold text-wine-950 sm:text-xl">{recipe.title}</h2>
+          <p className="mt-1 text-sm text-mocha">{recipe.subtitle}</p>
+          <div className="mt-3.5 flex flex-wrap gap-1.5">
+            <span className="rounded-md bg-cream-100 px-2.5 py-1 text-[0.68rem] font-semibold text-espresso ring-1 ring-espresso/8">
               {recipe.duration}
             </span>
-            <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold text-slate-600">
+            <span className="rounded-md bg-cream-100 px-2.5 py-1 text-[0.68rem] font-semibold text-espresso ring-1 ring-espresso/8">
               {recipe.servings}
+            </span>
+            <span className={cn('rounded-md px-2.5 py-1 text-[0.68rem] font-semibold ring-1', DIFFICULTY_STYLE[recipe.difficulty])}>
+              {recipe.difficulty}
             </span>
           </div>
         </div>
       </div>
 
-      <details className="group border-t border-stone-100" open>
-        <summary className="cursor-pointer list-none px-5 py-3.5 text-sm font-extrabold text-amber-700 transition hover:bg-amber-50/50 sm:px-6 [&::-webkit-details-marker]:hidden">
+      <details className="group border-t border-espresso/8" open>
+        <summary className="cursor-pointer list-none px-6 py-3.5 text-sm font-bold text-wine-800 transition hover:bg-cream-100/70 sm:px-8 [&::-webkit-details-marker]:hidden">
           <span className="flex items-center justify-between">
             مواد لازم و طرز تهیه
-            <span className="text-lg leading-none transition-transform group-open:rotate-180" aria-hidden="true">▾</span>
+            <span className="text-lg leading-none text-gold-700 transition-transform duration-300 group-open:rotate-180" aria-hidden="true">▾</span>
           </span>
         </summary>
-        <div className="space-y-5 px-5 pb-6 sm:px-6">
+        <div className="grid gap-7 px-6 pb-8 sm:grid-cols-[0.85fr_1.15fr] sm:px-8">
           <div>
-            <h3 className="mb-2 text-xs font-extrabold text-slate-500">مواد لازم</h3>
-            <ul className="space-y-1.5">
+            <h3 className="kicker mb-3.5 font-display">Ingredients</h3>
+            <ul className="space-y-2 border-r border-espresso/10 pr-4">
               {recipe.ingredients.map((item) => (
-                <li key={item} className="flex items-start gap-2 text-sm leading-7 text-slate-700">
-                  <span className="mt-2.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-hidden="true" />
+                <li key={item} className="flex items-start gap-2.5 text-sm leading-7 text-espresso">
+                  <span className="mt-[0.65rem] h-1 w-1 shrink-0 rotate-45 bg-gold-500" aria-hidden="true" />
                   {item}
                 </li>
               ))}
             </ul>
           </div>
           <div>
-            <h3 className="mb-2 text-xs font-extrabold text-slate-500">طرز تهیه</h3>
-            <ol className="space-y-2.5">
+            <h3 className="kicker mb-3.5 font-display">Method</h3>
+            <ol className="space-y-3">
               {recipe.steps.map((step, i) => (
-                <li key={i} className="flex items-start gap-2.5 text-sm leading-7 text-slate-700">
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-slate-900 text-[11px] font-black text-white">
+                <li key={i} className="flex items-start gap-3 text-sm leading-7 text-espresso">
+                  <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-wine-900 font-display text-[0.65rem] text-gold-300">
                     {i + 1}
                   </span>
                   {step}
@@ -72,8 +81,8 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
             </ol>
           </div>
           {recipe.tip && (
-            <p className="rounded-2xl bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800">
-              <span className="font-black">نکته ژینو: </span>
+            <p className="rounded-xl bg-gold-400/12 px-5 py-4 text-[0.8rem] leading-7 text-wine-900 ring-1 ring-gold-500/30 sm:col-span-2">
+              <span className="font-bold">نکته ژینو: </span>
               {recipe.tip}
             </p>
           )}
@@ -85,16 +94,16 @@ function RecipeCard({ recipe }: { recipe: Recipe }) {
 
 export default function RecipesPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 pt-10 sm:px-6">
-      <div className="animate-fade-up text-center">
-        <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">دستورهای خوشمزه ژینو</h1>
-        <p className="mt-2 text-sm leading-7 text-slate-500">
-          با پودر ژله و کاستارد ژینو، دسرهایی درست کنید که همه را شگفت‌زده کند.
-        </p>
-      </div>
-      <div className="mt-8 space-y-5">
-        {RECIPES.map((recipe) => (
-          <RecipeCard key={recipe.id} recipe={recipe} />
+    <div>
+      <PagePlate
+        kicker="The Recipe Notebook"
+        title="دستورهای خوشمزه ژینو"
+        lead="با پودر ژله و کاستارد ژینو، دسرهایی درست کنید که همه را شگفت‌زده کند."
+        ghost="Recipes"
+      />
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-14 sm:px-6">
+        {RECIPES.map((recipe, i) => (
+          <RecipeCard key={recipe.id} recipe={recipe} index={i} />
         ))}
       </div>
     </div>

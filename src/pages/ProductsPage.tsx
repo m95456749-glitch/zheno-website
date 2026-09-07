@@ -9,6 +9,8 @@ import type { ProductCategory } from '../types';
 import { formatNumber } from '../utils/format';
 import { cn } from '../utils/cn';
 import ProductCard from '../components/ProductCard';
+import PagePlate from '../components/PagePlate';
+import { useReveal } from '../hooks/useReveal';
 
 type Filter = 'all' | ProductCategory;
 
@@ -22,6 +24,8 @@ export default function ProductsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const param = searchParams.get('category');
   const active: Filter = param === 'jelly' || param === 'custard' ? param : 'all';
+
+  const gridReveal = useReveal<HTMLDivElement>();
 
   const counts = useMemo(
     () => ({
@@ -47,46 +51,56 @@ export default function ProductsPage() {
   };
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-10 sm:px-6">
-      <div className="animate-fade-up text-center">
-        <h1 className="text-2xl font-black text-slate-900 sm:text-3xl">محصولات ژینو</h1>
-        <p className="mt-2 text-sm text-slate-500">
-          {formatNumber(filtered.length)} محصول · بسته‌بندی {formatNumber(250)} گرمی
-        </p>
-      </div>
+    <div>
+      <PagePlate
+        kicker="The Zhino Collection"
+        title="محصولات ژینو"
+        lead={`${formatNumber(filtered.length)} محصول در بسته‌بندی ${formatNumber(250)} گرمی؛ همه طعم‌ها، یک کیفیت.`}
+        ghost="Collection"
+      />
 
-      <div className="mt-6 flex flex-wrap justify-center gap-2" role="tablist" aria-label="فیلتر دسته‌بندی">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            type="button"
-            role="tab"
-            aria-selected={active === tab.id}
-            onClick={() => setFilter(tab.id)}
-            className={cn(
-              'rounded-full px-5 py-2.5 text-sm font-bold transition active:scale-95',
-              active === tab.id
-                ? 'bg-slate-900 text-white shadow-md'
-                : 'bg-white text-slate-600 shadow-sm hover:bg-amber-50 hover:text-amber-800',
-            )}
-          >
-            {tab.label}
-            <span className={cn('mr-1.5 text-xs', active === tab.id ? 'text-amber-300' : 'text-slate-400')}>
-              {formatNumber(counts[tab.id])}
-            </span>
-          </button>
-        ))}
-      </div>
+      <div className="mx-auto max-w-6xl px-4 sm:px-6">
+        {/* filters — a floating pill bar overlapping the plate seam */}
+        <div
+          className="panel-lux relative z-10 mx-auto -mt-10 flex w-fit flex-wrap items-center justify-center gap-1 rounded-full px-2 py-2"
+          role="tablist"
+          aria-label="فیلتر دسته‌بندی"
+        >
+          {TABS.map((tab) => {
+            const isActive = active === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                onClick={() => setFilter(tab.id)}
+                className={cn(
+                  'flex items-baseline gap-2 rounded-full px-4.5 py-2 text-[0.82rem] font-medium transition duration-300 sm:px-5',
+                  isActive
+                    ? 'bg-wine-900 text-gold-300 shadow-md shadow-wine-900/25'
+                    : 'text-mocha hover:bg-cream-100 hover:text-wine-900',
+                )}
+              >
+                {tab.label}
+                <span className={cn('text-[0.68rem]', isActive ? 'text-gold-400' : 'text-mocha-light')}>
+                  {formatNumber(counts[tab.id])}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-      <div className="mt-8 grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
-        {filtered.map((product) => (
-          <ProductCard key={product.id} product={product} />
-        ))}
-      </div>
+        <div ref={gridReveal} className="mt-10 grid grid-cols-2 gap-3.5 pb-16 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+          {filtered.map((product) => (
+            <ProductCard key={product.id} product={product} />
+          ))}
+        </div>
 
-      {filtered.length === 0 && (
-        <p className="py-16 text-center text-sm text-slate-500">محصولی در این دسته یافت نشد.</p>
-      )}
+        {filtered.length === 0 && (
+          <p className="py-16 text-center text-sm text-mocha">محصولی در این دسته یافت نشد.</p>
+        )}
+      </div>
     </div>
   );
 }

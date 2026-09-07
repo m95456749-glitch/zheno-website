@@ -1,5 +1,5 @@
 // ============================================================
-// ZHINO — 404 page
+// ZHINO — 404 page (full wine plate)
 // ============================================================
 
 import { Link } from 'react-router-dom';
@@ -7,27 +7,29 @@ import { soundService } from '../services/soundService';
 
 export default function NotFoundPage() {
   return (
-    <div className="mx-auto max-w-xl px-4 pt-20 text-center sm:px-6">
-      <p className="text-7xl font-black text-amber-300" dir="ltr">404</p>
-      <h1 className="mt-4 text-xl font-black text-slate-800">صفحه یافت نشد</h1>
-      <p className="mt-2 text-sm leading-7 text-slate-500">
-        نشانی وارد شده اشتباه است یا این صفحه به مکان دیگری منتقل شده است.
+    <div className="page-plate dark-surface grain relative flex min-h-[74svh] items-center justify-center overflow-hidden px-4 py-16 text-center text-cream-50 sm:px-6">
+      <p className="ghost-mark pointer-events-none absolute inset-x-0 top-1/2 -translate-y-1/2 select-none text-[9rem] leading-none sm:text-[16rem]" aria-hidden="true">
+        404
       </p>
-      <div className="mt-6 flex flex-col justify-center gap-3 sm:flex-row">
-        <Link
-          to="/"
-          onClick={() => soundService.play('primaryButton')}
-          className="rounded-2xl bg-amber-500 px-7 py-3 text-sm font-extrabold text-white transition hover:bg-amber-600"
-        >
-          بازگشت به خانه
-        </Link>
-        <Link
-          to="/products"
-          onClick={() => soundService.play('primaryButton')}
-          className="rounded-2xl bg-stone-100 px-7 py-3 text-sm font-extrabold text-slate-700 transition hover:bg-stone-200"
-        >
-          مشاهده محصولات
-        </Link>
+      <div className="relative">
+        <p className="kicker kicker-dark font-display">Lost in the Kitchen</p>
+        <h1 className="mt-5 text-2xl font-light sm:text-3xl">صفحه یافت نشد</h1>
+        <p className="mx-auto mt-3 max-w-md text-sm leading-8 text-cream-200/70">
+          نشانی وارد شده اشتباه است یا این صفحه به مکان دیگری منتقل شده است.
+        </p>
+        <div className="mt-8 flex flex-col items-center justify-center gap-4 sm:flex-row sm:gap-6">
+          <Link to="/" onClick={() => soundService.play('primaryButton')} className="btn-lux btn-gold sheen">
+            بازگشت به خانه
+          </Link>
+          <Link
+            to="/products"
+            onClick={() => soundService.play('primaryButton')}
+            className="group inline-flex items-center gap-2.5 border-b border-gold-300/40 pb-1.5 text-sm font-medium text-cream-100 transition hover:border-gold-300 hover:text-gold-300"
+          >
+            مشاهده محصولات
+            <span className="transition-transform duration-300 group-hover:-translate-x-1.5" aria-hidden="true">←</span>
+          </Link>
+        </div>
       </div>
     </div>
   );

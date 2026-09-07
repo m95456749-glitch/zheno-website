@@ -41,27 +41,27 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#FAF8F5] p-6">
-        <div className="w-full max-w-md rounded-3xl bg-white p-8 text-center shadow-xl shadow-amber-100">
-          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 text-3xl font-black text-amber-700">
+      <div className="flex min-h-screen items-center justify-center bg-cream-50 p-6">
+        <div className="panel-lux w-full max-w-md rounded-2xl p-8 text-center">
+          <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-wine-900 text-2xl font-extrabold text-gold-300 ring-1 ring-gold-500/40">
             ژ
           </div>
-          <h1 className="mb-2 text-xl font-extrabold text-slate-800">مشکلی پیش آمد</h1>
-          <p className="mb-6 text-sm leading-7 text-slate-500">
+          <h1 className="mb-2 text-xl font-bold text-wine-950">مشکلی پیش آمد</h1>
+          <p className="mb-7 text-sm leading-8 text-mocha">
             متأسفیم! بخشی از صفحه به‌درستی بارگذاری نشد. لطفاً دوباره تلاش کنید.
           </p>
           <div className="flex gap-3">
             <button
               type="button"
               onClick={this.handleReset}
-              className="flex-1 rounded-2xl bg-amber-500 px-4 py-3 text-sm font-bold text-white transition hover:bg-amber-600"
+              className="btn-lux btn-wine flex-1 rounded-xl px-4"
             >
               تلاش مجدد
             </button>
             <button
               type="button"
               onClick={this.handleReload}
-              className="flex-1 rounded-2xl bg-stone-100 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-stone-200"
+              className="btn-lux btn-line-dark flex-1 rounded-xl px-4"
             >
               بارگذاری دوباره
             </button>
@@ -69,7 +69,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           {import.meta.env.DEV && this.state.error && (
             <pre
               dir="ltr"
-              className="mt-4 max-h-32 overflow-auto rounded-xl bg-slate-900 p-3 text-left text-[11px] leading-5 text-red-300"
+              className="mt-4 max-h-32 overflow-auto rounded-xl bg-noir p-3 text-left text-[11px] leading-5 text-wine-500"
             >
               {this.state.error.message}
             </pre>
