@@ -111,17 +111,17 @@ export default function HomePage() {
             style={{ '--rise-delay': '0.3s' } as CSSProperties}
           >
             {dishPhoto ? (
-              <div className="arch-unveil">
+              <div className="arch-unveil w-full max-w-md lg:max-w-[34rem]">
                 <div className="frame-lux arch overflow-hidden">
                   <img
                     src={HERO_DISH_URL}
                     alt="سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی"
-                    width={900}
-                    height={1200}
+                    width={1408}
+                    height={768}
                     loading="eager"
                     decoding="async"
                     onError={() => setDishPhoto(false)}
-                    className="block h-[44svh] w-auto max-w-[30rem] min-w-[15rem] object-cover object-[50%_38%] shadow-[0_50px_100px_-40px_rgba(0,0,0,0.9)] sm:h-[54svh] lg:h-[64svh] lg:max-h-[48rem]"
+                    className="block aspect-[4/3] w-full object-cover object-[50%_50%] shadow-[0_50px_100px_-40px_rgba(0,0,0,0.9)]"
                   />
                 </div>
               </div>
