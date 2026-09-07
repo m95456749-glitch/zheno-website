@@ -60,7 +60,7 @@ export default function Header() {
         overlay ? 'bg-transparent' : 'frost',
       )}
     >
-      <div className="mx-auto flex h-[4.5rem] max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         {/* brand */}
         <Link to="/" className="group flex items-center gap-3" aria-label="ژینو — صفحه اصلی">
           <span
@@ -96,9 +96,9 @@ export default function Header() {
                 key={item.to}
                 to={item.to}
                 className={cn(
-                  'relative px-4 py-2 text-sm font-medium transition-colors',
-                  'after:absolute after:inset-x-4 after:bottom-1 after:h-px after:origin-center after:scale-x-0 after:bg-gold-400 after:transition-transform after:duration-300 hover:after:scale-x-100',
-                  overlay ? 'text-cream-100/85 hover:text-gold-300' : 'text-mocha hover:text-wine-800',
+                  'relative px-3.5 py-2 text-[0.82rem] font-medium transition-colors',
+                  'after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-center after:scale-x-0 after:bg-gold-400 after:transition-transform after:duration-300 hover:after:scale-x-100',
+                  overlay ? 'text-cream-100/80 hover:text-gold-300' : 'text-mocha hover:text-wine-800',
                 )}
               >
                 {item.label}
@@ -110,8 +110,8 @@ export default function Header() {
                 end={item.end}
                 className={({ isActive }) =>
                   cn(
-                    'relative px-4 py-2 text-sm font-medium transition-colors',
-                    'after:absolute after:inset-x-4 after:bottom-1 after:h-px after:origin-center after:transition-transform after:duration-300',
+                    'relative px-3.5 py-2 text-[0.82rem] font-medium transition-colors',
+                    'after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-center after:transition-transform after:duration-300',
                     isActive ? 'after:scale-x-100' : 'after:scale-x-0 hover:after:scale-x-100',
                     overlay
                       ? isActive
@@ -213,7 +213,7 @@ export default function Header() {
       {/* mobile nav sheet */}
       {menuOpen && (
         <nav
-          className="border-t border-wine-900/10 bg-cream-50/98 px-4 pb-6 pt-3 backdrop-blur-xl md:hidden"
+          className="page-plate dark-surface grain relative border-t border-gold-400/25 px-4 pb-6 pt-3 md:hidden"
           aria-label="ناوبری موبایل"
         >
           {NAV_ITEMS.map((item) =>
@@ -222,7 +222,7 @@ export default function Header() {
                 key={item.to}
                 to={item.to}
                 onClick={() => setMenuOpen(false)}
-                className="block rounded-xl px-4 py-3.5 text-[0.95rem] font-semibold text-mocha transition hover:bg-wine-900/5 hover:text-wine-900"
+                className="block rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-gold-300"
               >
                 {item.label}
               </Link>
@@ -234,8 +234,8 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center justify-between rounded-xl px-4 py-3.5 text-[0.95rem] font-semibold transition',
-                    isActive ? 'bg-wine-900 text-gold-300' : 'text-mocha hover:bg-wine-900/5 hover:text-wine-900',
+                    'flex items-center justify-between rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-gold-300',
+                    isActive ? 'bg-cream-50/8 text-gold-300' : '',
                   )
                 }
               >

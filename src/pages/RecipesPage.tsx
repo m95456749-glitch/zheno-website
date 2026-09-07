@@ -6,6 +6,7 @@
 import { RECIPES } from '../data/recipes';
 import type { Recipe } from '../data/recipes';
 import { cn } from '../utils/cn';
+import PagePlate from '../components/PagePlate';
 
 const DIFFICULTY_STYLE: Record<Recipe['difficulty'], string> = {
   'آسان': 'text-emerald-800 bg-emerald-50 ring-emerald-200/70',
@@ -93,16 +94,14 @@ function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
 
 export default function RecipesPage() {
   return (
-    <div className="mx-auto max-w-4xl px-4 pt-14 sm:px-6">
-      <div className="animate-fade-up text-center">
-        <p className="kicker font-display">The Recipe Notebook</p>
-        <h1 className="mt-4 text-3xl font-bold text-wine-950 sm:text-4xl">دستورهای خوشمزه ژینو</h1>
-        <p className="mx-auto mt-4 max-w-xl text-sm leading-8 text-mocha">
-          با پودر ژله و کاستارد ژینو، دسرهایی درست کنید که همه را شگفت‌زده کند.
-        </p>
-        <span className="rule-lux mt-6" aria-hidden="true" />
-      </div>
-      <div className="mt-10 space-y-6">
+    <div>
+      <PagePlate
+        kicker="The Recipe Notebook"
+        title="دستورهای خوشمزه ژینو"
+        lead="با پودر ژله و کاستارد ژینو، دسرهایی درست کنید که همه را شگفت‌زده کند."
+        ghost="Recipes"
+      />
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-14 sm:px-6">
         {RECIPES.map((recipe, i) => (
           <RecipeCard key={recipe.id} recipe={recipe} index={i} />
         ))}

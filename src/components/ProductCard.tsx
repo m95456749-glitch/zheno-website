@@ -1,6 +1,7 @@
 // ============================================================
-// ZHINO — product card (data-driven, no hard-coded products)
-// Premium food-editorial treatment: image first, quiet chrome.
+// ZHINO — product card (data-driven, editorial v2)
+// Menu-card language: tinted plate, hairline top rule that
+// ignites on hover, quiet chrome, one clear action.
 // ============================================================
 
 import { useState } from 'react';
@@ -31,79 +32,70 @@ export default function ProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <article className="card-lux group flex flex-col overflow-hidden rounded-2xl">
+    <article className="card-lux group flex h-full flex-col overflow-hidden rounded-xl">
       <Link to={`/products/${product.id}`} className="block" aria-label={`مشاهده ${product.name}`}>
-        <div className="relative overflow-hidden">
+        <div className="relative">
           <ProductVisual
             color={flavor.color}
             emoji={flavor.emoji}
             name={product.name}
-            className="aspect-[4/5] w-full transition-transform duration-500 ease-out group-hover:scale-[1.03]"
+            className="aspect-[5/4.4] w-full sm:aspect-[5/5]"
           />
-          <div className="absolute right-3 top-3 flex flex-col items-end gap-1.5">
-            {product.featured && (
-              <span className="rounded-full bg-gradient-to-l from-gold-400 to-gold-500 px-3 py-1 text-[0.62rem] font-bold text-wine-950 shadow-md shadow-wine-950/20">
-                پیشنهاد ژینو
-              </span>
-            )}
-            {product.special && (
-              <span className="rounded-full bg-wine-900/90 px-3 py-1 text-[0.62rem] font-semibold text-gold-300 ring-1 ring-gold-400/40 backdrop-blur-sm">
-                ویژه
-              </span>
-            )}
-          </div>
-          {/* availability — derived from catalog data, presentation only */}
-          <div className="absolute bottom-3 left-3 flex items-center gap-1.5 rounded-full bg-noir/55 px-2.5 py-1 backdrop-blur-sm">
-            <span
-              className={cn('h-1.5 w-1.5 rounded-full', defaultVariant.available ? 'bg-emerald-400' : 'bg-red-400')}
-              aria-hidden="true"
-            />
-            <span className="text-[0.62rem] font-medium text-cream-100">
-              {defaultVariant.available ? 'موجود' : 'ناموجود'}
-            </span>
-          </div>
+          {(product.featured || product.special) && (
+            <div className="absolute right-3.5 top-3.5 flex flex-col items-end gap-1">
+              {product.featured && (
+                <span className="text-[0.62rem] font-bold text-wine-950/70">
+                  <span className="ml-1 text-gold-600" aria-hidden="true">◆</span>
+                  پیشنهاد ژینو
+                </span>
+              )}
+              {product.special && (
+                <span className="text-[0.62rem] font-semibold text-wine-800/80">
+                  <span className="ml-1 text-gold-600" aria-hidden="true">✦</span>
+                  ویژه
+                </span>
+              )}
+            </div>
+          )}
         </div>
       </Link>
 
       <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5 sm:px-5 sm:pb-5">
-        <span className="text-[0.68rem] font-semibold text-gold-700">
-          {product.categoryLabel}
-        </span>
+        <p className="flex items-center justify-between text-[0.68rem] font-medium text-mocha-light">
+          <span className="text-gold-700">{product.categoryLabel}</span>
+          <span className="flex items-center gap-1.5">
+            <span
+              className={cn('h-1.5 w-1.5 rounded-full', defaultVariant.available ? 'bg-emerald-600' : 'bg-red-500')}
+              aria-hidden="true"
+            />
+            {defaultVariant.available ? 'موجود' : 'ناموجود'}
+          </span>
+        </p>
         <Link
           to={`/products/${product.id}`}
-          className="mt-1.5 font-bold leading-8 text-wine-950 transition hover:text-wine-700"
+          className="mt-2 text-[1.02rem] font-medium leading-8 text-wine-950 transition-colors hover:text-wine-700"
         >
           {product.shortName}
         </Link>
-        <p className="mt-1 flex items-center gap-1.5 text-[0.72rem] text-mocha">
-          <span className="h-2 w-2 rounded-full ring-1 ring-espresso/10" style={{ backgroundColor: flavor.color }} aria-hidden="true" />
-          {flavor.name}
-          <span className="text-mocha-light">·</span>
-          {defaultVariant.weight}
+        <p className="mt-1 text-[0.72rem] text-mocha">
+          {flavor.name} <span className="mx-1 text-mocha-light">·</span> {defaultVariant.weight}
         </p>
 
-        <div className="mt-auto flex items-center justify-between gap-2 border-t border-espresso/8 pt-4">
-          <span className="whitespace-nowrap text-[0.95rem] font-extrabold text-wine-950 sm:text-base">
+        <div className="mt-auto flex items-end justify-between gap-2 border-t border-espresso/8 pt-3.5">
+          <span className="whitespace-nowrap text-[0.98rem] font-bold text-wine-900">
             {priceBody}
-            <span className="mr-1 align-middle text-[0.62rem] font-semibold text-mocha">تومان</span>
+            <span className="mr-1 text-[0.62rem] font-medium text-mocha">تومان</span>
           </span>
           <button
             type="button"
             onClick={handleAdd}
             aria-label={`افزودن ${product.shortName} به سبد خرید`}
-            className="flex h-10 w-10 items-center justify-center rounded-full bg-cream-100 text-wine-900 ring-1 ring-wine-900/15 transition duration-300 hover:bg-wine-900 hover:text-gold-300 hover:ring-gold-400/40 active:scale-95"
+            className="flex h-10 items-center gap-2 rounded-full px-3 text-[0.72rem] font-semibold text-wine-900 ring-1 ring-wine-900/20 transition duration-300 hover:bg-wine-900 hover:text-gold-300 hover:ring-gold-400/50 active:scale-95"
           >
-            <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5" aria-hidden="true">
-              <path
-                d="M3 4h2l2.4 9.2a1 1 0 0 0 1 .8h6.9a1 1 0 0 0 1-.8L17.5 7H6"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <circle cx="9.5" cy="17" r="1.2" fill="currentColor" />
-              <circle cx="15" cy="17" r="1.2" fill="currentColor" />
+            <svg viewBox="0 0 20 20" fill="none" className="h-4.5 w-4.5" aria-hidden="true">
+              <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
             </svg>
+            <span className="hidden sm:inline">افزودن</span>
           </button>
         </div>
         {error && <p className="pt-2 text-[0.72rem] font-semibold text-red-700">{error}</p>}

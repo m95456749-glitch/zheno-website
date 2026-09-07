@@ -1,7 +1,8 @@
 // ============================================================
-// ZHINO — data-driven product visual
-// Renders the flavor color + motif stored in the product catalog
-// as a jewel-toned, softly lit plate (no external images).
+// ZHINO — data-driven product visual (v2)
+// Editorial "plated" presentation: the flavor's jewel disc sits
+// on a tinted table wash, like food photography on a set.
+// Still 100% derived from catalog data — no invented imagery.
 // ============================================================
 
 interface Props {
@@ -10,44 +11,64 @@ interface Props {
   name: string;
   className?: string;
   emojiClassName?: string;
+  /** hide the tiny Zhino mark (used on small thumbs) */
+  compact?: boolean;
 }
 
-export default function ProductVisual({ color, emoji, name, className = '', emojiClassName = 'text-6xl' }: Props) {
+export default function ProductVisual({
+  color,
+  emoji,
+  name,
+  className = '',
+  emojiClassName = 'text-6xl',
+  compact = false,
+}: Props) {
   return (
     <div
       role="img"
       aria-label={name}
       className={`relative overflow-hidden ${className}`}
       style={{
-        backgroundColor: color,
-        backgroundImage: `radial-gradient(115% 85% at 26% 16%, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 52%), radial-gradient(130% 100% at 74% 96%, rgba(0,0,0,0.42) 0%, rgba(0,0,0,0) 58%), linear-gradient(152deg, ${color} 0%, color-mix(in srgb, ${color} 66%, black) 72%, color-mix(in srgb, ${color} 40%, black) 100%)`,
+        backgroundColor: 'var(--color-cream-100)',
+        backgroundImage: `
+          radial-gradient(120% 95% at 50% 118%, rgba(31,9,15,0.16) 0%, rgba(31,9,15,0) 52%),
+          radial-gradient(85% 65% at 22% 8%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 60%),
+          linear-gradient(178deg, color-mix(in srgb, ${color} 12%, #fbf7ef) 0%, color-mix(in srgb, ${color} 24%, #f3eadb) 100%)
+        `,
       }}
     >
-      {/* studio light pools */}
-      <div className="absolute left-1/2 top-1/2 h-[55%] w-[62%] -translate-x-1/2 -translate-y-[58%] rounded-full bg-white/12 blur-2xl" aria-hidden="true" />
-      {/* pedestal shadow under the motif */}
-      <div className="absolute bottom-[16%] left-1/2 h-6 w-2/5 -translate-x-1/2 rounded-[100%] bg-black/25 blur-md" aria-hidden="true" />
-      {/* flavor motif */}
+      {/* the plate — a jewel disc of the flavor color */}
       <div className="absolute inset-0 flex items-center justify-center">
-        <span
-          className={`${emojiClassName} drop-shadow-[0_10px_16px_rgba(0,0,0,0.45)] transition-transform duration-500 ease-out group-hover:scale-108 group-hover:-translate-y-1`}
+        <div
+          className="relative aspect-square w-[64%] max-w-[22rem] rounded-full transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+          style={{
+            background: `radial-gradient(70% 62% at 32% 24%, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0) 46%), linear-gradient(150deg, color-mix(in srgb, ${color} 88%, white 6%) 0%, ${color} 55%, color-mix(in srgb, ${color} 55%, black) 100%)`,
+            boxShadow:
+              'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -8px 18px rgba(0,0,0,0.28), 0 22px 34px -14px rgba(31,9,15,0.45)',
+          }}
           aria-hidden="true"
         >
-          {emoji}
-        </span>
+          <div className="absolute inset-[7%] rounded-full border border-white/18" />
+          <div className="absolute inset-[18%] rounded-full" style={{ background: 'radial-gradient(circle at 50% 46%, rgba(255,255,255,0.22) 0%, rgba(255,255,255,0) 62%)' }} aria-hidden="true" />
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={`${emojiClassName} drop-shadow-[0_8px_14px_rgba(0,0,0,0.4)]`} aria-hidden="true">
+              {emoji}
+            </span>
+          </div>
+        </div>
       </div>
-      {/* glass shine */}
+
+      {/* table shadow under the plate */}
       <div
-        className="pointer-events-none absolute inset-0"
+        className="absolute bottom-[9%] left-1/2 h-[7%] w-[52%] -translate-x-1/2 rounded-[100%] bg-noir/30 blur-md"
         aria-hidden="true"
-        style={{ background: 'linear-gradient(108deg, rgba(255,255,255,0.20) 0%, rgba(255,255,255,0) 36%)' }}
       />
-      {/* hairline inner rim */}
-      <div className="pointer-events-none absolute inset-0 rounded-[inherit] ring-1 ring-inset ring-white/10" aria-hidden="true" />
-      {/* brand mark */}
-      <div className="absolute bottom-2.5 right-3 font-display text-[0.58rem] uppercase tracking-[0.35em] text-cream-50/75">
-        Zhino
-      </div>
+
+      {!compact && (
+        <div className="absolute bottom-3 right-4 font-display text-[0.56rem] uppercase tracking-[0.34em] text-wine-950/45">
+          Zhino
+        </div>
+      )}
     </div>
   );
 }

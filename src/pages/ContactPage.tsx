@@ -5,6 +5,7 @@
 import { useState } from 'react';
 import { soundService } from '../services/soundService';
 import { cn } from '../utils/cn';
+import PagePlate from '../components/PagePlate';
 
 const inputClass = (hasError: boolean) =>
   cn(
@@ -41,17 +42,15 @@ export default function ContactPage() {
   };
 
   return (
-    <div className="mx-auto max-w-5xl px-4 pt-14 sm:px-6">
-      <div className="animate-fade-up text-center">
-        <p className="kicker font-display">Get in Touch</p>
-        <h1 className="mt-4 text-3xl font-bold text-wine-950 sm:text-4xl">تماس با ژینو</h1>
-        <p className="mx-auto mt-4 max-w-xl text-sm leading-8 text-mocha">
-          سؤال، پیشنهاد یا انتقادی دارید؟ از طریق فرم زیر برای ما بنویسید؛ در ساعات کاری پاسخ می‌دهیم.
-        </p>
-        <span className="rule-lux mt-6" aria-hidden="true" />
-      </div>
+    <div>
+      <PagePlate
+        kicker="Get in Touch"
+        title="تماس با ژینو"
+        lead="سؤال، پیشنهاد یا انتقادی دارید؟ از طریق فرم زیر برای ما بنویسید؛ در ساعات کاری پاسخ می‌دهیم."
+        ghost="Contact"
+      />
 
-      <div className="mt-10 grid items-start gap-6 lg:grid-cols-[0.85fr_1.15fr]">
+      <div className="mx-auto grid max-w-5xl items-start gap-6 px-4 py-14 sm:px-6 lg:grid-cols-[0.85fr_1.15fr]">
         {/* quiet side panel — brand voice only, no invented contact data */}
         <div className="grain relative hidden overflow-hidden rounded-2xl bg-gradient-to-bl from-wine-800 via-wine-900 to-noir p-8 text-cream-50 ring-1 ring-gold-400/25 lg:block">
           <p className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-gold-400">Zhino Atelier</p>
@@ -140,3 +139,4 @@ export default function ContactPage() {
     </div>
   );
 }
+

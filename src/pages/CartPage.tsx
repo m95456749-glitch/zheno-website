@@ -18,6 +18,7 @@ import { soundService } from '../services/soundService';
 import FreeShippingProgress from '../components/FreeShippingProgress';
 import QuantitySelector from '../components/QuantitySelector';
 import ProductVisual from '../components/ProductVisual';
+import PagePlate from '../components/PagePlate';
 
 export default function CartPage() {
   const { items, totalItems, subtotal, isShippingFree, updateQuantity, removeItem } = useCartContext();
@@ -39,8 +40,14 @@ export default function CartPage() {
 
   if (items.length === 0) {
     return (
-      <div className="mx-auto max-w-xl px-4 pt-20 text-center sm:px-6">
-        <div className="animate-fade-up panel-lux rounded-2xl p-10 sm:p-12">
+      <div>
+        <PagePlate
+          kicker="Your Basket"
+          title="سبد خرید"
+          ghost="Cart"
+        />
+        <div className="mx-auto max-w-xl px-4 pb-10 pt-8 text-center sm:px-6">
+          <div className="animate-fade-up panel-lux -mt-14 rounded-2xl p-10 sm:p-12">
           <span className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-cream-100 text-wine-800 ring-1 ring-gold-500/30">
             <svg viewBox="0 0 24 24" fill="none" className="h-10 w-10" aria-hidden="true">
               <path
@@ -65,22 +72,26 @@ export default function CartPage() {
           >
             مشاهده محصولات
           </Link>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-14 sm:px-6">
-      <div className="mb-8 flex items-end justify-between gap-4">
-        <div>
-          <p className="kicker font-display">Your Selection</p>
-          <h1 className="mt-2.5 text-2xl font-bold text-wine-950 sm:text-3xl">
+    <div>
+      <PagePlate
+        kicker="Your Selection"
+        title={
+          <>
             سبد خرید{' '}
-            <span className="text-sm font-medium text-mocha">({formatNumber(totalItems)} کالا)</span>
-          </h1>
-        </div>
-      </div>
+            <span className="text-base font-medium text-cream-200/70">({formatNumber(totalItems)} کالا)</span>
+          </>
+        }
+        ghost="Cart"
+      />
+
+      <div className="mx-auto max-w-6xl px-4 pb-8 pt-10 sm:px-6">
 
       {lineError && (
         <p
@@ -224,6 +235,7 @@ export default function CartPage() {
             ادامه خرید ←
           </Link>
         </aside>
+      </div>
       </div>
     </div>
   );

@@ -1,53 +1,49 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ZHINO — luxury design system
-   Palette: deep burgundy wine · warm dark neutrals · cream/ivory
-   Accents: antique gold, restrained fruit jewel tones (per flavor)
-   Display latin: Marcellus · Persian: Vazirmatn
+   ZHINO — luxury design system v2
+   Identity: burgundy-dominant cinematic plates, arched dessert
+   framing, restaurant-menu typography, hairline gold rules.
+   Persian: Vazirmatn (light display weights) · latin: Marcellus
    ============================================================ */
 
 @theme {
   --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, sans-serif;
   --font-display: 'Marcellus', 'Vazirmatn', Georgia, serif;
 
-  /* near-black plum for the deepest surfaces */
-  --color-noir: #170609;
+  /* near-black plum */
+  --color-noir: #15060a;
 
-  /* burgundy / wine scale */
-  --color-wine-950: #200a10;
-  --color-wine-900: #360f1b;
-  --color-wine-800: #4c1624;
-  --color-wine-700: #64202f;
-  --color-wine-600: #7d2c3e;
-  --color-wine-500: #96414f;
+  /* burgundy / wine */
+  --color-wine-950: #1f090f;
+  --color-wine-900: #33101a;
+  --color-wine-800: #471725;
+  --color-wine-700: #5e2133;
+  --color-wine-600: #772a40;
+  --color-wine-500: #8f3b50;
 
   /* cream / ivory */
-  --color-cream-50: #fbf7f0;
-  --color-cream-100: #f5eee1;
-  --color-cream-200: #ebe0cc;
-  --color-cream-300: #ddcbab;
+  --color-cream-50: #faf6ee;
+  --color-cream-100: #f4ecdf;
+  --color-cream-200: #e9dcc6;
+  --color-cream-300: #d9c4a2;
 
   /* antique gold */
-  --color-gold-300: #e9d5a7;
-  --color-gold-400: #d8b878;
-  --color-gold-500: #c09a4e;
-  --color-gold-600: #9c7a39;
-  --color-gold-700: #795c29;
+  --color-gold-300: #ecd9ac;
+  --color-gold-400: #dcbc7d;
+  --color-gold-500: #c39c51;
+  --color-gold-600: #9e7a38;
+  --color-gold-700: #77592a;
 
-  /* warm neutrals for text */
-  --color-espresso: #2b1d18;
-  --color-mocha: #6f5a4f;
-  --color-mocha-light: #97847a;
+  /* warm text neutrals */
+  --color-espresso: #291b16;
+  --color-mocha: #6d584d;
+  --color-mocha-light: #947f72;
 }
 
 body {
   font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
 }
-
-/* ------------------------------------------------------------
-   Base polish
-   ------------------------------------------------------------ */
 
 ::selection {
   background: var(--color-gold-300);
@@ -60,7 +56,6 @@ body {
   border-radius: 4px;
 }
 
-/* Custom scrollbar styling */
 ::-webkit-scrollbar {
   width: 9px;
   height: 9px;
@@ -81,7 +76,7 @@ body {
 }
 
 /* ------------------------------------------------------------
-   Cinematic film grain (tiny inline SVG, no extra requests)
+   Film grain — cinematic texture on all dark surfaces
    ------------------------------------------------------------ */
 
 .grain::after {
@@ -89,140 +84,193 @@ body {
   position: absolute;
   inset: 0;
   pointer-events: none;
-  opacity: 0.05;
+  opacity: 0.055;
   mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
 /* ------------------------------------------------------------
-   Hero — layered background
-   When public/images/hero-bg.jpg exists it is painted over the
-   silk gradient; if absent the CSS treatment below stands in,
-   so the Hero is never broken.
+   Hero backdrop layers
+   IMAGE 1 slot: public/images/hero-bg.jpg (set via --hero-img).
+   Beneath it a slow-burning burgundy silk; above it scrims.
    ------------------------------------------------------------ */
 
 .hero-silk {
   background-color: var(--color-wine-950);
   background-image:
-    radial-gradient(58% 90% at 78% 18%, rgba(125, 44, 62, 0.55) 0%, rgba(125, 44, 62, 0) 62%),
-    radial-gradient(70% 120% at 12% 88%, rgba(76, 22, 36, 0.9) 0%, rgba(76, 22, 36, 0) 60%),
-    conic-gradient(from 210deg at 62% 46%, #200a10 0deg, #4c1624 70deg, #64202f 150deg, #360f1b 250deg, #200a10 360deg);
+    radial-gradient(60% 80% at 70% 12%, rgba(143, 59, 80, 0.5) 0%, rgba(143, 59, 80, 0) 60%),
+    radial-gradient(80% 120% at 8% 96%, rgba(71, 23, 37, 0.95) 0%, rgba(71, 23, 37, 0) 55%),
+    conic-gradient(from 195deg at 58% 42%, #1f090f 0deg, #33101a 60deg, #5e2133 140deg, #471725 245deg, #1f090f 360deg);
+}
+
+.hero-silk::before {
+  content: '';
+  position: absolute;
+  inset: -15%;
+  background-image:
+    radial-gradient(45% 60% at 28% 30%, rgba(220, 188, 125, 0.07) 0%, rgba(220, 188, 125, 0) 60%),
+    radial-gradient(55% 70% at 76% 72%, rgba(143, 59, 80, 0.32) 0%, rgba(143, 59, 80, 0) 62%);
+  transform: rotate(-7deg);
 }
 
 .hero-photo {
   background-image: var(--hero-img, none);
   background-size: cover;
   background-repeat: no-repeat;
-  background-position: 50% 62%;
+  background-position: 50% 60%;
+  opacity: 0.9;
 }
 
 @media (min-width: 1024px) {
   .hero-photo {
-    background-position: 66% center;
+    background-position: 62% center;
   }
 }
 
-/* soft flowing "silk" ribbons, purely decorative */
-.hero-silk::before {
-  content: '';
-  position: absolute;
-  inset: -20%;
-  background-image:
-    radial-gradient(42% 58% at 30% 34%, rgba(216, 184, 120, 0.09) 0%, rgba(216, 184, 120, 0) 60%),
-    radial-gradient(50% 70% at 72% 68%, rgba(150, 65, 79, 0.4) 0%, rgba(150, 65, 79, 0) 62%);
-  transform: rotate(-6deg);
-  filter: blur(2px);
+/* very slow ken-burns on the hero photo layer */
+@keyframes slow-burn {
+  from {
+    transform: scale(1.015);
+  }
+  to {
+    transform: scale(1.06);
+  }
+}
+
+.slow-burn {
+  animation: slow-burn 26s ease-in-out infinite alternate;
+  will-change: transform;
 }
 
 /* ------------------------------------------------------------
-   Buttons — refined, two-tone luxury
+   Arched dessert framing — the brand's silhouette motif
+   ------------------------------------------------------------ */
+
+.arch {
+  border-radius: 11rem 11rem 1.25rem 1.25rem;
+}
+
+@media (max-width: 640px) {
+  .arch {
+    border-radius: 8rem 8rem 1rem 1rem;
+  }
+}
+
+.arch-sm {
+  border-radius: 7rem 7rem 0.875rem 0.875rem;
+}
+
+/* ------------------------------------------------------------
+   Buttons
    ------------------------------------------------------------ */
 
 .btn-lux {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 0.85rem;
-  padding: 0.9rem 2rem;
+  border-radius: 9999px;
+  padding: 0.85rem 1.9rem;
   font-weight: 600;
-  font-size: 0.95rem;
+  font-size: 0.92rem;
   line-height: 1;
   transition:
-    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.25s ease,
-    background-color 0.25s ease,
-    color 0.25s ease,
-    border-color 0.25s ease;
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease,
+    background-color 0.3s ease,
+    background-image 0.3s ease,
+    color 0.3s ease,
+    border-color 0.3s ease;
 }
 
 .btn-lux:active {
-  transform: scale(0.98);
+  transform: scale(0.97);
 }
 
 .btn-gold {
-  background-image: linear-gradient(120deg, var(--color-gold-400) 0%, var(--color-gold-500) 55%, var(--color-gold-300) 100%);
+  background-image: linear-gradient(115deg, var(--color-gold-300) 0%, var(--color-gold-400) 45%, var(--color-gold-500) 100%);
   color: var(--color-wine-950);
   box-shadow:
-    0 12px 30px -12px rgba(192, 154, 78, 0.55),
-    inset 0 1px 0 rgba(255, 255, 255, 0.45);
+    0 14px 34px -14px rgba(195, 156, 81, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .btn-gold:hover {
-  background-image: linear-gradient(120deg, var(--color-gold-300) 0%, var(--color-gold-400) 60%, var(--color-gold-300) 100%);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
+  background-image: linear-gradient(115deg, #f2e3be 0%, var(--color-gold-300) 50%, var(--color-gold-400) 100%);
 }
 
 .btn-wine {
   background-color: var(--color-wine-900);
   color: var(--color-cream-50);
   box-shadow:
-    0 14px 30px -14px rgba(32, 10, 16, 0.5),
-    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+    0 16px 32px -18px rgba(31, 9, 15, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
 .btn-wine:hover {
   background-color: var(--color-wine-800);
-  transform: translateY(-1px);
+  transform: translateY(-2px);
 }
 
 .btn-line-light {
-  border: 1px solid rgba(251, 247, 240, 0.35);
+  border: 1px solid rgba(250, 246, 238, 0.32);
   color: var(--color-cream-50);
-  background: rgba(251, 247, 240, 0.04);
-  backdrop-filter: blur(6px);
+  background: rgba(250, 246, 238, 0.03);
 }
 
 .btn-line-light:hover {
   border-color: var(--color-gold-400);
   color: var(--color-gold-300);
-  background: rgba(216, 184, 120, 0.08);
-  transform: translateY(-1px);
+  background: rgba(220, 188, 125, 0.08);
+  transform: translateY(-2px);
 }
 
 .btn-line-dark {
-  border: 1px solid rgba(43, 29, 24, 0.18);
+  border: 1px solid rgba(41, 27, 22, 0.18);
   color: var(--color-espresso);
   background: transparent;
 }
 
 .btn-line-dark:hover {
-  border-color: var(--color-wine-700);
+  border-color: var(--color-wine-600);
   color: var(--color-wine-800);
-  background: rgba(100, 32, 47, 0.05);
-  transform: translateY(-1px);
+  background: rgba(94, 33, 51, 0.05);
+  transform: translateY(-2px);
+}
+
+/* gold sheen sweep */
+.sheen {
+  position: relative;
+  overflow: hidden;
+}
+
+.sheen::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 38%;
+  left: -60%;
+  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  transform: skewX(-18deg);
+  transition: left 0.65s ease;
+  pointer-events: none;
+}
+
+.sheen:hover::after {
+  left: 125%;
 }
 
 /* ------------------------------------------------------------
-   Editorial type helpers
+   Editorial typography helpers
    ------------------------------------------------------------ */
 
 .kicker {
   font-family: var(--font-display);
   text-transform: uppercase;
-  letter-spacing: 0.42em;
-  font-size: 0.68rem;
+  letter-spacing: 0.4em;
+  font-size: 0.64rem;
   color: var(--color-gold-700);
 }
 
@@ -230,10 +278,26 @@ body {
   color: var(--color-gold-400);
 }
 
-/* thin ornamental rule with a diamond node */
+/* giant ghost wordmark behind section titles */
+.ghost-mark {
+  font-family: var(--font-display);
+  text-transform: uppercase;
+  letter-spacing: 0.22em;
+  line-height: 1;
+  color: transparent;
+  -webkit-text-stroke: 1px rgba(195, 156, 81, 0.16);
+  user-select: none;
+  pointer-events: none;
+}
+
+.dark-surface .ghost-mark {
+  -webkit-text-stroke: 1px rgba(236, 217, 172, 0.14);
+}
+
+/* hairline rule with gold diamond */
 .rule-lux {
   display: inline-block;
-  width: 3.5rem;
+  width: 3.75rem;
   height: 1px;
   background: linear-gradient(90deg, transparent, var(--color-gold-500), transparent);
   position: relative;
@@ -251,38 +315,50 @@ body {
 }
 
 /* ------------------------------------------------------------
-   Surfaces — quiet cards, no plastic rounding
+   Surfaces
    ------------------------------------------------------------ */
 
+/* quiet cream card — the hairline top does the speaking */
 .card-lux {
-  background: #fffdf9;
-  border: 1px solid rgba(43, 29, 24, 0.08);
-  box-shadow:
-    0 1px 2px rgba(43, 29, 24, 0.04),
-    0 18px 40px -28px rgba(43, 29, 24, 0.25);
+  position: relative;
+  background: #fffdf8;
+  border: 1px solid rgba(41, 27, 22, 0.07);
+  box-shadow: 0 24px 48px -40px rgba(31, 9, 15, 0.35);
   transition:
-    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.35s ease,
-    border-color 0.35s ease;
+    transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.4s ease,
+    border-color 0.4s ease;
+}
+
+.card-lux::before {
+  content: '';
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--color-gold-500) 30%, var(--color-gold-400) 70%, transparent);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
 }
 
 .card-lux:hover {
-  border-color: rgba(192, 154, 78, 0.45);
-  box-shadow:
-    0 1px 2px rgba(43, 29, 24, 0.04),
-    0 30px 55px -30px rgba(54, 15, 27, 0.35);
-  transform: translateY(-4px);
+  transform: translateY(-3px);
+  box-shadow: 0 38px 64px -38px rgba(31, 9, 15, 0.42);
+  border-color: rgba(195, 156, 81, 0.4);
+}
+
+.card-lux:hover::before {
+  opacity: 1;
 }
 
 .panel-lux {
-  background: #fffdf9;
-  border: 1px solid rgba(43, 29, 24, 0.08);
-  box-shadow:
-    0 1px 2px rgba(43, 29, 24, 0.04),
-    0 24px 48px -32px rgba(43, 29, 24, 0.3);
+  background: #fffdf8;
+  border: 1px solid rgba(41, 27, 22, 0.07);
+  box-shadow: 0 28px 56px -44px rgba(31, 9, 15, 0.35);
 }
 
-/* hairline gold frame used around hero focal + key panels */
+/* framed offset hairline (hero focal, key plates) */
 .frame-lux {
   position: relative;
 }
@@ -291,33 +367,87 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(216, 184, 120, 0.5);
+  border: 1px solid rgba(220, 188, 125, 0.55);
   border-radius: inherit;
-  transform: translate(1.1rem, 1.1rem);
+  transform: translate(1rem, 1rem);
   pointer-events: none;
 }
 
-html[dir='rtl'] .frame-lux::before {
-  transform: translate(1.1rem, 1.1rem);
+/* frosted bar for the scrolled / inner-page header */
+.frost {
+  background: rgba(250, 246, 238, 0.88);
+  backdrop-filter: blur(16px) saturate(1.4);
+  -webkit-backdrop-filter: blur(16px) saturate(1.4);
+  border-bottom: 1px solid rgba(51, 16, 26, 0.09);
+  box-shadow: 0 10px 30px -24px rgba(31, 9, 15, 0.4);
 }
 
-/* frosted panel for the light scroll state of the header */
-.frost {
-  background: rgba(251, 247, 240, 0.86);
-  backdrop-filter: blur(14px) saturate(1.3);
-  -webkit-backdrop-filter: blur(14px) saturate(1.3);
-  border-bottom: 1px solid rgba(54, 15, 27, 0.08);
-  box-shadow: 0 10px 30px -22px rgba(32, 10, 16, 0.35);
+/* deep-wine plate used as the header of every inner page */
+.page-plate {
+  background-color: var(--color-wine-950);
+  background-image:
+    radial-gradient(90% 130% at 85% -20%, rgba(143, 59, 80, 0.5) 0%, rgba(143, 59, 80, 0) 55%),
+    radial-gradient(70% 120% at 10% 115%, rgba(31, 9, 15, 0.9) 0%, rgba(31, 9, 15, 0) 60%),
+    linear-gradient(160deg, var(--color-wine-900) 0%, var(--color-wine-950) 100%);
 }
 
 /* ------------------------------------------------------------
-   Motion — restrained entrances
+   Menu-list rows (#flavors section) — restaurant index
+   ------------------------------------------------------------ */
+
+.menu-row {
+  position: relative;
+  transition: transform 0.25s ease;
+}
+
+.menu-row .leader {
+  flex: 1;
+  border-bottom: 1px dotted rgba(41, 27, 22, 0.28);
+  margin: 0 0.75rem 0.35rem;
+  min-width: 1.5rem;
+}
+
+.dark-surface .menu-row .leader {
+  border-bottom-color: rgba(250, 246, 238, 0.22);
+}
+
+.menu-row:hover {
+  transform: translateX(-4px);
+}
+
+/* ------------------------------------------------------------
+   Flavor-name ticker (hero base / transitions)
+   ------------------------------------------------------------ */
+
+@keyframes ticker {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-50%);
+  }
+}
+
+/* LTR content wrapper inside RTL doc still scrolls fine; we animate a
+   duplicated strip and rely on physical translateX. */
+.ticker-track {
+  display: flex;
+  width: max-content;
+  animation: ticker 46s linear infinite;
+}
+
+.ticker-mask:hover .ticker-track {
+  animation-play-state: paused;
+}
+
+/* ------------------------------------------------------------
+   Motion — entrances
    ------------------------------------------------------------ */
 
 @keyframes rise {
   from {
     opacity: 0;
-    transform: translateY(16px);
+    transform: translateY(18px);
   }
   to {
     opacity: 1;
@@ -326,51 +456,63 @@ html[dir='rtl'] .frame-lux::before {
 }
 
 .rise {
-  animation: rise 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: rise 0.8s cubic-bezier(0.22, 1, 0.36, 1) both;
   animation-delay: var(--rise-delay, 0s);
 }
 
-/* cinematic wipe for the hero focal image */
-@keyframes veil-up {
+@keyframes arch-unveil {
   from {
-    clip-path: inset(12% 6% 12% 6%);
-    opacity: 0.4;
+    clip-path: inset(14% 8% 14% 8% round 11rem);
+    opacity: 0.3;
   }
   to {
-    clip-path: inset(0% 0% 0% 0%);
+    clip-path: inset(0% 0% 0% 0% round 11rem);
     opacity: 1;
   }
 }
 
-.veil-up {
-  animation: veil-up 1s 0.25s cubic-bezier(0.65, 0, 0.35, 1) both;
+.arch-unveil {
+  animation: arch-unveil 1.1s 0.3s cubic-bezier(0.65, 0, 0.35, 1) both;
 }
 
-/* slow drift for hero focal (very subtle) */
 @keyframes drift {
   0%, 100% {
     transform: translateY(0);
   }
   50% {
-    transform: translateY(-7px);
+    transform: translateY(-8px);
   }
 }
 
 .drift {
-  animation: drift 7s ease-in-out infinite;
+  animation: drift 8s ease-in-out infinite;
 }
 
-/* legacy entrance kept for existing usages */
+@keyframes scroll-cue {
+  0% {
+    transform: translateY(-100%);
+  }
+  55% {
+    transform: translateY(110%);
+  }
+  100% {
+    transform: translateY(110%);
+  }
+}
+
+.scroll-cue-line {
+  animation: scroll-cue 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+}
+
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-fade-up {
-  animation: fade-up 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: fade-up 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Toast entrance */
 @keyframes toast-in {
   from { opacity: 0; transform: translateY(16px) scale(0.98); }
   to { opacity: 1; transform: translateY(0) scale(1); }
@@ -380,13 +522,13 @@ html[dir='rtl'] .frame-lux::before {
   animation: toast-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* scroll-triggered sections (armed by JS only when IO is available) */
+/* IO-driven section reveals (armed by JS only) */
 .reveal-armed {
   opacity: 0;
-  transform: translateY(22px);
+  transform: translateY(26px);
   transition:
-    opacity 0.8s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.8s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .reveal-in {
@@ -394,31 +536,22 @@ html[dir='rtl'] .frame-lux::before {
   transform: translateY(0);
 }
 
-/* gold shimmer sweep on hero CTA hover */
-.sheen {
-  position: relative;
-  overflow: hidden;
+/* horizontal snap rail (featured products on mobile) */
+.snap-rail {
+  scroll-snap-type: x mandatory;
+  scrollbar-width: none;
 }
 
-.sheen::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  width: 40%;
-  left: -60%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.55), transparent);
-  transform: skewX(-18deg);
-  transition: left 0.7s ease;
-  pointer-events: none;
+.snap-rail::-webkit-scrollbar {
+  display: none;
 }
 
-.sheen:hover::after {
-  left: 120%;
+.snap-rail > * {
+  scroll-snap-align: start;
 }
 
 /* ------------------------------------------------------------
-   Accessibility — motion preferences are honored everywhere
+   Reduced motion — everything calm, nothing hidden
    ------------------------------------------------------------ */
 
 @media (prefers-reduced-motion: reduce) {
@@ -432,14 +565,15 @@ html[dir='rtl'] .frame-lux::before {
   }
 
   .rise,
-  .veil-up,
+  .arch-unveil,
   .reveal-armed {
     opacity: 1 !important;
     transform: none !important;
     clip-path: none !important;
   }
 
-  .card-lux:hover {
+  .card-lux:hover,
+  .menu-row:hover {
     transform: none;
   }
 }

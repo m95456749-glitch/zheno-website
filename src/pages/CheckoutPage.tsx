@@ -18,6 +18,7 @@ import { initiatePayment, verifyPayment } from '../services/api';
 import { soundService } from '../services/soundService';
 import { cn } from '../utils/cn';
 import FreeShippingProgress from '../components/FreeShippingProgress';
+import PagePlate from '../components/PagePlate';
 import type { Address, CheckoutStep, Customer, ShippingMethod } from '../types';
 
 type FormStep = Exclude<CheckoutStep, 'cart'>;
@@ -222,14 +223,16 @@ export default function CheckoutPage() {
   }
 
   return (
-    <div className="mx-auto max-w-6xl px-4 pt-14 sm:px-6">
-      <div className="text-center">
-        <p className="kicker font-display">Checkout</p>
-        <h1 className="mt-2.5 text-2xl font-bold text-wine-950 sm:text-3xl">تسویه حساب</h1>
-      </div>
-
+    <div>
+      <PagePlate
+        kicker="Checkout"
+        title="تسویه حساب"
+        lead="سه گامِ کوتاه تا میزِ دسر — سریع، مطمئن، بدون شلوغی."
+        ghost="Checkout"
+      />
+      <div className="mx-auto max-w-6xl px-4 pb-8 pt-9 sm:px-6">
       {/* step indicator */}
-      <ol className="mx-auto mt-8 flex max-w-xl items-start" aria-label="مراحل تسویه">
+      <ol className="mx-auto flex max-w-xl items-start" aria-label="مراحل تسویه">
         {STEPS.map((s, i) => (
           <li key={s.id} className={cn('flex items-center', i < STEPS.length - 1 && 'flex-1')}>
             <div className="flex flex-col items-center gap-1.5">
@@ -519,6 +522,7 @@ export default function CheckoutPage() {
             </div>
           </dl>
         </aside>
+      </div>
       </div>
     </div>
   );
