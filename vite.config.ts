@@ -37,7 +37,20 @@ function spa404Fallback(): Plugin {
 export default defineConfig({
   // Repository deployment: https://<user>.github.io/zheno-website/
   base: "/zheno-website/",
-  plugins: [react(), tailwindcss(), viteSingleFile(), spa404Fallback()],
+  plugins: [
+    react(),
+    tailwindcss(),
+    // vite-plugin-singlefile's recommended build config overrides `base`
+    // with "./", which breaks the GitHub Pages sub-path deployment
+    // (BASE_URL becomes "./" and the router basename breaks with it).
+    // overrideConfig is applied AFTER that override, restoring the base.
+    viteSingleFile({
+      overrideConfig: {
+        base: "/zheno-website/",
+      },
+    }),
+    spa404Fallback(),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
