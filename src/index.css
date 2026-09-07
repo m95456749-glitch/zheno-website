@@ -392,55 +392,6 @@ body {
 }
 
 /* ------------------------------------------------------------
-   Menu-list rows (#flavors section) — restaurant index
-   ------------------------------------------------------------ */
-
-.menu-row {
-  position: relative;
-  transition: transform 0.25s ease;
-}
-
-.menu-row .leader {
-  flex: 1;
-  border-bottom: 1px dotted rgba(41, 27, 22, 0.28);
-  margin: 0 0.75rem 0.35rem;
-  min-width: 1.5rem;
-}
-
-.dark-surface .menu-row .leader {
-  border-bottom-color: rgba(250, 246, 238, 0.22);
-}
-
-.menu-row:hover {
-  transform: translateX(-4px);
-}
-
-/* ------------------------------------------------------------
-   Flavor-name ticker (hero base / transitions)
-   ------------------------------------------------------------ */
-
-@keyframes ticker {
-  from {
-    transform: translateX(0);
-  }
-  to {
-    transform: translateX(-50%);
-  }
-}
-
-/* LTR content wrapper inside RTL doc still scrolls fine; we animate a
-   duplicated strip and rely on physical translateX. */
-.ticker-track {
-  display: flex;
-  width: max-content;
-  animation: ticker 46s linear infinite;
-}
-
-.ticker-mask:hover .ticker-track {
-  animation-play-state: paused;
-}
-
-/* ------------------------------------------------------------
    Motion — entrances
    ------------------------------------------------------------ */
 
@@ -488,22 +439,6 @@ body {
   animation: drift 8s ease-in-out infinite;
 }
 
-@keyframes scroll-cue {
-  0% {
-    transform: translateY(-100%);
-  }
-  55% {
-    transform: translateY(110%);
-  }
-  100% {
-    transform: translateY(110%);
-  }
-}
-
-.scroll-cue-line {
-  animation: scroll-cue 2.6s cubic-bezier(0.65, 0, 0.35, 1) infinite;
-}
-
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(14px); }
   to { opacity: 1; transform: translateY(0); }
@@ -536,20 +471,6 @@ body {
   transform: translateY(0);
 }
 
-/* horizontal snap rail (featured products on mobile) */
-.snap-rail {
-  scroll-snap-type: x mandatory;
-  scrollbar-width: none;
-}
-
-.snap-rail::-webkit-scrollbar {
-  display: none;
-}
-
-.snap-rail > * {
-  scroll-snap-align: start;
-}
-
 /* ------------------------------------------------------------
    Reduced motion — everything calm, nothing hidden
    ------------------------------------------------------------ */
@@ -572,8 +493,7 @@ body {
     clip-path: none !important;
   }
 
-  .card-lux:hover,
-  .menu-row:hover {
+  .card-lux:hover {
     transform: none;
   }
 }

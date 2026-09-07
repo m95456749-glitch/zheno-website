@@ -17,7 +17,7 @@ type Filter = 'all' | ProductCategory;
 const TABS: { id: Filter; label: string }[] = [
   { id: 'all', label: 'همه محصولات' },
   { id: 'jelly', label: 'پودر ژله' },
-  { id: 'custard', label: 'پودر کاستارد' },
+  { id: 'custard', label: 'پودر کاستر' },
 ];
 
 export default function ProductsPage() {

@@ -3,7 +3,7 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
-  "description": "ZHINO — فروشگاه پودر ژله و کاستارد",
+  "description": "ZHINO — فروشگاه پودر ژله و کاستر",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

@@ -131,6 +131,11 @@ function expectContains(label, text, needle) {
   else fail(`${label} MISSING «${needle}»`);
 }
 
+function expectNotContains(label, text, needle) {
+  if (!text.includes(needle)) ok(`${label} does not contain «${needle}»`);
+  else fail(`${label} MUST NOT contain «${needle}»`);
+}
+
 function expectNoErrors(label, errors) {
   if (errors.length === 0) ok(`${label} — no runtime errors`);
   else fail(`${label} runtime errors:\n    - ${errors.join('\n    - ')}`);
@@ -143,8 +148,20 @@ function expectNoErrors(label, errors) {
   else fail(`home looks blank (only ${text.trim().length} chars)`);
   expectContains('home', text, 'ژینو');
   expectContains('home', text, 'پودر ژله');
-  expectContains('home', text, 'پودر کاستارد');
+  expectContains('home', text, 'پودر کاستر');
+  // All 15 products render on the homepage (8 jelly + 7 custard)
+  expectContains('home', text, 'ژله انار');
+  expectContains('home', text, 'ژله آلبالو');
   expectContains('home', text, 'ژله توت فرنگی');
+  expectContains('home', text, 'کاستر موز');
+  expectContains('home', text, 'کاستر محلبی وانیلی');
+  // Hero content + CTA
+  expectContains('home', text, 'طعمِ اصیل');
+  expectContains('home', text, 'مشاهده محصولات');
+  // Recipes + flavor index present
+  expectContains('home', text, 'دستور تهیه');
+  // The old spelling must be gone everywhere
+  expectNotContains('home', text, 'کاستارد');
   expectNoErrors('home', errors);
 }
 
@@ -153,8 +170,9 @@ function expectNoErrors(label, errors) {
   const { text, errors } = await render('/zheno-website/products');
   expectContains('products', text, 'محصولات ژینو');
   expectContains('products', text, 'ژله انار');
-  expectContains('products', text, 'کاستارد موز');
-  expectContains('products', text, 'کاستارد محلبی وانیلی');
+  expectContains('products', text, 'کاستر موز');
+  expectContains('products', text, 'کاستر محلبی وانیلی');
+  expectNotContains('products', text, 'کاستارد');
   expectNoErrors('products', errors);
 }
 
@@ -165,6 +183,15 @@ function expectNoErrors(label, errors) {
   expectContains('product detail', text, 'افزودن به سبد خرید');
   expectContains('product detail', text, '۲۰۰٬۰۰۰ تومان');
   expectNoErrors('product detail', errors);
+}
+
+// ── 3b. Custard product detail (renamed terminology) ────────
+{
+  const { text, errors } = await render('/zheno-website/products/custard-mahlab-vanilla');
+  expectContains('custard detail', text, 'پودر کاستر محلبی وانیلی ژینو');
+  expectContains('custard detail', text, 'افزودن به سبد خرید');
+  expectNotContains('custard detail', text, 'کاستارد');
+  expectNoErrors('custard detail', errors);
 }
 
 // ── 4. Unknown product id ────────────────────────────────────
@@ -265,8 +292,10 @@ function expectNoErrors(label, errors) {
 // ── 12. Recipes / About / Contact / 404 ─────────────────────
 {
   const r = await render('/zheno-website/recipes');
-  expectContains('recipes', r.text, 'ژله رنگین‌کمانی');
-  expectContains('recipes', r.text, 'ترایفل کاستارد محلبی');
+  expectContains('recipes', r.text, 'دستور تهیه ژله');
+  expectContains('recipes', r.text, 'دستور تهیه کاستر');
+  expectContains('recipes', r.text, '۱.۵ لیوان آب');
+  expectContains('recipes', r.text, '۲ قاشق شکر');
   expectNoErrors('recipes', r.errors);
 }
 {

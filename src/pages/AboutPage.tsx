@@ -61,7 +61,7 @@ export default function AboutPage() {
           ))}
         </div>
         <p className="mt-6 text-[0.72rem] font-light text-cream-200/55">
-          {formatNumber(jellyCount)} طعم پودر ژله و {formatNumber(custardCount)} طعم پودر کاستارد، از جمله محلبی وانیلی ویژه — در بسته‌بندی {formatNumber(250)} گرمی.
+          {formatNumber(jellyCount)} طعم پودر ژله و {formatNumber(custardCount)} طعم پودر کاستر، از جمله محلبی وانیلی ویژه — در بسته‌بندی {formatNumber(250)} گرمی.
         </p>
       </PagePlate>
 
@@ -93,7 +93,7 @@ export default function AboutPage() {
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: flavor.color }} aria-hidden="true" />
                 {flavor.name}
                 <span className="text-[0.62rem] text-mocha-light">
-                  ({flavor.category === 'jelly' ? 'ژله' : 'کاستارد'})
+                  ({flavor.category === 'jelly' ? 'ژله' : 'کاستر'})
                 </span>
               </span>
             ))}

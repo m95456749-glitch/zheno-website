@@ -1,7 +1,7 @@
 // ============================================================
-// ZHINO — product card (data-driven, editorial v2)
-// Menu-card language: tinted plate, hairline top rule that
-// ignites on hover, quiet chrome, one clear action.
+// ZHINO — product card (editorial, compact, image-first)
+// The plated product visual is the star; below it only the
+// essentials: name, weight, availability, price, one action.
 // ============================================================
 
 import { useState } from 'react';
@@ -22,6 +22,7 @@ export default function ProductCard({ product }: { product: Product }) {
   if (!defaultVariant) return null;
 
   const priceBody = formatPrice(defaultVariant.price).replace(' تومان', '');
+  const available = defaultVariant.available;
 
   const handleAdd = () => {
     const result = addItemWithToast(product.id, defaultVariant.id, 1);
@@ -32,73 +33,69 @@ export default function ProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <article className="card-lux group flex h-full flex-col overflow-hidden rounded-xl">
-      <Link to={`/products/${product.id}`} className="block" aria-label={`مشاهده ${product.name}`}>
-        <div className="relative">
-          <ProductVisual
-            color={flavor.color}
-            emoji={flavor.emoji}
-            name={product.name}
-            className="aspect-[5/4.4] w-full sm:aspect-[5/5]"
-          />
-          {(product.featured || product.special) && (
-            <div className="absolute right-3.5 top-3.5 flex flex-col items-end gap-1">
-              {product.featured && (
-                <span className="text-[0.62rem] font-bold text-wine-950/70">
-                  <span className="ml-1 text-gold-600" aria-hidden="true">◆</span>
-                  پیشنهاد ژینو
-                </span>
-              )}
-              {product.special && (
-                <span className="text-[0.62rem] font-semibold text-wine-800/80">
-                  <span className="ml-1 text-gold-600" aria-hidden="true">✦</span>
-                  ویژه
-                </span>
-              )}
-            </div>
-          )}
-        </div>
+    <article className="card-lux group flex h-full flex-col overflow-hidden rounded-2xl">
+      <Link
+        to={`/products/${product.id}`}
+        className="relative block"
+        aria-label={`مشاهده ${product.name}`}
+      >
+        <ProductVisual
+          color={flavor.color}
+          emoji={flavor.emoji}
+          name={product.name}
+          className="aspect-square w-full sm:aspect-[5/4.6]"
+        />
+        {(product.featured || product.special) && (
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-cream-50/92 px-2.5 py-1 text-[0.58rem] font-bold text-wine-900 shadow-sm ring-1 ring-gold-500/30 backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.62rem]">
+            <span className="ml-1 text-gold-600" aria-hidden="true">
+              {product.special ? '✦' : '◆'}
+            </span>
+            {product.special ? 'ویژه' : 'پیشنهاد ژینو'}
+          </span>
+        )}
       </Link>
 
-      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5 sm:px-5 sm:pb-5">
-        <p className="flex items-center justify-between text-[0.68rem] font-medium text-mocha-light">
-          <span className="text-gold-700">{product.categoryLabel}</span>
-          <span className="flex items-center gap-1.5">
-            <span
-              className={cn('h-1.5 w-1.5 rounded-full', defaultVariant.available ? 'bg-emerald-600' : 'bg-red-500')}
-              aria-hidden="true"
-            />
-            {defaultVariant.available ? 'موجود' : 'ناموجود'}
-          </span>
-        </p>
+      <div className="flex flex-1 flex-col px-3 pb-3 pt-2.5 sm:px-3.5 sm:pb-3.5">
         <Link
           to={`/products/${product.id}`}
-          className="mt-2 text-[1.02rem] font-medium leading-8 text-wine-950 transition-colors hover:text-wine-700"
+          className="truncate text-[0.92rem] font-semibold leading-7 text-wine-950 transition-colors hover:text-wine-700 sm:text-[0.98rem]"
         >
           {product.shortName}
         </Link>
-        <p className="mt-1 text-[0.72rem] text-mocha">
-          {flavor.name} <span className="mx-1 text-mocha-light">·</span> {defaultVariant.weight}
+
+        <p className="mt-0.5 flex items-center gap-1.5 text-[0.66rem] leading-6 text-mocha">
+          <span>{defaultVariant.weight}</span>
+          <span className="text-gold-500" aria-hidden="true">
+            ·
+          </span>
+          <span className="flex items-center gap-1">
+            <span
+              className={cn('h-1.5 w-1.5 rounded-full', available ? 'bg-emerald-600' : 'bg-red-500')}
+              aria-hidden="true"
+            />
+            {available ? 'موجود' : 'ناموجود'}
+          </span>
         </p>
 
-        <div className="mt-auto flex items-end justify-between gap-2 border-t border-espresso/8 pt-3.5">
-          <span className="whitespace-nowrap text-[0.98rem] font-bold text-wine-900">
-            {priceBody}
-            <span className="mr-1 text-[0.62rem] font-medium text-mocha">تومان</span>
-          </span>
-          <button
-            type="button"
-            onClick={handleAdd}
-            aria-label={`افزودن ${product.shortName} به سبد خرید`}
-            className="flex h-10 items-center gap-2 rounded-full px-3 text-[0.72rem] font-semibold text-wine-900 ring-1 ring-wine-900/20 transition duration-300 hover:bg-wine-900 hover:text-gold-300 hover:ring-gold-400/50 active:scale-95"
-          >
-            <svg viewBox="0 0 20 20" fill="none" className="h-4.5 w-4.5" aria-hidden="true">
-              <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
-            </svg>
-            <span className="hidden sm:inline">افزودن</span>
-          </button>
-        </div>
-        {error && <p className="pt-2 text-[0.72rem] font-semibold text-red-700">{error}</p>}
+        <p className="mt-1.5 whitespace-nowrap text-[0.92rem] font-extrabold text-wine-900 sm:text-[1rem]">
+          {priceBody}
+          <span className="mr-1 text-[0.6rem] font-medium text-mocha">تومان</span>
+        </p>
+
+        <button
+          type="button"
+          onClick={handleAdd}
+          disabled={!available}
+          aria-label={`افزودن ${product.shortName} به سبد خرید`}
+          className="mt-2.5 flex h-9 items-center justify-center gap-1.5 rounded-lg bg-wine-900 text-[0.72rem] font-bold text-cream-50 shadow-sm shadow-wine-900/25 transition duration-300 hover:bg-wine-800 hover:shadow-md active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:rounded-xl sm:text-[0.78rem]"
+        >
+          <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
+            <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />
+          </svg>
+          افزودن به سبد
+        </button>
+
+        {error && <p className="pt-1.5 text-[0.66rem] font-semibold text-red-700">{error}</p>}
       </div>
     </article>
   );
