@@ -282,15 +282,15 @@ export const PRODUCTS: Product[] = [
   },
 
   // ────────────────────────────────────────
-  // CUSTARD POWDER — پودر کاستارد
+  // CUSTARD POWDER — پودر کاستر
   // ────────────────────────────────────────
   {
     id: 'custard-banana',
     category: 'custard',
     flavorId: 'banana',
-    name: 'پودر کاستارد موز ژینو',
-    shortName: 'کاستارد موز',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر موز ژینو',
+    shortName: 'کاستر موز',
+    categoryLabel: 'پودر کاستر',
     featured: true,
     variants: [
       {
@@ -309,9 +309,9 @@ export const PRODUCTS: Product[] = [
     id: 'custard-cantaloupe',
     category: 'custard',
     flavorId: 'cantaloupe',
-    name: 'پودر کاستارد طالبی ژینو',
-    shortName: 'کاستارد طالبی',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر طالبی ژینو',
+    shortName: 'کاستر طالبی',
+    categoryLabel: 'پودر کاستر',
     variants: [
       {
         id: 'custard-cantaloupe-250',
@@ -329,9 +329,9 @@ export const PRODUCTS: Product[] = [
     id: 'custard-strawberry',
     category: 'custard',
     flavorId: 'strawberry-c',
-    name: 'پودر کاستارد توت فرنگی ژینو',
-    shortName: 'کاستارد توت فرنگی',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر توت فرنگی ژینو',
+    shortName: 'کاستر توت فرنگی',
+    categoryLabel: 'پودر کاستر',
     variants: [
       {
         id: 'custard-strawberry-250',
@@ -349,9 +349,9 @@ export const PRODUCTS: Product[] = [
     id: 'custard-chocolate',
     category: 'custard',
     flavorId: 'chocolate',
-    name: 'پودر کاستارد کاکائو ژینو',
-    shortName: 'کاستارد کاکائو',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر کاکائو ژینو',
+    shortName: 'کاستر کاکائو',
+    categoryLabel: 'پودر کاستر',
     variants: [
       {
         id: 'custard-chocolate-250',
@@ -369,9 +369,9 @@ export const PRODUCTS: Product[] = [
     id: 'custard-seven-fruit',
     category: 'custard',
     flavorId: 'seven-fruit',
-    name: 'پودر کاستارد هفت میوه ژینو',
-    shortName: 'کاستارد هفت میوه',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر هفت میوه ژینو',
+    shortName: 'کاستر هفت میوه',
+    categoryLabel: 'پودر کاستر',
     variants: [
       {
         id: 'custard-seven-fruit-250',
@@ -389,9 +389,9 @@ export const PRODUCTS: Product[] = [
     id: 'custard-orange',
     category: 'custard',
     flavorId: 'orange-c',
-    name: 'پودر کاستارد پرتقال ژینو',
-    shortName: 'کاستارد پرتقال',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر پرتقال ژینو',
+    shortName: 'کاستر پرتقال',
+    categoryLabel: 'پودر کاستر',
     variants: [
       {
         id: 'custard-orange-250',
@@ -409,9 +409,9 @@ export const PRODUCTS: Product[] = [
     id: 'custard-mahlab-vanilla',
     category: 'custard',
     flavorId: 'mahlab-vanilla',
-    name: 'پودر کاستارد محلبی وانیلی ژینو',
-    shortName: 'کاستارد محلبی وانیلی',
-    categoryLabel: 'پودر کاستارد',
+    name: 'پودر کاستر محلبی وانیلی ژینو',
+    shortName: 'کاستر محلبی وانیلی',
+    categoryLabel: 'پودر کاستر',
     special: true,
     featured: true,
     variants: [

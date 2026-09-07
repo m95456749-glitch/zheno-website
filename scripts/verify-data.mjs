@@ -88,5 +88,14 @@ if (failures === 0) ok('all product flavorIds resolve to FLAVORS entries');
 if (src.includes('FREE_SHIPPING_THRESHOLD = 700000')) ok('free-shipping threshold = 700000');
 else fail('FREE_SHIPPING_THRESHOLD is not 700000');
 
+// Official terminology: «پودر کاستر» — the spelling «کاستارد» is banned
+if (!src.includes('کاستارد')) ok("no «کاستارد» anywhere — «پودر کاستر» used throughout");
+else fail('found «کاستارد» — must be «کاستر» everywhere');
+
+// Custard products must be labeled «پودر کاستر»
+const kasterLabels = (src.match(/categoryLabel: 'پودر کاستر'/g) ?? []).length;
+if (kasterLabels === 7) ok("all 7 custard products labeled 'پودر کاستر'");
+else fail(`expected 7 'پودر کاستر' labels, found ${kasterLabels}`);
+
 console.log(failures === 0 ? '\nAll data checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);

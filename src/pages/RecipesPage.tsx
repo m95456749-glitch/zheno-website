@@ -1,18 +1,11 @@
 // ============================================================
-// ZHINO — recipes page (data-driven from src/data/recipes.ts)
-// Editorial presentation: numbered spread, quiet chrome.
+// ZHINO — recipes page (the two official preparation methods)
+// Concise and useful: ingredients + steps, nothing more.
 // ============================================================
 
 import { RECIPES } from '../data/recipes';
 import type { Recipe } from '../data/recipes';
-import { cn } from '../utils/cn';
 import PagePlate from '../components/PagePlate';
-
-const DIFFICULTY_STYLE: Record<Recipe['difficulty'], string> = {
-  'آسان': 'text-emerald-800 bg-emerald-50 ring-emerald-200/70',
-  'متوسط': 'text-gold-700 bg-gold-400/15 ring-gold-500/30',
-  'حرفه‌ای': 'text-wine-800 bg-wine-900/5 ring-wine-700/25',
-};
 
 function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
   const number = String(index + 1).padStart(2, '0');
@@ -23,28 +16,17 @@ function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
           {number}
         </span>
         <span
-          className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cream-100 to-cream-200 text-4xl ring-1 ring-gold-500/25 sm:h-20 sm:w-20 sm:text-5xl"
+          className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cream-100 to-cream-200 text-3xl ring-1 ring-gold-500/25 sm:h-16 sm:w-16"
           aria-hidden="true"
         >
           {recipe.emoji}
         </span>
         <div className="min-w-0 flex-1">
           <p className="font-display text-[0.6rem] uppercase tracking-[0.38em] text-gold-700">
-            {recipe.category === 'jelly' ? 'Jelly Dessert' : 'Custard Dessert'}
+            {recipe.category === 'jelly' ? 'Jelly' : 'Custard'}
           </p>
           <h2 className="mt-2 text-lg font-bold text-wine-950 sm:text-xl">{recipe.title}</h2>
-          <p className="mt-1 text-sm text-mocha">{recipe.subtitle}</p>
-          <div className="mt-3.5 flex flex-wrap gap-1.5">
-            <span className="rounded-md bg-cream-100 px-2.5 py-1 text-[0.68rem] font-semibold text-espresso ring-1 ring-espresso/8">
-              {recipe.duration}
-            </span>
-            <span className="rounded-md bg-cream-100 px-2.5 py-1 text-[0.68rem] font-semibold text-espresso ring-1 ring-espresso/8">
-              {recipe.servings}
-            </span>
-            <span className={cn('rounded-md px-2.5 py-1 text-[0.68rem] font-semibold ring-1', DIFFICULTY_STYLE[recipe.difficulty])}>
-              {recipe.difficulty}
-            </span>
-          </div>
+          <p className="mt-1 text-sm leading-7 text-mocha">{recipe.summary}</p>
         </div>
       </div>
 
@@ -80,12 +62,6 @@ function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
               ))}
             </ol>
           </div>
-          {recipe.tip && (
-            <p className="rounded-xl bg-gold-400/12 px-5 py-4 text-[0.8rem] leading-7 text-wine-900 ring-1 ring-gold-500/30 sm:col-span-2">
-              <span className="font-bold">نکته ژینو: </span>
-              {recipe.tip}
-            </p>
-          )}
         </div>
       </details>
     </article>
@@ -97,11 +73,11 @@ export default function RecipesPage() {
     <div>
       <PagePlate
         kicker="The Recipe Notebook"
-        title="دستورهای خوشمزه ژینو"
-        lead="با پودر ژله و کاستارد ژینو، دسرهایی درست کنید که همه را شگفت‌زده کند."
+        title="دستور تهیه"
+        lead="دستور رسمی آماده‌سازی ژله و کاستر ژینو — ساده، سریع و دقیق."
         ghost="Recipes"
       />
-      <div className="mx-auto max-w-4xl space-y-6 px-4 py-14 sm:px-6">
+      <div className="mx-auto max-w-4xl space-y-6 px-4 py-12 sm:px-6 sm:py-14">
         {RECIPES.map((recipe, i) => (
           <RecipeCard key={recipe.id} recipe={recipe} index={i} />
         ))}

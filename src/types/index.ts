@@ -37,7 +37,7 @@ export interface Product {
   flavorId: FlavorId;
   name: string;         // full display name
   shortName: string;    // short name for cards
-  categoryLabel: string; // "پودر ژله" | "پودر کاستارد"
+  categoryLabel: string; // "پودر ژله" | "پودر کاستر"
   imageUrl?: string;
   variants: ProductVariant[];
   featured?: boolean;
