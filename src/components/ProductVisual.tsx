@@ -1,9 +1,12 @@
 // ============================================================
 // ZHINO — data-driven product visual (v2)
-// Editorial "plated" presentation: the flavor's jewel disc sits
-// on a tinted table wash, like food photography on a set.
-// Still 100% derived from catalog data — no invented imagery.
+// When the catalog provides a real production photo (imageUrl),
+// it fills this exact frame; otherwise the editorial "plated"
+// presentation (flavor jewel disc on a tinted table wash) stands
+// in — still 100% derived from catalog data, no invented imagery.
 // ============================================================
+
+import { useState } from 'react';
 
 interface Props {
   color: string;
@@ -13,6 +16,8 @@ interface Props {
   emojiClassName?: string;
   /** hide the tiny Zhino mark (used on small thumbs) */
   compact?: boolean;
+  /** site-root-relative photo path from the catalog, e.g. "images/IMG_....jpg" */
+  imageUrl?: string;
 }
 
 export default function ProductVisual({
@@ -22,7 +27,34 @@ export default function ProductVisual({
   className = '',
   emojiClassName = 'text-6xl',
   compact = false,
+  imageUrl,
 }: Props) {
+  const [imgFailed, setImgFailed] = useState(false);
+
+  // Real production photo: same frame, resolved against the Vite base
+  // so it works both in dev ("/") and on GitHub Pages ("/zheno-website/").
+  // If the file ever fails to load, fall through to the plated visual —
+  // the page never shows a broken image.
+  if (imageUrl && !imgFailed) {
+    return (
+      <div
+        role="img"
+        aria-label={name}
+        className={`relative overflow-hidden ${className}`}
+        style={{ backgroundColor: 'var(--color-cream-100)' }}
+      >
+        <img
+          src={`${import.meta.env.BASE_URL}${imageUrl}`}
+          alt={name}
+          loading="lazy"
+          decoding="async"
+          onError={() => setImgFailed(true)}
+          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       role="img"

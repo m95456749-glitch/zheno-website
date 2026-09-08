@@ -82,6 +82,7 @@ export default function ProductDetailPage() {
                 color={flavor.color}
                 emoji={flavor.emoji}
                 name={product.name}
+                imageUrl={product.imageUrl}
                 className="aspect-[4/5] w-full"
                 emojiClassName="text-7xl sm:text-8xl"
               />

@@ -43,6 +43,7 @@ export default function ProductCard({ product }: { product: Product }) {
           color={flavor.color}
           emoji={flavor.emoji}
           name={product.name}
+          imageUrl={product.imageUrl}
           className="aspect-square w-full sm:aspect-[5/4.6]"
         />
         {(product.featured || product.special) && (
