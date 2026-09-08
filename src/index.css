@@ -2,10 +2,11 @@
 
 /* ============================================================
    ZHINO — design system v3 (colour theme)
-   Palette: warm ivory canvas (#FAF7F2) · deep burgundy plates
-   (#5A1725) · secondary burgundy (#8B3040) for active states ·
-   muted matte gold (#B89A62) for rare hairline accents ·
-   warm-dark text (#292321).
+   Palette: warm taupe canvas (#CDB99F) · light ivory (#FAF7F2)
+   kept as the secondary light surface (cards, panels, chips) ·
+   deep burgundy plates (#5A1725) · secondary burgundy (#8B3040)
+   for active states · muted matte gold (#B89A62) for rare
+   hairline accents · warm-dark text (#292321).
    Persian: Vazirmatn (light display weights) · latin: Marcellus
    ============================================================ */
 
@@ -24,14 +25,17 @@
   --color-wine-600: #ae5c68;
   --color-wine-500: #c0828a;
 
-  /* ── warm ivory ─────────────────────────────────────────── */
-  --color-cream-50: #faf7f2; /* main background — warm ivory */
+  /* ── warm taupe — the ZHINO canvas ──────────────────────── */
+  /* main background of every light section: warm, premium, distinct */
+  --color-canvas: #cdb99f;
+  /* deeper taupe — recessed details (scrollbar track) on the canvas */
+  --color-canvas-deep: #bfa788;
+
+  /* ── light ivory — the secondary light surface ───────────── */
+  --color-cream-50: #faf7f2; /* cards, panels, chips — light ivory */
   --color-cream-100: #f3ede4; /* soft tinted surfaces */
   --color-cream-200: #e7ddd1; /* dividers, tracks, chips */
   --color-cream-300: #d9caba; /* decorative */
-
-  /* warm ivory — the Products section surface */
-  --color-cream-page: #faf7f2;
 
   /* ── muted matte gold — used very sparingly ─────────────── */
   --color-gold-300: #e0d0ab;
@@ -70,13 +74,13 @@ body {
 }
 
 ::-webkit-scrollbar-track {
-  background: var(--color-cream-100);
+  background: var(--color-canvas-deep);
 }
 
 ::-webkit-scrollbar-thumb {
   background: linear-gradient(var(--color-wine-700), var(--color-wine-900));
   border-radius: 9999px;
-  border: 2px solid var(--color-cream-100);
+  border: 2px solid var(--color-canvas-deep);
 }
 
 ::-webkit-scrollbar-thumb:hover {
@@ -152,9 +156,10 @@ body {
 
 /* ------------------------------------------------------------
    Hero bottom curve — a wide, soft circular arc that lets the
-   burgundy hero gently flow into the warm products section.
-   The curve depth is exposed as --hero-curve so the hero's
-   content padding can clear it responsively (see HomePage).
+   burgundy hero gently flow into the warm taupe products
+   section. The curve depth is exposed as --hero-curve so the
+   hero's content padding can clear it responsively (see
+   HomePage).
    ------------------------------------------------------------ */
 .hero-curve {
   --hero-curve: clamp(3rem, 7vw, 5.5rem);
@@ -167,7 +172,7 @@ body {
   right: 0;
   bottom: 0;
   height: var(--hero-curve);
-  background: var(--color-cream-page);
+  background: var(--color-canvas);
   border-radius: 50% 50% 0 0 / 100% 100% 0 0;
   z-index: 2;
   pointer-events: none;
@@ -413,10 +418,10 @@ body {
    Surfaces
    ------------------------------------------------------------ */
 
-/* quiet ivory card — the hairline top does the speaking */
+/* quiet ivory card on the warm taupe canvas — the hairline top does the speaking */
 .card-lux {
   position: relative;
-  background: #ffffff;
+  background: var(--color-cream-50);
   border: 1px solid rgba(41, 35, 33, 0.09);
   box-shadow: 0 24px 48px -40px rgba(41, 35, 33, 0.35);
   transition:
@@ -448,14 +453,14 @@ body {
 }
 
 .panel-lux {
-  background: #ffffff;
+  background: var(--color-cream-50);
   border: 1px solid rgba(41, 35, 33, 0.09);
   box-shadow: 0 28px 56px -44px rgba(41, 35, 33, 0.35);
 }
 
 /* ------------------------------------------------------------
    Product card — an independent premium surface that lifts
-   slightly off the warm cream page. Subtle 1px hairline, soft
+   slightly off the warm taupe page. Subtle 1px hairline, soft
    restrained shadow, refined corners, quiet hover elevation.
    ------------------------------------------------------------ */
 .card-product {
@@ -463,7 +468,7 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #ffffff;
+  background: var(--color-cream-50);
   border: 1px solid rgba(41, 35, 33, 0.1);
   border-radius: 1.125rem;
   box-shadow:
