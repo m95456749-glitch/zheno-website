@@ -22,7 +22,7 @@ export default function QuantitySelector({ quantity, onIncrease, onDecrease, lab
         type="button"
         onClick={onIncrease}
         aria-label="زیاد کردن تعداد"
-        className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-lg font-bold text-wine-900 shadow-sm ring-1 ring-espresso/8 transition hover:bg-gold-400 hover:text-wine-950 active:scale-95"
+        className="flex h-9 w-9 items-center justify-center rounded-lg bg-white text-lg font-bold text-wine-900 shadow-sm ring-1 ring-espresso/8 transition hover:bg-wine-800 hover:text-cream-50 active:scale-95"
       >
         +
       </button>

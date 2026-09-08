@@ -47,8 +47,8 @@ export default function ProductCard({ product }: { product: Product }) {
           className="aspect-square w-full sm:aspect-[5/4.6]"
         />
         {(product.featured || product.special) && (
-          <span className="absolute right-2.5 top-2.5 rounded-full bg-cream-50/92 px-2.5 py-1 text-[0.58rem] font-bold text-wine-900 shadow-sm ring-1 ring-gold-500/30 backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.62rem]">
-            <span className="ml-1 text-gold-600" aria-hidden="true">
+          <span className="absolute right-2.5 top-2.5 rounded-full bg-cream-50/92 px-2.5 py-1 text-[0.58rem] font-bold text-wine-900 shadow-sm ring-1 ring-wine-900/10 backdrop-blur-sm sm:right-3 sm:top-3 sm:text-[0.62rem]">
+            <span className="ml-1 text-wine-700" aria-hidden="true">
               {product.special ? '✦' : '◆'}
             </span>
             {product.special ? 'ویژه' : 'پیشنهاد ژینو'}
@@ -66,7 +66,7 @@ export default function ProductCard({ product }: { product: Product }) {
 
         <p className="mt-1 flex items-center gap-1.5 text-[0.66rem] leading-6 text-mocha">
           <span>{defaultVariant.weight}</span>
-          <span className="text-gold-500" aria-hidden="true">
+          <span className="text-mocha-light" aria-hidden="true">
             ·
           </span>
           <span className="flex items-center gap-1">

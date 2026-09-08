@@ -1,9 +1,11 @@
 @import "tailwindcss";
 
 /* ============================================================
-   ZHINO — luxury design system v2
-   Identity: burgundy-dominant cinematic plates, arched dessert
-   framing, restaurant-menu typography, hairline gold rules.
+   ZHINO — design system v3 (colour theme)
+   Palette: warm ivory canvas (#FAF7F2) · deep burgundy plates
+   (#5A1725) · secondary burgundy (#8B3040) for active states ·
+   muted matte gold (#B89A62) for rare hairline accents ·
+   warm-dark text (#292321).
    Persian: Vazirmatn (light display weights) · latin: Marcellus
    ============================================================ */
 
@@ -11,37 +13,37 @@
   --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, sans-serif;
   --font-display: 'Marcellus', 'Vazirmatn', Georgia, serif;
 
-  /* near-black plum */
-  --color-noir: #15060a;
+  /* deepest burgundy-black — footer, toasts, deep scrims */
+  --color-noir: #1d070c;
 
-  /* burgundy / wine */
-  --color-wine-950: #1f090f;
-  --color-wine-900: #33101a;
-  --color-wine-800: #471725;
-  --color-wine-700: #5e2133;
-  --color-wine-600: #772a40;
-  --color-wine-500: #8f3b50;
+  /* ── burgundy / wine — the ZHINO identity ───────────────── */
+  --color-wine-950: #2a0b12; /* deepest burgundy: hero + plate base, headings */
+  --color-wine-900: #5a1725; /* PRIMARY deep burgundy */
+  --color-wine-800: #8b3040; /* SECONDARY burgundy: hover / active / selected */
+  --color-wine-700: #9b4351; /* secondary burgundy, lightened */
+  --color-wine-600: #ae5c68;
+  --color-wine-500: #c0828a;
 
-  /* cream / ivory */
-  --color-cream-50: #faf6ee;
-  --color-cream-100: #f4ecdf;
-  --color-cream-200: #e9dcc6;
-  --color-cream-300: #d9c4a2;
+  /* ── warm ivory ─────────────────────────────────────────── */
+  --color-cream-50: #faf7f2; /* main background — warm ivory */
+  --color-cream-100: #f3ede4; /* soft tinted surfaces */
+  --color-cream-200: #e7ddd1; /* dividers, tracks, chips */
+  --color-cream-300: #d9caba; /* decorative */
 
-  /* warm ivory — the Products section surface (subtle premium cream) */
-  --color-cream-page: #efe4d2;
+  /* warm ivory — the Products section surface */
+  --color-cream-page: #faf7f2;
 
-  /* antique gold */
-  --color-gold-300: #ecd9ac;
-  --color-gold-400: #dcbc7d;
-  --color-gold-500: #c39c51;
-  --color-gold-600: #9e7a38;
-  --color-gold-700: #77592a;
+  /* ── muted matte gold — used very sparingly ─────────────── */
+  --color-gold-300: #e0d0ab;
+  --color-gold-400: #c9ae7c;
+  --color-gold-500: #b89a62;
+  --color-gold-600: #9a8050;
+  --color-gold-700: #6f5c34;
 
-  /* warm text neutrals */
-  --color-espresso: #291b16;
-  --color-mocha: #6d584d;
-  --color-mocha-light: #947f72;
+  /* ── warm text neutrals ─────────────────────────────────── */
+  --color-espresso: #292321; /* main text */
+  --color-mocha: #6e5f57; /* secondary text */
+  --color-mocha-light: #7e6b61; /* tertiary text / placeholders (AA on ivory) */
 }
 
 body {
@@ -49,14 +51,17 @@ body {
 }
 
 ::selection {
-  background: var(--color-gold-300);
-  color: var(--color-wine-950);
+  background: var(--color-wine-800);
+  color: var(--color-cream-50);
 }
 
+/* burgundy ring on light surfaces, soft gold halo on dark ones — the focus
+   indicator stays clearly visible against both ivory and burgundy. */
 :focus-visible {
-  outline: 2px solid var(--color-gold-500);
+  outline: 2px solid var(--color-wine-800);
   outline-offset: 2px;
   border-radius: 4px;
+  box-shadow: 0 0 0 4px rgba(184, 154, 98, 0.4);
 }
 
 ::-webkit-scrollbar {
@@ -101,9 +106,9 @@ body {
 .hero-silk {
   background-color: var(--color-wine-950);
   background-image:
-    radial-gradient(60% 80% at 70% 12%, rgba(143, 59, 80, 0.5) 0%, rgba(143, 59, 80, 0) 60%),
-    radial-gradient(80% 120% at 8% 96%, rgba(71, 23, 37, 0.95) 0%, rgba(71, 23, 37, 0) 55%),
-    conic-gradient(from 195deg at 58% 42%, #1f090f 0deg, #33101a 60deg, #5e2133 140deg, #471725 245deg, #1f090f 360deg);
+    radial-gradient(60% 80% at 70% 12%, rgba(139, 48, 64, 0.42) 0%, rgba(139, 48, 64, 0) 60%),
+    radial-gradient(80% 120% at 8% 96%, rgba(42, 11, 18, 0.95) 0%, rgba(42, 11, 18, 0) 55%),
+    conic-gradient(from 195deg at 58% 42%, #2a0b12 0deg, #43121c 60deg, #5a1725 140deg, #43121c 245deg, #2a0b12 360deg);
 }
 
 .hero-silk::before {
@@ -111,8 +116,8 @@ body {
   position: absolute;
   inset: -15%;
   background-image:
-    radial-gradient(45% 60% at 28% 30%, rgba(220, 188, 125, 0.07) 0%, rgba(220, 188, 125, 0) 60%),
-    radial-gradient(55% 70% at 76% 72%, rgba(143, 59, 80, 0.32) 0%, rgba(143, 59, 80, 0) 62%);
+    radial-gradient(45% 60% at 28% 30%, rgba(184, 154, 98, 0.05) 0%, rgba(184, 154, 98, 0) 60%),
+    radial-gradient(55% 70% at 76% 72%, rgba(139, 48, 64, 0.28) 0%, rgba(139, 48, 64, 0) 62%);
   transform: rotate(-7deg);
 }
 
@@ -213,24 +218,31 @@ body {
   transform: scale(0.97);
 }
 
+/* primary action — solid deep burgundy, hairline matte-gold inner edge */
 .btn-gold {
-  background-image: linear-gradient(115deg, var(--color-gold-300) 0%, var(--color-gold-400) 45%, var(--color-gold-500) 100%);
-  color: var(--color-wine-950);
+  background-color: var(--color-wine-900);
+  background-image: none;
+  color: var(--color-cream-50);
   box-shadow:
-    0 14px 34px -14px rgba(195, 156, 81, 0.65),
-    inset 0 1px 0 rgba(255, 255, 255, 0.5);
+    0 16px 32px -18px rgba(42, 11, 18, 0.55),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    inset 0 0 0 1px rgba(184, 154, 98, 0.28);
 }
 
 .btn-gold:hover {
   transform: translateY(-2px);
-  background-image: linear-gradient(115deg, #f2e3be 0%, var(--color-gold-300) 50%, var(--color-gold-400) 100%);
+  background-color: var(--color-wine-800);
+  box-shadow:
+    0 18px 34px -18px rgba(42, 11, 18, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1),
+    inset 0 0 0 1px rgba(184, 154, 98, 0.32);
 }
 
 .btn-wine {
   background-color: var(--color-wine-900);
   color: var(--color-cream-50);
   box-shadow:
-    0 16px 32px -18px rgba(31, 9, 15, 0.55),
+    0 16px 32px -18px rgba(42, 11, 18, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.07);
 }
 
@@ -240,28 +252,28 @@ body {
 }
 
 .btn-line-light {
-  border: 1px solid rgba(250, 246, 238, 0.32);
+  border: 1px solid rgba(250, 247, 242, 0.32);
   color: var(--color-cream-50);
-  background: rgba(250, 246, 238, 0.03);
+  background: rgba(250, 247, 242, 0.03);
 }
 
 .btn-line-light:hover {
-  border-color: var(--color-gold-400);
-  color: var(--color-gold-300);
-  background: rgba(220, 188, 125, 0.08);
+  border-color: rgba(250, 247, 242, 0.7);
+  color: var(--color-cream-50);
+  background: rgba(250, 247, 242, 0.08);
   transform: translateY(-2px);
 }
 
 .btn-line-dark {
-  border: 1px solid rgba(41, 27, 22, 0.18);
+  border: 1px solid rgba(41, 35, 33, 0.18);
   color: var(--color-espresso);
   background: transparent;
 }
 
 .btn-line-dark:hover {
-  border-color: var(--color-wine-600);
-  color: var(--color-wine-800);
-  background: rgba(94, 33, 51, 0.05);
+  border-color: var(--color-wine-800);
+  color: var(--color-wine-900);
+  background: rgba(139, 48, 64, 0.05);
   transform: translateY(-2px);
 }
 
@@ -311,13 +323,13 @@ body {
   letter-spacing: 0.22em;
   line-height: 1;
   color: transparent;
-  -webkit-text-stroke: 1px rgba(195, 156, 81, 0.16);
+  -webkit-text-stroke: 1px rgba(139, 48, 64, 0.18);
   user-select: none;
   pointer-events: none;
 }
 
 .dark-surface .ghost-mark {
-  -webkit-text-stroke: 1px rgba(236, 217, 172, 0.14);
+  -webkit-text-stroke: 1px rgba(250, 247, 242, 0.13);
 }
 
 /* hairline rule with gold diamond */
@@ -344,12 +356,12 @@ body {
    Surfaces
    ------------------------------------------------------------ */
 
-/* quiet cream card — the hairline top does the speaking */
+/* quiet ivory card — the hairline top does the speaking */
 .card-lux {
   position: relative;
-  background: #fffdf8;
-  border: 1px solid rgba(41, 27, 22, 0.07);
-  box-shadow: 0 24px 48px -40px rgba(31, 9, 15, 0.35);
+  background: #ffffff;
+  border: 1px solid rgba(41, 35, 33, 0.09);
+  box-shadow: 0 24px 48px -40px rgba(41, 35, 33, 0.35);
   transition:
     transform 0.4s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.4s ease,
@@ -362,7 +374,7 @@ body {
   inset-inline: 0;
   top: 0;
   height: 2px;
-  background: linear-gradient(90deg, transparent, var(--color-gold-500) 30%, var(--color-gold-400) 70%, transparent);
+  background: linear-gradient(90deg, transparent, var(--color-wine-800) 30%, var(--color-wine-700) 70%, transparent);
   opacity: 0;
   transition: opacity 0.4s ease;
   pointer-events: none;
@@ -370,8 +382,8 @@ body {
 
 .card-lux:hover {
   transform: translateY(-3px);
-  box-shadow: 0 38px 64px -38px rgba(31, 9, 15, 0.42);
-  border-color: rgba(195, 156, 81, 0.4);
+  box-shadow: 0 38px 64px -38px rgba(41, 35, 33, 0.42);
+  border-color: rgba(139, 48, 64, 0.34);
 }
 
 .card-lux:hover::before {
@@ -379,9 +391,9 @@ body {
 }
 
 .panel-lux {
-  background: #fffdf8;
-  border: 1px solid rgba(41, 27, 22, 0.07);
-  box-shadow: 0 28px 56px -44px rgba(31, 9, 15, 0.35);
+  background: #ffffff;
+  border: 1px solid rgba(41, 35, 33, 0.09);
+  box-shadow: 0 28px 56px -44px rgba(41, 35, 33, 0.35);
 }
 
 /* ------------------------------------------------------------
@@ -394,12 +406,12 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: #fffdf8;
-  border: 1px solid rgba(41, 27, 22, 0.08);
+  background: #ffffff;
+  border: 1px solid rgba(41, 35, 33, 0.1);
   border-radius: 1.125rem;
   box-shadow:
-    0 1px 2px rgba(31, 9, 15, 0.05),
-    0 18px 36px -26px rgba(31, 9, 15, 0.3);
+    0 1px 2px rgba(41, 35, 33, 0.05),
+    0 18px 36px -26px rgba(41, 35, 33, 0.28);
   transition:
     transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
     box-shadow 0.35s ease,
@@ -410,18 +422,18 @@ body {
 @media (max-width: 639px) {
   .card-product {
     box-shadow:
-      0 1px 2px rgba(31, 9, 15, 0.04),
-      0 12px 22px -22px rgba(31, 9, 15, 0.24);
+      0 1px 2px rgba(41, 35, 33, 0.04),
+      0 12px 22px -22px rgba(41, 35, 33, 0.22);
   }
 }
 
 @media (hover: hover) {
   .card-product:hover {
     transform: translateY(-4px);
-    border-color: rgba(195, 156, 81, 0.34);
+    border-color: rgba(139, 48, 64, 0.3);
     box-shadow:
-      0 2px 3px rgba(31, 9, 15, 0.05),
-      0 30px 52px -30px rgba(31, 9, 15, 0.34);
+      0 2px 3px rgba(41, 35, 33, 0.05),
+      0 30px 52px -30px rgba(41, 35, 33, 0.32);
   }
 }
 
@@ -434,7 +446,7 @@ body {
   content: '';
   position: absolute;
   inset: 0;
-  border: 1px solid rgba(220, 188, 125, 0.55);
+  border: 1px solid rgba(250, 247, 242, 0.34);
   border-radius: inherit;
   transform: translate(1rem, 1rem);
   pointer-events: none;
@@ -442,20 +454,20 @@ body {
 
 /* frosted bar for the scrolled / inner-page header */
 .frost {
-  background: rgba(250, 246, 238, 0.88);
+  background: rgba(250, 247, 242, 0.88);
   backdrop-filter: blur(16px) saturate(1.4);
   -webkit-backdrop-filter: blur(16px) saturate(1.4);
-  border-bottom: 1px solid rgba(51, 16, 26, 0.09);
-  box-shadow: 0 10px 30px -24px rgba(31, 9, 15, 0.4);
+  border-bottom: 1px solid rgba(41, 35, 33, 0.08);
+  box-shadow: 0 10px 30px -24px rgba(41, 35, 33, 0.35);
 }
 
-/* deep-wine plate used as the header of every inner page */
+/* deep-burgundy plate used as the header of every inner page */
 .page-plate {
   background-color: var(--color-wine-950);
   background-image:
-    radial-gradient(90% 130% at 85% -20%, rgba(143, 59, 80, 0.5) 0%, rgba(143, 59, 80, 0) 55%),
-    radial-gradient(70% 120% at 10% 115%, rgba(31, 9, 15, 0.9) 0%, rgba(31, 9, 15, 0) 60%),
-    linear-gradient(160deg, var(--color-wine-900) 0%, var(--color-wine-950) 100%);
+    radial-gradient(90% 130% at 85% -20%, rgba(139, 48, 64, 0.45) 0%, rgba(139, 48, 64, 0) 55%),
+    radial-gradient(70% 120% at 10% 115%, rgba(29, 7, 12, 0.9) 0%, rgba(29, 7, 12, 0) 60%),
+    linear-gradient(160deg, #43121c 0%, var(--color-wine-950) 100%);
 }
 
 /* ------------------------------------------------------------

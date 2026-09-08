@@ -48,7 +48,7 @@ export default function CartPage() {
         />
         <div className="mx-auto max-w-xl px-4 pb-10 pt-8 text-center sm:px-6">
           <div className="animate-fade-up panel-lux -mt-14 rounded-2xl p-10 sm:p-12">
-          <span className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-cream-100 text-wine-800 ring-1 ring-gold-500/30">
+          <span className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-cream-100 text-wine-900 ring-1 ring-wine-900/10">
             <svg viewBox="0 0 24 24" fill="none" className="h-10 w-10" aria-hidden="true">
               <path
                 d="M4 5h2l2.4 9.2a1 1 0 0 0 1 .8h6.9a1 1 0 0 0 1-.8L19.5 8H7"

@@ -12,7 +12,7 @@ const inputClass = (hasError: boolean) =>
     'w-full rounded-xl border-2 bg-white px-4 py-3 text-sm font-semibold text-espresso outline-none transition placeholder:font-normal placeholder:text-mocha-light',
     hasError
       ? 'border-red-300 focus:border-red-400'
-      : 'border-espresso/12 focus:border-gold-500 hover:border-gold-500/60',
+      : 'border-espresso/12 focus:border-wine-800 hover:border-wine-700/60',
   );
 
 export default function ContactPage() {
@@ -52,8 +52,8 @@ export default function ContactPage() {
 
       <div className="mx-auto grid max-w-5xl items-start gap-6 px-4 py-14 sm:px-6 lg:grid-cols-[0.85fr_1.15fr]">
         {/* quiet side panel — brand voice only, no invented contact data */}
-        <div className="grain relative hidden overflow-hidden rounded-2xl bg-gradient-to-bl from-wine-800 via-wine-900 to-noir p-8 text-cream-50 ring-1 ring-gold-400/25 lg:block">
-          <p className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-gold-400">Zhino Atelier</p>
+        <div className="grain relative hidden overflow-hidden rounded-2xl bg-gradient-to-bl from-wine-800 via-wine-900 to-noir p-8 text-cream-50 ring-1 ring-cream-50/15 lg:block">
+          <p className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-cream-200/70">Zhino Atelier</p>
           <p className="mt-5 text-xl font-light leading-[1.8]">
             هر پیام شما، یک قدم به دسرِ بهترِ فردا.
           </p>

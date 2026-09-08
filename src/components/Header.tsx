@@ -67,8 +67,8 @@ export default function Header() {
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-xl text-lg font-extrabold ring-1 transition duration-300',
               overlay
-                ? 'bg-wine-900/60 text-gold-300 ring-gold-400/40 backdrop-blur-md group-hover:ring-gold-300/70'
-                : 'bg-wine-900 text-gold-300 ring-gold-500/30 group-hover:ring-gold-400/60',
+                ? 'bg-wine-900/60 text-gold-300 ring-cream-50/25 backdrop-blur-md group-hover:ring-cream-50/45'
+                : 'bg-wine-900 text-gold-300 ring-wine-900/15 group-hover:ring-wine-800/40',
             )}
           >
             ژ
@@ -97,8 +97,8 @@ export default function Header() {
                 to={item.to}
                 className={cn(
                   'relative px-3.5 py-2 text-[0.82rem] font-medium transition-colors',
-                  'after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-center after:scale-x-0 after:bg-gold-400 after:transition-transform after:duration-300 hover:after:scale-x-100',
-                  overlay ? 'text-cream-100/80 hover:text-gold-300' : 'text-mocha hover:text-wine-800',
+                  'after:absolute after:inset-x-3.5 after:bottom-0.5 after:h-px after:origin-center after:scale-x-0 after:bg-wine-700 after:transition-transform after:duration-300 hover:after:scale-x-100',
+                  overlay ? 'text-cream-100/80 hover:text-cream-50' : 'text-mocha hover:text-wine-800',
                 )}
               >
                 {item.label}
@@ -115,11 +115,11 @@ export default function Header() {
                     isActive ? 'after:scale-x-100' : 'after:scale-x-0 hover:after:scale-x-100',
                     overlay
                       ? isActive
-                        ? 'text-gold-300 after:bg-gold-300'
-                        : 'text-cream-100/85 after:bg-gold-300/70 hover:text-gold-200'
+                        ? 'text-cream-50 after:bg-cream-50'
+                        : 'text-cream-100/85 after:bg-cream-50/60 hover:text-cream-50'
                       : isActive
-                        ? 'text-wine-900 after:bg-wine-700'
-                        : 'text-mocha after:bg-gold-500 hover:text-wine-800',
+                        ? 'text-wine-900 after:bg-wine-800'
+                        : 'text-mocha after:bg-wine-700/70 hover:text-wine-800',
                   )
                 }
               >
@@ -140,8 +140,8 @@ export default function Header() {
             className={cn(
               'flex h-10 w-10 items-center justify-center rounded-full ring-1 transition duration-300',
               overlay
-                ? 'text-cream-100/90 ring-cream-50/20 hover:bg-cream-50/10 hover:text-gold-300 hover:ring-gold-300/50'
-                : 'text-mocha ring-espresso/10 hover:bg-wine-900/5 hover:text-wine-800 hover:ring-gold-500/40',
+                ? 'text-cream-100/90 ring-cream-50/20 hover:bg-cream-50/10 hover:text-cream-50 hover:ring-cream-50/45'
+                : 'text-mocha ring-espresso/10 hover:bg-wine-900/5 hover:text-wine-800 hover:ring-wine-800/40',
             )}
           >
             {soundOn ? (
@@ -163,7 +163,7 @@ export default function Header() {
             className={cn(
               'relative flex h-10 items-center gap-2 rounded-full px-4 text-sm font-semibold transition duration-300',
               overlay
-                ? 'bg-cream-50/10 text-cream-50 ring-1 ring-gold-300/40 backdrop-blur-md hover:bg-gold-400/15 hover:ring-gold-300/70'
+                ? 'bg-cream-50/10 text-cream-50 ring-1 ring-cream-50/30 backdrop-blur-md hover:bg-cream-50/15 hover:ring-cream-50/60'
                 : 'bg-wine-900 text-cream-50 shadow-md shadow-wine-900/20 hover:bg-wine-800',
             )}
           >
@@ -213,7 +213,7 @@ export default function Header() {
       {/* mobile nav sheet */}
       {menuOpen && (
         <nav
-          className="page-plate dark-surface grain relative border-t border-gold-400/25 px-4 pb-6 pt-3 md:hidden"
+          className="page-plate dark-surface grain relative border-t border-cream-50/12 px-4 pb-6 pt-3 md:hidden"
           aria-label="ناوبری موبایل"
         >
           {NAV_ITEMS.map((item) =>
@@ -222,7 +222,7 @@ export default function Header() {
                 key={item.to}
                 to={item.to}
                 onClick={() => setMenuOpen(false)}
-                className="block rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-gold-300"
+                className="block rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-cream-50"
               >
                 {item.label}
               </Link>
@@ -234,8 +234,8 @@ export default function Header() {
                 onClick={() => setMenuOpen(false)}
                 className={({ isActive }) =>
                   cn(
-                    'flex items-center justify-between rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-gold-300',
-                    isActive ? 'bg-cream-50/8 text-gold-300' : '',
+                    'flex items-center justify-between rounded-xl px-4 py-3.5 text-[1.02rem] font-light text-cream-100/85 transition hover:bg-cream-50/5 hover:text-cream-50',
+                    isActive ? 'bg-cream-50/8 text-cream-50' : '',
                   )
                 }
               >

@@ -15,7 +15,7 @@ export default function FreeShippingProgress({ subtotal }: { subtotal: number })
     <div
       className={cn(
         'rounded-xl border p-4',
-        reached ? 'border-emerald-300/60 bg-emerald-50/80' : 'border-gold-500/30 bg-cream-100/80',
+        reached ? 'border-emerald-300/60 bg-emerald-50/80' : 'border-wine-800/25 bg-cream-100/80',
       )}
     >
       <div className="mb-2.5 flex items-center justify-between gap-2 text-sm">
@@ -26,7 +26,7 @@ export default function FreeShippingProgress({ subtotal }: { subtotal: number })
           {reached ? 'تبریک! ارسال سفارش شما رایگان شد' : `${formatPrice(remaining)} تا ارسال رایگان`}
         </span>
         {!reached && (
-          <span className="shrink-0 text-[0.62rem] font-semibold text-gold-700">
+          <span className="shrink-0 text-[0.62rem] font-semibold text-mocha">
             {formatPrice(FREE_SHIPPING_THRESHOLD)}
           </span>
         )}
@@ -42,7 +42,7 @@ export default function FreeShippingProgress({ subtotal }: { subtotal: number })
         <div
           className={cn(
             'h-full rounded-full transition-all duration-700 ease-out',
-            reached ? 'bg-gradient-to-l from-emerald-400 to-emerald-600' : 'bg-gradient-to-l from-gold-400 to-wine-700',
+            reached ? 'bg-gradient-to-l from-emerald-400 to-emerald-600' : 'bg-gradient-to-l from-wine-700 to-wine-900',
           )}
           style={{ width: `${pct}%` }}
         />

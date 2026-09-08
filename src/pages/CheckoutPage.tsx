@@ -42,7 +42,7 @@ const inputClass = (hasError: boolean) =>
     'w-full rounded-xl border-2 bg-white px-4 py-3 text-sm font-semibold text-espresso outline-none transition placeholder:font-normal placeholder:text-mocha-light',
     hasError
       ? 'border-red-300 focus:border-red-400'
-      : 'border-espresso/12 focus:border-gold-500 hover:border-gold-500/60',
+      : 'border-espresso/12 focus:border-wine-800 hover:border-wine-700/60',
   );
 
 const fieldLabelClass = 'mb-1.5 block text-xs font-bold text-wine-900';
@@ -206,7 +206,7 @@ export default function CheckoutPage() {
           <p className="mt-2.5 text-sm leading-8 text-mocha">
             از خرید شما سپاسگزاریم! سفارش شما در حال آماده‌سازی است.
           </p>
-          <p className="mt-5 rounded-xl bg-cream-100 px-4 py-3 font-display text-sm tracking-[0.2em] text-wine-900 ring-1 ring-gold-500/30" dir="ltr">
+          <p className="mt-5 rounded-xl bg-cream-100 px-4 py-3 font-display text-sm tracking-[0.2em] text-wine-900 ring-1 ring-wine-900/10" dir="ltr">
             {orderId}
           </p>
           <div className="mt-7 flex flex-col gap-3 sm:flex-row">
@@ -239,8 +239,8 @@ export default function CheckoutPage() {
               <span
                 className={cn(
                   'flex h-10 w-10 items-center justify-center rounded-full font-display text-sm transition duration-300',
-                  i < stepIndex && 'bg-emerald-600 text-white ring-4 ring-emerald-100',
-                  i === stepIndex && 'bg-wine-900 text-gold-300 ring-4 ring-gold-400/25 shadow-lg shadow-wine-900/25',
+                  i < stepIndex && 'bg-wine-700 text-cream-50 ring-4 ring-wine-800/15',
+                  i === stepIndex && 'bg-wine-900 text-cream-50 ring-4 ring-wine-800/30 shadow-lg shadow-wine-900/25',
                   i > stepIndex && 'bg-cream-100 text-mocha ring-1 ring-espresso/10',
                 )}
                 aria-current={i === stepIndex ? 'step' : undefined}
@@ -252,7 +252,7 @@ export default function CheckoutPage() {
               </span>
             </div>
             {i < STEPS.length - 1 && (
-              <div className={cn('mx-2 mt-[0.625rem] h-0.5 flex-1 rounded', i < stepIndex ? 'bg-emerald-500' : 'bg-cream-200')} aria-hidden="true" />
+              <div className={cn('mx-2 mt-[0.625rem] h-0.5 flex-1 rounded', i < stepIndex ? 'bg-wine-700' : 'bg-cream-200')} aria-hidden="true" />
             )}
           </li>
         ))}
@@ -265,7 +265,7 @@ export default function CheckoutPage() {
             <div className="animate-fade-up space-y-5">
               <h2 className="flex items-baseline gap-3 text-lg font-bold text-wine-950">
                 مشخصات تحویل‌گیرنده
-                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-gold-600">Details</span>
+                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-wine-700">Details</span>
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -337,7 +337,7 @@ export default function CheckoutPage() {
             <div className="animate-fade-up space-y-5">
               <h2 className="flex items-baseline gap-3 text-lg font-bold text-wine-950">
                 نشانی ارسال
-                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-gold-600">Address</span>
+                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-wine-700">Address</span>
               </h2>
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
@@ -415,7 +415,7 @@ export default function CheckoutPage() {
             <div className="animate-fade-up space-y-5">
               <h2 className="flex items-baseline gap-3 text-lg font-bold text-wine-950">
                 روش ارسال و پرداخت
-                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-gold-600">Payment</span>
+                <span className="font-display text-[0.6rem] uppercase tracking-[0.35em] text-wine-700">Payment</span>
               </h2>
               <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label="روش ارسال">
                 <button
@@ -426,8 +426,8 @@ export default function CheckoutPage() {
                   className={cn(
                     'rounded-xl border-2 p-4 text-right transition duration-300',
                     shippingMethod === 'standard'
-                      ? 'border-gold-500 bg-gold-400/10 shadow-md shadow-gold-500/10'
-                      : 'border-espresso/12 hover:border-gold-500/50 hover:bg-cream-100/60',
+                      ? 'border-wine-800 bg-wine-800/8 shadow-md shadow-wine-900/5'
+                      : 'border-espresso/12 hover:border-wine-700/50 hover:bg-cream-100/60',
                   )}
                 >
                   <span className="block text-sm font-bold text-wine-950">ارسال استاندارد</span>
@@ -443,8 +443,8 @@ export default function CheckoutPage() {
                   className={cn(
                     'rounded-xl border-2 p-4 text-right transition duration-300',
                     shippingMethod === 'express'
-                      ? 'border-gold-500 bg-gold-400/10 shadow-md shadow-gold-500/10'
-                      : 'border-espresso/12 hover:border-gold-500/50 hover:bg-cream-100/60',
+                      ? 'border-wine-800 bg-wine-800/8 shadow-md shadow-wine-900/5'
+                      : 'border-espresso/12 hover:border-wine-700/50 hover:bg-cream-100/60',
                   )}
                 >
                   <span className="block text-sm font-bold text-wine-950">ارسال سریع</span>

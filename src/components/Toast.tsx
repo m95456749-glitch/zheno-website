@@ -19,9 +19,9 @@ export default function Toast() {
   return (
     <div
       role="status"
-      className="animate-toast-in fixed bottom-6 left-1/2 z-[60] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-3 overflow-hidden rounded-xl bg-noir px-4 py-3.5 text-cream-50 shadow-2xl shadow-wine-950/40 ring-1 ring-gold-400/30"
+      className="animate-toast-in fixed bottom-6 left-1/2 z-[60] flex w-[calc(100%-2rem)] max-w-md -translate-x-1/2 items-center gap-3 overflow-hidden rounded-xl bg-noir px-4 py-3.5 text-cream-50 shadow-2xl shadow-wine-950/40 ring-1 ring-cream-50/15"
     >
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wine-800 text-gold-300 ring-1 ring-gold-400/40">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-wine-800 text-cream-50 ring-1 ring-cream-50/20">
         <svg viewBox="0 0 20 20" fill="none" className="h-5 w-5" aria-hidden="true">
           <path
             d="M4 10.5 8.5 15 16 6"

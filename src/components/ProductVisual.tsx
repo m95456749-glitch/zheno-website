@@ -63,9 +63,9 @@ export default function ProductVisual({
       style={{
         backgroundColor: 'var(--color-cream-100)',
         backgroundImage: `
-          radial-gradient(120% 95% at 50% 118%, rgba(31,9,15,0.16) 0%, rgba(31,9,15,0) 52%),
+          radial-gradient(120% 95% at 50% 118%, rgba(41,35,33,0.16) 0%, rgba(41,35,33,0) 52%),
           radial-gradient(85% 65% at 22% 8%, rgba(255,255,255,0.9) 0%, rgba(255,255,255,0) 60%),
-          linear-gradient(178deg, color-mix(in srgb, ${color} 12%, #fbf7ef) 0%, color-mix(in srgb, ${color} 24%, #f3eadb) 100%)
+          linear-gradient(178deg, color-mix(in srgb, ${color} 12%, #faf7f2) 0%, color-mix(in srgb, ${color} 24%, #f3ede4) 100%)
         `,
       }}
     >
@@ -76,7 +76,7 @@ export default function ProductVisual({
           style={{
             background: `radial-gradient(70% 62% at 32% 24%, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0) 46%), linear-gradient(150deg, color-mix(in srgb, ${color} 88%, white 6%) 0%, ${color} 55%, color-mix(in srgb, ${color} 55%, black) 100%)`,
             boxShadow:
-              'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -8px 18px rgba(0,0,0,0.28), 0 22px 34px -14px rgba(31,9,15,0.45)',
+              'inset 0 1px 0 rgba(255,255,255,0.35), inset 0 -8px 18px rgba(0,0,0,0.28), 0 22px 34px -14px rgba(41,35,33,0.45)',
           }}
           aria-hidden="true"
         >

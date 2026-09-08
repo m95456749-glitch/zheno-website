@@ -26,7 +26,7 @@ export default function PagePlate({ kicker, title, lead, ghost, className, child
       )}
     >
       {/* top hairline so the plate meets the frosted header cleanly */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-gold-400/60 to-transparent" aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/35 to-transparent" aria-hidden="true" />
       {ghost ? (
         <p
           className="ghost-mark pointer-events-none absolute -bottom-8 left-0 select-none text-[5.5rem] leading-none sm:text-[8rem]"
