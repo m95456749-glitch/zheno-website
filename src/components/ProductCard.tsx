@@ -33,7 +33,7 @@ export default function ProductCard({ product }: { product: Product }) {
   };
 
   return (
-    <article className="card-lux group flex h-full flex-col overflow-hidden rounded-2xl">
+    <article className="card-product group flex h-full flex-col">
       <Link
         to={`/products/${product.id}`}
         className="relative block"
@@ -55,7 +55,7 @@ export default function ProductCard({ product }: { product: Product }) {
         )}
       </Link>
 
-      <div className="flex flex-1 flex-col px-3 pb-3 pt-2.5 sm:px-3.5 sm:pb-3.5">
+      <div className="flex flex-1 flex-col px-4 pb-4 pt-3.5 sm:px-4 sm:pb-5 sm:pt-4">
         <Link
           to={`/products/${product.id}`}
           className="truncate text-[0.92rem] font-semibold leading-7 text-wine-950 transition-colors hover:text-wine-700 sm:text-[0.98rem]"
@@ -63,7 +63,7 @@ export default function ProductCard({ product }: { product: Product }) {
           {product.shortName}
         </Link>
 
-        <p className="mt-0.5 flex items-center gap-1.5 text-[0.66rem] leading-6 text-mocha">
+        <p className="mt-1 flex items-center gap-1.5 text-[0.66rem] leading-6 text-mocha">
           <span>{defaultVariant.weight}</span>
           <span className="text-gold-500" aria-hidden="true">
             ·
@@ -77,7 +77,7 @@ export default function ProductCard({ product }: { product: Product }) {
           </span>
         </p>
 
-        <p className="mt-1.5 whitespace-nowrap text-[0.92rem] font-extrabold text-wine-900 sm:text-[1rem]">
+        <p className="mt-2 whitespace-nowrap text-[0.92rem] font-extrabold text-wine-900 sm:text-[1rem]">
           {priceBody}
           <span className="mr-1 text-[0.6rem] font-medium text-mocha">تومان</span>
         </p>
@@ -87,7 +87,7 @@ export default function ProductCard({ product }: { product: Product }) {
           onClick={handleAdd}
           disabled={!available}
           aria-label={`افزودن ${product.shortName} به سبد خرید`}
-          className="mt-2.5 flex h-9 items-center justify-center gap-1.5 rounded-lg bg-wine-900 text-[0.72rem] font-bold text-cream-50 shadow-sm shadow-wine-900/25 transition duration-300 hover:bg-wine-800 hover:shadow-md active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 sm:h-10 sm:rounded-xl sm:text-[0.78rem]"
+          className="mt-3 flex h-10 items-center justify-center gap-1.5 rounded-lg bg-wine-900 text-[0.72rem] font-bold text-cream-50 shadow-sm shadow-wine-900/25 transition duration-300 hover:bg-wine-800 hover:shadow-md active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:rounded-xl sm:text-[0.78rem]"
         >
           <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
             <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />

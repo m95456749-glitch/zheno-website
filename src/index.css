@@ -28,6 +28,9 @@
   --color-cream-200: #e9dcc6;
   --color-cream-300: #d9c4a2;
 
+  /* warm ivory — the Products section surface (subtle premium cream) */
+  --color-cream-page: #efe4d2;
+
   /* antique gold */
   --color-gold-300: #ecd9ac;
   --color-gold-400: #dcbc7d;
@@ -140,6 +143,29 @@ body {
 .slow-burn {
   animation: slow-burn 26s ease-in-out infinite alternate;
   will-change: transform;
+}
+
+/* ------------------------------------------------------------
+   Hero bottom curve — a wide, soft circular arc that lets the
+   burgundy hero gently flow into the warm products section.
+   The curve depth is exposed as --hero-curve so the hero's
+   content padding can clear it responsively (see HomePage).
+   ------------------------------------------------------------ */
+.hero-curve {
+  --hero-curve: clamp(3rem, 7vw, 5.5rem);
+}
+
+.hero-curve::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: var(--hero-curve);
+  background: var(--color-cream-page);
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+  z-index: 2;
+  pointer-events: none;
 }
 
 /* ------------------------------------------------------------
@@ -358,6 +384,38 @@ body {
   box-shadow: 0 28px 56px -44px rgba(31, 9, 15, 0.35);
 }
 
+/* ------------------------------------------------------------
+   Product card — an independent premium surface that lifts
+   slightly off the warm cream page. Subtle 1px hairline, soft
+   restrained shadow, refined corners, quiet hover elevation.
+   ------------------------------------------------------------ */
+.card-product {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: #fffdf8;
+  border: 1px solid rgba(41, 27, 22, 0.08);
+  border-radius: 1.125rem;
+  box-shadow:
+    0 1px 2px rgba(31, 9, 15, 0.05),
+    0 18px 36px -26px rgba(31, 9, 15, 0.3);
+  transition:
+    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.35s ease,
+    border-color 0.35s ease;
+}
+
+@media (hover: hover) {
+  .card-product:hover {
+    transform: translateY(-4px);
+    border-color: rgba(195, 156, 81, 0.34);
+    box-shadow:
+      0 2px 3px rgba(31, 9, 15, 0.05),
+      0 30px 52px -30px rgba(31, 9, 15, 0.34);
+  }
+}
+
 /* framed offset hairline (hero focal, key plates) */
 .frame-lux {
   position: relative;
@@ -494,6 +552,10 @@ body {
   }
 
   .card-lux:hover {
+    transform: none;
+  }
+
+  .card-product:hover {
     transform: none;
   }
 }
