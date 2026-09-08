@@ -88,7 +88,7 @@ export default function AboutPage() {
             {flavors.map((flavor) => (
               <span
                 key={flavor.id}
-                className="inline-flex items-center gap-2 rounded-lg border border-espresso/8 bg-cream-50 px-3.5 py-2 text-[0.8rem] font-medium text-espresso transition hover:border-wine-700/50"
+                className="inline-flex items-center gap-2 rounded-lg border border-espresso/8 bg-cream-100 px-3.5 py-2 text-[0.8rem] font-medium text-espresso transition hover:border-wine-700/50"
               >
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: flavor.color }} aria-hidden="true" />
                 {flavor.name}

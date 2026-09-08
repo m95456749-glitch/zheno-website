@@ -16,7 +16,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   const isHome = pathname === '/';
 
   return (
-    <div className="flex min-h-screen flex-col bg-cream-50">
+    <div className="flex min-h-screen flex-col bg-canvas">
       <Header />
       <main className={cn('flex-1', !isHome && 'pt-[4.5rem]')}>{children}</main>
       <Footer />

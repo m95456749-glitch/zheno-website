@@ -166,7 +166,7 @@ export default function HomePage() {
       </section>
 
       {/* ══ PRODUCTS — the main content: all 15 ══════════════ */}
-      <section className="bg-cream-page" aria-label="محصولات ژینو">
+      <section className="bg-canvas" aria-label="محصولات ژینو">
         <div className="mx-auto max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pb-16 sm:pt-16">
           <header className="text-center">
             <p className="kicker font-display">The Collection</p>
