@@ -406,6 +406,15 @@ body {
     border-color 0.35s ease;
 }
 
+/* on small screens the depth is a touch more restrained — cards stay grounded */
+@media (max-width: 639px) {
+  .card-product {
+    box-shadow:
+      0 1px 2px rgba(31, 9, 15, 0.04),
+      0 12px 22px -22px rgba(31, 9, 15, 0.24);
+  }
+}
+
 @media (hover: hover) {
   .card-product:hover {
     transform: translateY(-4px);
