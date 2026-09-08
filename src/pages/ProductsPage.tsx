@@ -91,7 +91,7 @@ export default function ProductsPage() {
           })}
         </div>
 
-        <div ref={gridReveal} className="mt-10 grid grid-cols-2 gap-3.5 pb-16 sm:gap-5 lg:grid-cols-3 xl:grid-cols-4">
+        <div ref={gridReveal} className="mt-10 grid grid-cols-2 gap-4 pb-16 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((product) => (
             <ProductCard key={product.id} product={product} />
           ))}

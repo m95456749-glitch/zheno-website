@@ -59,7 +59,7 @@ export default function HomePage() {
     <div>
       {/* ══ HERO — short cinematic opening ═══════════════════ */}
       <section
-        className="dark-surface relative isolate overflow-hidden bg-wine-950 text-cream-50"
+        className="hero-curve dark-surface relative isolate overflow-hidden bg-wine-950 text-cream-50"
         aria-label="معرفی ژینو"
       >
         {/* IMAGE 1 — burgundy backdrop photo over silk */}
@@ -73,9 +73,9 @@ export default function HomePage() {
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-wine-950/85 via-wine-950/35 to-wine-950/90" aria-hidden="true" />
 
         {/* thin gold plate frame */}
-        <div className="pointer-events-none absolute inset-2.5 z-10 rounded-2xl border border-gold-300/20 sm:inset-4" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-2.5 z-[1] rounded-2xl border border-gold-300/20 sm:inset-4" aria-hidden="true" />
 
-        <div className="relative z-20 mx-auto w-full max-w-6xl px-4 pb-6 pt-[5.5rem] sm:px-6 lg:grid lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:gap-12 lg:pb-10 lg:pt-28">
+        <div className="relative z-20 mx-auto w-full max-w-6xl px-4 pb-[calc(var(--hero-curve)_+_1.75rem)] pt-[5.5rem] sm:px-6 lg:grid lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:gap-12 lg:pb-[calc(var(--hero-curve)_+_2.5rem)] lg:pt-28">
           {/* headline block */}
           <div className="text-center lg:text-right">
             <p className="rise flex items-center justify-center gap-3 lg:justify-start" style={{ '--rise-delay': '0.05s' } as CSSProperties}>
@@ -166,31 +166,33 @@ export default function HomePage() {
       </section>
 
       {/* ══ PRODUCTS — the main content: all 15 ══════════════ */}
-      <section className="mx-auto max-w-6xl px-4 pt-10 sm:px-6 sm:pt-12" aria-label="محصولات ژینو">
-        <header className="text-center">
-          <p className="kicker font-display">The Collection</p>
-          <h2 className="mt-3 text-[1.65rem] font-light text-wine-950 sm:text-[2.1rem]">محصولات ژینو</h2>
-          <span className="rule-lux mt-3.5" aria-hidden="true" />
-        </header>
+      <section className="bg-cream-page" aria-label="محصولات ژینو">
+        <div className="mx-auto max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pb-16 sm:pt-16">
+          <header className="text-center">
+            <p className="kicker font-display">The Collection</p>
+            <h2 className="mt-3 text-[1.65rem] font-light text-wine-950 sm:text-[2.1rem]">محصولات ژینو</h2>
+            <span className="rule-lux mt-3.5" aria-hidden="true" />
+          </header>
 
-        {groups.map((group, gi) => (
-          <div key={group.key} className={gi === 0 ? 'mt-8' : 'mt-10'}>
-            <div className="flex items-center gap-3">
-              <h3 className="text-[1.02rem] font-bold text-wine-950">{group.title}</h3>
-              <span className="text-[0.7rem] font-medium text-mocha">{formatNumber(group.count)} طعم</span>
-              <span className="h-px flex-1 bg-espresso/10" aria-hidden="true" />
-            </div>
+          {groups.map((group, gi) => (
+            <div key={group.key} className={gi === 0 ? 'mt-8' : 'mt-10'}>
+              <div className="flex items-center gap-3">
+                <h3 className="text-[1.02rem] font-bold text-wine-950">{group.title}</h3>
+                <span className="text-[0.7rem] font-medium text-mocha">{formatNumber(group.count)} طعم</span>
+                <span className="h-px flex-1 bg-espresso/10" aria-hidden="true" />
+              </div>
 
-            <div
-              ref={group.reveal}
-              className="mt-3.5 grid grid-cols-2 gap-3 sm:gap-4 md:grid-cols-3 lg:grid-cols-4"
-            >
-              {group.products.map((product) => (
-                <ProductCard key={product.id} product={product} />
-              ))}
+              <div
+                ref={group.reveal}
+                className="mt-4 grid grid-cols-2 gap-3.5 sm:gap-5 md:grid-cols-3 lg:grid-cols-4"
+              >
+                {group.products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </section>
 
       {/* ══ FLAVOR INDEX — compact discovery chips ══════════ */}
