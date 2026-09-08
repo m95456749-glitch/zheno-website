@@ -126,7 +126,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله انار ژینو',
     shortName: 'ژله انار',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014205_466.jpg',
+    imageUrl: 'images/products/jelly-pomegranate.jpg',
     variants: [
       {
         id: 'jelly-pomegranate-250',
@@ -147,7 +147,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله توت فرنگی ژینو',
     shortName: 'ژله توت فرنگی',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014213_348.jpg',
+    imageUrl: 'images/products/jelly-strawberry.jpg',
     featured: true,
     variants: [
       {
@@ -169,7 +169,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله هلو ژینو',
     shortName: 'ژله هلو',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014214_902.jpg',
+    imageUrl: 'images/products/jelly-peach.jpg',
     variants: [
       {
         id: 'jelly-peach-250',
@@ -190,7 +190,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله تمشک ژینو',
     shortName: 'ژله تمشک',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014206_913.jpg',
+    imageUrl: 'images/products/jelly-raspberry.jpg',
     variants: [
       {
         id: 'jelly-raspberry-250',
@@ -211,7 +211,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله بلوبری ژینو',
     shortName: 'ژله بلوبری',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014203_418.jpg',
+    imageUrl: 'images/products/jelly-blueberry.jpg',
     variants: [
       {
         id: 'jelly-blueberry-250',
@@ -232,7 +232,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله پرتقال ژینو',
     shortName: 'ژله پرتقال',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014218_054.jpg',
+    imageUrl: 'images/products/jelly-orange.jpg',
     variants: [
       {
         id: 'jelly-orange-250',
@@ -253,7 +253,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله آناناس ژینو',
     shortName: 'ژله آناناس',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014158_817.jpg',
+    imageUrl: 'images/products/jelly-pineapple.jpg',
     variants: [
       {
         id: 'jelly-pineapple-250',
@@ -274,7 +274,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله آلبالو ژینو',
     shortName: 'ژله آلبالو',
     categoryLabel: 'پودر ژله',
-    imageUrl: 'images/IMG_20260903_014211_342.jpg',
+    imageUrl: 'images/products/jelly-sour-cherry.jpg',
     variants: [
       {
         id: 'jelly-sour-cherry-250',

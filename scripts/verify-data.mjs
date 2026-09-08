@@ -3,7 +3,7 @@
 // Usage: node scripts/verify-data.mjs
 // ============================================================
 
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -96,6 +96,61 @@ else fail('found «کاستارد» — must be «کاستر» everywhere');
 const kasterLabels = (src.match(/categoryLabel: 'پودر کاستر'/g) ?? []).length;
 if (kasterLabels === 7) ok("all 7 custard products labeled 'پودر کاستر'");
 else fail(`expected 7 'پودر کاستر' labels, found ${kasterLabels}`);
+
+// ────────────────────────────────────────────────────────────
+// Product ↔ real photo mapping
+//
+// Each jelly photograph carries the flavor name printed on the glass
+// («ژله انار», «ژله بلوبری», …). That baked-in label — not the filename —
+// is the ground truth, and each mapping below was confirmed by visually
+// inspecting the photo. Custard has no production photography yet, so
+// those products intentionally carry no imageUrl and fall back to the
+// catalog-driven plated visual in ProductVisual.
+// ────────────────────────────────────────────────────────────
+const expectedImages = {
+  'jelly-pomegranate': 'images/products/jelly-pomegranate.jpg',
+  'jelly-strawberry': 'images/products/jelly-strawberry.jpg',
+  'jelly-peach': 'images/products/jelly-peach.jpg',
+  'jelly-raspberry': 'images/products/jelly-raspberry.jpg',
+  'jelly-blueberry': 'images/products/jelly-blueberry.jpg',
+  'jelly-orange': 'images/products/jelly-orange.jpg',
+  'jelly-pineapple': 'images/products/jelly-pineapple.jpg',
+  'jelly-sour-cherry': 'images/products/jelly-sour-cherry.jpg',
+};
+
+// Pull the imageUrl declared inside each product block
+const declaredImages = new Map();
+for (const m of src.matchAll(/\n  \{\n\s*id: '([^']+)',[\s\S]*?(?=\n  \},)/g)) {
+  const block = m[0];
+  const img = block.match(/imageUrl: '([^']*)'/);
+  declaredImages.set(m[1], img ? img[1] : undefined);
+}
+
+for (const [id, expected] of Object.entries(expectedImages)) {
+  const actual = declaredImages.get(id);
+  if (actual === expected) ok(`${id} → ${expected}`);
+  else fail(`${id} should map to ${expected}, found ${actual ?? '(none)'}`);
+
+  const file = join(root, 'public', expected);
+  if (existsSync(file)) ok(`photo exists on disk: public/${expected}`);
+  else fail(`missing photo file: public/${expected}`);
+}
+
+// Photos must be one-to-one: no two products may share the same picture
+const usedImages = [...declaredImages.values()].filter(Boolean);
+if (new Set(usedImages).size === usedImages.length)
+  ok('every product photo is used by exactly one product');
+else fail('the same photo is assigned to more than one product');
+
+// Custard products must NOT invent photography they do not have
+const custardWithImages = custard.filter((p) => declaredImages.get(p.id));
+if (custardWithImages.length === 0)
+  ok('no custard product claims a photo (plated fallback is used)');
+else fail(`custard products must not have images: ${custardWithImages.map((p) => p.id).join(', ')}`);
+
+// Nothing may still point at the old unsorted camera filenames
+if (!src.includes('images/IMG_')) ok('no legacy IMG_* paths remain in the catalog');
+else fail('catalog still references legacy images/IMG_* paths');
 
 console.log(failures === 0 ? '\nAll data checks passed.' : `\n${failures} check(s) failed.`);
 process.exit(failures === 0 ? 0 : 1);
