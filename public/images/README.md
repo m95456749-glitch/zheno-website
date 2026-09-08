@@ -11,3 +11,9 @@ The Hero references both through the site base path, so they deploy to
 `/zheno-website/images/...` on GitHub Pages automatically. If a file is
 missing, the layered CSS treatments (`src/index.css → .hero-silk`, and the
 framed flavor triptych) stand in, so the page never shows a broken image.
+
+## Product photography
+
+Per-product photos live in `products/` — see `products/README.md`. Their filenames
+were historically mismatched, so the flavor name **printed inside each photo** is the
+ground truth, not the filename.
