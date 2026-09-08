@@ -13,6 +13,7 @@ import { cn } from '../utils/cn';
 import ProductVisual from '../components/ProductVisual';
 import ProductCard from '../components/ProductCard';
 import QuantitySelector from '../components/QuantitySelector';
+import BackButton from '../components/BackButton';
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -36,7 +37,7 @@ export default function ProductDetailPage() {
   if (!product) {
     return (
       <div className="mx-auto max-w-xl px-4 pt-28 text-center sm:px-6">
-        <p className="font-display text-7xl text-gold-500/70">۴۰۴</p>
+        <p className="font-display text-7xl text-wine-900/15">۴۰۴</p>
         <h1 className="mt-4 text-xl font-bold text-wine-950">محصول یافت نشد</h1>
         <p className="mt-2 text-sm leading-7 text-mocha">این محصول وجود ندارد یا از فروشگاه حذف شده است.</p>
         <Link to="/products" className="btn-lux btn-wine mt-8 inline-flex">
@@ -66,12 +67,17 @@ export default function ProductDetailPage() {
     <div className="pb-8">
       {/* wine seam carrying the page header language */}
       <div className="page-plate dark-surface relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-gold-400/40 to-transparent" aria-hidden="true" />
-        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-6xl px-4 pb-3 pt-5 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
-          <Link to="/" className="transition hover:text-gold-300">خانه</Link>
-          <span className="mx-2 text-gold-500/60">/</span>
-          <Link to="/products" className="transition hover:text-gold-300">محصولات</Link>
-          <span className="mx-2 text-gold-500/60">/</span>
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/30 to-transparent" aria-hidden="true" />
+        <div className="relative mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+          <div className="flex justify-start">
+            <BackButton fallback="/products" />
+          </div>
+        </div>
+        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-6xl px-4 pb-3 pt-3 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
+          <Link to="/" className="transition hover:text-cream-50">خانه</Link>
+          <span className="mx-2 text-cream-200/35">/</span>
+          <Link to="/products" className="transition hover:text-cream-50">محصولات</Link>
+          <span className="mx-2 text-cream-200/35">/</span>
           <span className="text-cream-100">{product.shortName}</span>
         </nav>
         <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-8 px-4 pb-2 pt-2 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:gap-14">
@@ -93,11 +99,11 @@ export default function ProductDetailPage() {
           {/* identity */}
           <div className="pb-10 lg:pb-14 lg:text-right">
             <div className="flex flex-wrap items-center gap-2.5 lg:justify-end">
-              <span className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-gold-400">
+              <span className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-cream-200/70">
                 {product.category === 'jelly' ? 'Jelly' : 'Custard'}
               </span>
               {product.featured && (
-                <span className="rounded-full bg-gold-400/15 px-3 py-1 text-[0.66rem] font-semibold text-gold-300 ring-1 ring-gold-400/40">
+                <span className="rounded-full bg-cream-50/10 px-3 py-1 text-[0.66rem] font-semibold text-cream-50 ring-1 ring-cream-50/20">
                   ◆ پیشنهاد ژینو
                 </span>
               )}
@@ -111,7 +117,7 @@ export default function ProductDetailPage() {
               {product.name}
             </h1>
             <p className="mt-3.5 max-w-xl text-sm font-light leading-8 text-cream-200/70 lg:mr-0 lg:ml-auto">
-              طعم <span className="font-medium text-gold-300">{flavor.name}</span> — در بسته‌بندی {selected.weight}؛
+              طعم <span className="font-semibold text-cream-50">{flavor.name}</span> — در بسته‌بندی {selected.weight}؛
               آماده‌ی یک دسر مجلسی با دست‌پخت خودتان.
             </p>
             <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[0.78rem] text-cream-200/70 lg:justify-end">
@@ -119,7 +125,7 @@ export default function ProductDetailPage() {
                 <span className={cn('h-1.5 w-1.5 rounded-full', selected.available ? 'bg-emerald-400' : 'bg-red-400')} aria-hidden="true" />
                 {selected.available ? 'موجود' : 'ناموجود'}
                 {lowStock && selected.available && (
-                  <span className="text-gold-300">· تنها {formatNumber(selected.stock)} عدد</span>
+                  <span className="text-cream-200">· تنها {formatNumber(selected.stock)} عدد</span>
                 )}
               </span>
               <span dir="ltr" className="font-display tracking-[0.22em] text-cream-200/60">{selected.sku}</span>
@@ -148,8 +154,8 @@ export default function ProductDetailPage() {
                   className={cn(
                     'rounded-xl border-2 px-5 py-2.5 text-start text-sm font-bold transition duration-300 active:scale-95',
                     variant.id === selected.id
-                      ? 'border-gold-500 bg-gold-400/15 text-wine-950'
-                      : 'border-espresso/12 text-mocha hover:border-gold-500/60 hover:text-wine-900',
+                      ? 'border-wine-800 bg-wine-800/8 text-wine-900'
+                      : 'border-espresso/12 text-mocha hover:border-wine-700/60 hover:text-wine-900',
                   )}
                 >
                   {variant.weight}
@@ -208,7 +214,7 @@ export default function ProductDetailPage() {
             </button>
             <p className="text-center text-[0.7rem] leading-6 text-mocha lg:text-start">
               جمع این بخش: {formatPrice(selected.price * qty)}
-              <span className="mx-2 text-gold-500">·</span>
+              <span className="mx-2 text-mocha-light">·</span>
               ارسال رایگان برای سبد بالای {formatPrice(FREE_SHIPPING_THRESHOLD)}
             </p>
           </div>

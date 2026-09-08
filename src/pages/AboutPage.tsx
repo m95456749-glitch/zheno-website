@@ -55,7 +55,7 @@ export default function AboutPage() {
             { value: formatNumber(RECIPES.length), label: 'دستور اختصاصی' },
           ].map((stat) => (
             <div key={stat.label}>
-              <p className="text-2xl font-bold text-gold-300 sm:text-4xl">{stat.value}</p>
+              <p className="text-2xl font-bold text-cream-50 sm:text-4xl">{stat.value}</p>
               <p className="mt-1.5 text-[0.68rem] font-light text-cream-200/65 sm:text-sm">{stat.label}</p>
             </div>
           ))}
@@ -70,8 +70,8 @@ export default function AboutPage() {
         <div ref={valuesReveal} className="grid gap-10 md:grid-cols-3">
           {VALUES.map((value) => (
             <div key={value.title} className="relative border-t border-espresso/10 pt-6 text-center md:text-start">
-              <span className="absolute -top-px right-0 h-px w-12 bg-gold-500" aria-hidden="true" />
-              <p className="font-display text-[0.62rem] tracking-[0.4em] text-gold-600">{value.no}</p>
+              <span className="absolute -top-px right-0 h-px w-12 bg-wine-700" aria-hidden="true" />
+              <p className="font-display text-[0.62rem] tracking-[0.4em] text-wine-700">{value.no}</p>
               <h2 className="mt-3 text-lg font-bold text-wine-950">{value.title}</h2>
               <p className="mt-2.5 text-sm leading-8 text-mocha">{value.text}</p>
             </div>
@@ -88,7 +88,7 @@ export default function AboutPage() {
             {flavors.map((flavor) => (
               <span
                 key={flavor.id}
-                className="inline-flex items-center gap-2 rounded-lg border border-espresso/8 bg-cream-50 px-3.5 py-2 text-[0.8rem] font-medium text-espresso transition hover:border-gold-500/50"
+                className="inline-flex items-center gap-2 rounded-lg border border-espresso/8 bg-cream-50 px-3.5 py-2 text-[0.8rem] font-medium text-espresso transition hover:border-wine-700/50"
               >
                 <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: flavor.color }} aria-hidden="true" />
                 {flavor.name}

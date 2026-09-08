@@ -73,14 +73,14 @@ export default function HomePage() {
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-wine-950/85 via-wine-950/35 to-wine-950/90" aria-hidden="true" />
 
         {/* thin gold plate frame */}
-        <div className="pointer-events-none absolute inset-2.5 z-[1] rounded-2xl border border-gold-300/20 sm:inset-4" aria-hidden="true" />
+        <div className="pointer-events-none absolute inset-2.5 z-[1] rounded-2xl border border-cream-50/12 sm:inset-4" aria-hidden="true" />
 
         <div className="relative z-20 mx-auto w-full max-w-6xl px-4 pb-[calc(var(--hero-curve)_+_1.75rem)] pt-[5.5rem] sm:px-6 lg:grid lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:gap-12 lg:pb-[calc(var(--hero-curve)_+_2.5rem)] lg:pt-28">
           {/* headline block */}
           <div className="text-center lg:text-right">
             <p className="rise flex items-center justify-center gap-3 lg:justify-start" style={{ '--rise-delay': '0.05s' } as CSSProperties}>
               <span className="text-[1rem] font-bold tracking-normal">ژینو</span>
-              <span className="h-4 w-px bg-gold-300/40" aria-hidden="true" />
+              <span className="h-4 w-px bg-cream-50/35" aria-hidden="true" />
               <span className="kicker kicker-dark font-display">Zhino</span>
             </p>
 
@@ -88,7 +88,7 @@ export default function HomePage() {
               className="rise mt-4 text-[1.8rem] font-light leading-[1.4] text-balance sm:text-4xl sm:leading-[1.35] lg:mt-5 lg:text-[3.2rem] lg:leading-[1.3]"
               style={{ '--rise-delay': '0.16s' } as CSSProperties}
             >
-              طعمِ اصیل، انتخابِ <span className="font-semibold text-gold-300">متفاوت</span>
+              طعمِ اصیل، انتخابِ <span className="font-semibold text-cream-50">متفاوت</span>
             </h1>
 
             <p
@@ -108,7 +108,7 @@ export default function HomePage() {
               <Link
                 to="/#flavors"
                 onClick={playPrimary}
-                className="group inline-flex items-center gap-2 border-b border-gold-300/40 pb-1 text-[0.82rem] font-medium text-cream-100 transition hover:border-gold-300 hover:text-gold-300"
+                className="group inline-flex items-center gap-2 border-b border-cream-50/30 pb-1 text-[0.82rem] font-medium text-cream-100 transition hover:border-cream-50/70 hover:text-cream-50"
               >
                 کشف طعم‌ها
                 <span className="transition-transform duration-300 group-hover:-translate-x-1.5" aria-hidden="true">←</span>
@@ -206,7 +206,7 @@ export default function HomePage() {
             <h2 className="text-[1.05rem] font-medium text-wine-950">کشف طعم‌های ژینو</h2>
             <p className="mt-1.5 text-[0.72rem] leading-6 text-mocha">
               {formatNumber(jellyFlavors.length)} طعم پودر ژله
-              <span className="mx-2 text-gold-500" aria-hidden="true">·</span>
+              <span className="mx-2 text-mocha-light" aria-hidden="true">·</span>
               {formatNumber(custardFlavors.length)} طعم پودر کاستر
             </p>
           </div>
@@ -221,7 +221,7 @@ export default function HomePage() {
                 {row.flavors.map((flavor) => (
                   <span
                     key={flavor.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-espresso/8 bg-cream-50 px-3 py-1 text-[0.72rem] font-medium text-espresso transition hover:border-gold-500/50"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-espresso/8 bg-cream-50 px-3 py-1 text-[0.72rem] font-medium text-espresso transition hover:border-wine-700/50"
                   >
                     <span
                       className="h-2 w-2 rounded-full"
@@ -264,7 +264,7 @@ export default function HomePage() {
               )}
             >
               <span
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cream-100 to-cream-200 text-2xl ring-1 ring-gold-500/25 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
+                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cream-100 to-cream-200 text-2xl ring-1 ring-espresso/8 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
                 aria-hidden="true"
               >
                 {recipe.emoji}
@@ -275,7 +275,7 @@ export default function HomePage() {
                   {recipe.summary}
                 </span>
               </span>
-              <span className="text-gold-600 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+              <span className="text-wine-700 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
             </Link>
           ))}
         </div>
@@ -297,17 +297,17 @@ export default function HomePage() {
         <p className="kicker kicker-dark font-display">The Zhino Story</p>
         <p className="mx-auto mt-4 max-w-xl text-[1.02rem] font-light leading-8 sm:text-lg sm:leading-9">
           دسر خوب، حق هر خانواده است —{' '}
-          <span className="font-semibold text-gold-300">کیفیت واقعی، انتخاب ژینو.</span>
+          <span className="font-semibold text-cream-50">کیفیت واقعی، انتخاب ژینو.</span>
         </p>
         <div className="mt-6 flex items-center justify-center gap-8">
-          <Link to="/about" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-gold-300">
+          <Link to="/about" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50">
             درباره ما
-            <span className="text-gold-400/70 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+            <span className="text-cream-200/45 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
           </Link>
           <span className="h-4 w-px bg-cream-50/20" aria-hidden="true" />
-          <Link to="/contact" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-gold-300">
+          <Link to="/contact" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50">
             تماس با ما
-            <span className="text-gold-400/70 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+            <span className="text-cream-200/45 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
           </Link>
         </div>
       </section>

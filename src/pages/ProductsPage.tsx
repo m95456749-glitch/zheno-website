@@ -78,12 +78,12 @@ export default function ProductsPage() {
                 className={cn(
                   'flex items-baseline gap-2 rounded-full px-4.5 py-2 text-[0.82rem] font-medium transition duration-300 sm:px-5',
                   isActive
-                    ? 'bg-wine-900 text-gold-300 shadow-md shadow-wine-900/25'
+                    ? 'bg-wine-900 text-cream-50 shadow-md shadow-wine-900/25'
                     : 'text-mocha hover:bg-cream-100 hover:text-wine-900',
                 )}
               >
                 {tab.label}
-                <span className={cn('text-[0.68rem]', isActive ? 'text-gold-400' : 'text-mocha-light')}>
+                <span className={cn('text-[0.68rem]', isActive ? 'text-cream-200/75' : 'text-mocha-light')}>
                   {formatNumber(counts[tab.id])}
                 </span>
               </button>

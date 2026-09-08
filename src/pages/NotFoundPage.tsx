@@ -24,7 +24,7 @@ export default function NotFoundPage() {
           <Link
             to="/products"
             onClick={() => soundService.play('primaryButton')}
-            className="group inline-flex items-center gap-2.5 border-b border-gold-300/40 pb-1.5 text-sm font-medium text-cream-100 transition hover:border-gold-300 hover:text-gold-300"
+            className="group inline-flex items-center gap-2.5 border-b border-cream-50/30 pb-1.5 text-sm font-medium text-cream-100 transition hover:border-cream-50/70 hover:text-cream-50"
           >
             مشاهده محصولات
             <span className="transition-transform duration-300 group-hover:-translate-x-1.5" aria-hidden="true">←</span>

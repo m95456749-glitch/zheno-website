@@ -6,6 +6,7 @@
 
 import type { ReactNode } from 'react';
 import { cn } from '../utils/cn';
+import BackButton from './BackButton';
 
 interface Props {
   kicker: string;
@@ -13,11 +14,21 @@ interface Props {
   lead?: ReactNode;
   /** optional ghost wordmark behind the title (decorative) */
   ghost?: string;
+  /** set false where the page owns its own «بازگشت» control (e.g. checkout steps) */
+  showBack?: boolean;
   className?: string;
   children?: ReactNode;
 }
 
-export default function PagePlate({ kicker, title, lead, ghost, className, children }: Props) {
+export default function PagePlate({
+  kicker,
+  title,
+  lead,
+  ghost,
+  showBack = true,
+  className,
+  children,
+}: Props) {
   return (
     <header
       className={cn(
@@ -26,7 +37,7 @@ export default function PagePlate({ kicker, title, lead, ghost, className, child
       )}
     >
       {/* top hairline so the plate meets the frosted header cleanly */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-gold-400/60 to-transparent" aria-hidden="true" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/35 to-transparent" aria-hidden="true" />
       {ghost ? (
         <p
           className="ghost-mark pointer-events-none absolute -bottom-8 left-0 select-none text-[5.5rem] leading-none sm:text-[8rem]"
@@ -36,6 +47,11 @@ export default function PagePlate({ kicker, title, lead, ghost, className, child
         </p>
       ) : null}
       <div className="relative mx-auto max-w-6xl px-4 py-14 text-center sm:px-6 sm:py-16">
+        {showBack ? (
+          <div className="-mt-7 mb-5 flex justify-start sm:-mt-8">
+            <BackButton />
+          </div>
+        ) : null}
         <p className="kicker kicker-dark font-display">{kicker}</p>
         <h1 className="mx-auto mt-4 max-w-2xl text-3xl font-light leading-[1.5] sm:text-[2.6rem] sm:leading-[1.5]">
           {title}
