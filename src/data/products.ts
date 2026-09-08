@@ -126,6 +126,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله انار ژینو',
     shortName: 'ژله انار',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014205_466.jpg',
     variants: [
       {
         id: 'jelly-pomegranate-250',
@@ -146,6 +147,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله توت فرنگی ژینو',
     shortName: 'ژله توت فرنگی',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014213_348.jpg',
     featured: true,
     variants: [
       {
@@ -167,6 +169,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله هلو ژینو',
     shortName: 'ژله هلو',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014214_902.jpg',
     variants: [
       {
         id: 'jelly-peach-250',
@@ -187,6 +190,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله تمشک ژینو',
     shortName: 'ژله تمشک',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014206_913.jpg',
     variants: [
       {
         id: 'jelly-raspberry-250',
@@ -207,6 +211,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله بلوبری ژینو',
     shortName: 'ژله بلوبری',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014203_418.jpg',
     variants: [
       {
         id: 'jelly-blueberry-250',
@@ -227,6 +232,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله پرتقال ژینو',
     shortName: 'ژله پرتقال',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014218_054.jpg',
     variants: [
       {
         id: 'jelly-orange-250',
@@ -247,6 +253,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله آناناس ژینو',
     shortName: 'ژله آناناس',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014158_817.jpg',
     variants: [
       {
         id: 'jelly-pineapple-250',
@@ -267,6 +274,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر ژله آلبالو ژینو',
     shortName: 'ژله آلبالو',
     categoryLabel: 'پودر ژله',
+    imageUrl: 'images/IMG_20260903_014211_342.jpg',
     variants: [
       {
         id: 'jelly-sour-cherry-250',

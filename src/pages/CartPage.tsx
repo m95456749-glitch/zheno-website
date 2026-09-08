@@ -139,6 +139,7 @@ export default function CartPage() {
                     color={flavor.color}
                     emoji={flavor.emoji}
                     name={product.name}
+                    imageUrl={product.imageUrl}
                     className="h-24 w-24 rounded-lg sm:h-28 sm:w-28"
                     emojiClassName="text-4xl sm:text-5xl"
                   />
