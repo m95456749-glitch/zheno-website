@@ -224,11 +224,13 @@ export default function CheckoutPage() {
 
   return (
     <div>
+      {/* no plate back-button here: the form already owns a «بازگشت» step control */}
       <PagePlate
         kicker="Checkout"
         title="تسویه حساب"
         lead="سه گامِ کوتاه تا میزِ دسر — سریع، مطمئن، بدون شلوغی."
         ghost="Checkout"
+        showBack={false}
       />
       <div className="mx-auto max-w-6xl px-4 pb-8 pt-9 sm:px-6">
       {/* step indicator */}

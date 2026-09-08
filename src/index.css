@@ -277,6 +277,63 @@ body {
   transform: translateY(-2px);
 }
 
+/* ------------------------------------------------------------
+   Back navigation — a quiet hairline pill on the burgundy
+   plates. 44px tall on touch screens, tighter on desktop;
+   hover is scoped to pointer devices (same pattern as
+   .card-product) so taps never leave a stuck hover state.
+   ------------------------------------------------------------ */
+
+.btn-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding-inline: 1rem;
+  border: 1px solid rgba(250, 247, 242, 0.2);
+  border-radius: 9999px;
+  background: transparent;
+  font-size: 0.78rem;
+  font-weight: 500;
+  line-height: 1;
+  color: rgba(243, 237, 228, 0.85);
+  transition:
+    border-color 0.3s ease,
+    background-color 0.3s ease,
+    color 0.3s ease,
+    transform 0.3s ease;
+}
+
+.btn-back-arrow {
+  flex-shrink: 0;
+  transition: transform 0.3s ease;
+}
+
+.btn-back:active {
+  transform: scale(0.97);
+}
+
+@media (min-width: 640px) {
+  .btn-back {
+    height: 2.25rem;
+    padding-inline: 0.875rem;
+    font-size: 0.75rem;
+  }
+}
+
+@media (hover: hover) {
+  .btn-back:hover {
+    border-color: rgba(250, 247, 242, 0.45);
+    background-color: rgba(250, 247, 242, 0.08);
+    color: var(--color-cream-50);
+  }
+
+  .btn-back:hover .btn-back-arrow {
+    /* RTL: the arrow nudges right, toward the previous page */
+    transform: translateX(2px);
+  }
+}
+
 /* gold sheen sweep */
 .sheen {
   position: relative;

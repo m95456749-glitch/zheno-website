@@ -13,6 +13,7 @@ import { cn } from '../utils/cn';
 import ProductVisual from '../components/ProductVisual';
 import ProductCard from '../components/ProductCard';
 import QuantitySelector from '../components/QuantitySelector';
+import BackButton from '../components/BackButton';
 
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -67,7 +68,12 @@ export default function ProductDetailPage() {
       {/* wine seam carrying the page header language */}
       <div className="page-plate dark-surface relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/30 to-transparent" aria-hidden="true" />
-        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-6xl px-4 pb-3 pt-5 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
+        <div className="relative mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+          <div className="flex justify-start">
+            <BackButton fallback="/products" />
+          </div>
+        </div>
+        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-6xl px-4 pb-3 pt-3 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
           <Link to="/" className="transition hover:text-cream-50">خانه</Link>
           <span className="mx-2 text-cream-200/35">/</span>
           <Link to="/products" className="transition hover:text-cream-50">محصولات</Link>
