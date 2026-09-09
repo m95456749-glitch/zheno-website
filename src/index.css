@@ -25,13 +25,13 @@
   --color-wine-500: #c0828a;
 
   /* ── warm ivory ─────────────────────────────────────────── */
-  --color-cream-50: #faf7f2; /* main background — warm ivory */
+  --color-cream-50: #faf7f2; /* light ivory — cards, panels, light text on dark */
   --color-cream-100: #f3ede4; /* soft tinted surfaces */
   --color-cream-200: #e7ddd1; /* dividers, tracks, chips */
   --color-cream-300: #d9caba; /* decorative */
 
-  /* warm ivory — the Products section surface */
-  --color-cream-page: #faf7f2;
+  /* warm stone / taupe — the main site canvas */
+  --color-cream-page: #b7a795;
 
   /* ── muted matte gold — used very sparingly ─────────────── */
   --color-gold-300: #e0d0ab;
@@ -48,6 +48,8 @@
 
 body {
   font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  background: var(--color-cream-page);
+  color: var(--color-espresso);
 }
 
 ::selection {
