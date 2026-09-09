@@ -64,25 +64,25 @@ export default function ProductDetailPage() {
   };
 
   return (
-    <div className="pb-8">
+    <div className="pb-6 sm:pb-8">
       {/* wine seam carrying the page header language */}
       <div className="page-plate dark-surface relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/30 to-transparent" aria-hidden="true" />
-        <div className="relative mx-auto max-w-6xl px-4 pt-5 sm:px-6">
+        <div className="relative mx-auto max-w-5xl px-4 pt-5 sm:px-6">
           <div className="flex justify-start">
             <BackButton fallback="/products" />
           </div>
         </div>
-        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-6xl px-4 pb-3 pt-3 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
+        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-5xl px-4 pb-3 pt-3 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
           <Link to="/" className="transition hover:text-cream-50">خانه</Link>
           <span className="mx-2 text-cream-200/35">/</span>
           <Link to="/products" className="transition hover:text-cream-50">محصولات</Link>
           <span className="mx-2 text-cream-200/35">/</span>
           <span className="text-cream-100">{product.shortName}</span>
         </nav>
-        <div className="relative mx-auto grid max-w-6xl grid-cols-1 items-center gap-8 px-4 pb-2 pt-2 sm:px-6 lg:grid-cols-[0.92fr_1.08fr] lg:gap-14">
+        <div className="relative mx-auto grid max-w-5xl grid-cols-1 items-center gap-6 px-4 pb-1 pt-2 sm:px-6 lg:grid-cols-[0.88fr_1fr] lg:gap-10">
           {/* arched plate visual */}
-          <div className="arch-unveil mx-auto w-full max-w-[24rem] lg:max-w-[26rem]">
+          <div className="arch-unveil mx-auto w-full max-w-[20.5rem] sm:max-w-[22rem] lg:max-w-[23rem]">
             <figure className="frame-lux arch overflow-hidden shadow-[0_55px_100px_-45px_rgba(0,0,0,0.85)]">
               <ProductVisual
                 color={flavor.color}
@@ -97,7 +97,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* identity */}
-          <div className="pb-10 lg:pb-14 lg:text-right">
+          <div className="pb-8 lg:pb-10 lg:text-right">
             <div className="flex flex-wrap items-center gap-2.5 lg:justify-end">
               <span className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-cream-200/70">
                 {product.category === 'jelly' ? 'Jelly' : 'Custard'}
@@ -113,14 +113,14 @@ export default function ProductDetailPage() {
                 </span>
               )}
             </div>
-            <h1 className="mt-4 text-[1.9rem] font-light leading-[1.55] text-cream-50 sm:text-[2.5rem] sm:leading-[1.55]">
+            <h1 className="mt-3.5 text-[1.72rem] font-light leading-[1.5] text-cream-50 sm:text-[2.18rem] sm:leading-[1.48] lg:text-[2.3rem]">
               {product.name}
             </h1>
-            <p className="mt-3.5 max-w-xl text-sm font-light leading-8 text-cream-200/70 lg:mr-0 lg:ml-auto">
+            <p className="mt-3 max-w-lg text-[0.9rem] font-light leading-7 text-cream-200/72 lg:mr-0 lg:ml-auto">
               طعم <span className="font-semibold text-cream-50">{flavor.name}</span> — در بسته‌بندی {selected.weight}؛
               آماده‌ی یک دسر مجلسی با دست‌پخت خودتان.
             </p>
-            <div className="mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-[0.78rem] text-cream-200/70 lg:justify-end">
+            <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[0.75rem] text-cream-200/72 lg:justify-end">
               <span className="flex items-center gap-2">
                 <span className={cn('h-1.5 w-1.5 rounded-full', selected.available ? 'bg-emerald-400' : 'bg-red-400')} aria-hidden="true" />
                 {selected.available ? 'موجود' : 'ناموجود'}
@@ -135,11 +135,11 @@ export default function ProductDetailPage() {
       </div>
 
       {/* purchase desk on cream */}
-      <div className="mx-auto -mt-8 max-w-6xl px-4 sm:px-6">
-        <div className="panel-lux grid gap-6 rounded-2xl p-5 sm:p-8 lg:grid-cols-[1.2fr_0.8fr]">
+      <div className="mx-auto -mt-6 max-w-5xl px-4 sm:px-6">
+        <div className="panel-lux grid gap-5 rounded-[1.35rem] p-4.5 sm:p-6 lg:grid-cols-[1.08fr_0.92fr] lg:gap-6">
           <div>
             {/* packaging selector */}
-            <p className="mb-2.5 text-[0.72rem] font-bold text-espresso">بسته‌بندی</p>
+            <p className="mb-2 text-[0.72rem] font-bold text-espresso">بسته‌بندی</p>
             <div className="flex flex-wrap gap-2">
               {product.variants.map((variant) => (
                 <button
@@ -152,7 +152,7 @@ export default function ProductDetailPage() {
                   }}
                   aria-pressed={variant.id === selected.id}
                   className={cn(
-                    'rounded-xl border-2 px-5 py-2.5 text-start text-sm font-bold transition duration-300 active:scale-95',
+                    'rounded-xl border-2 px-4.5 py-2 text-start text-[0.92rem] font-bold transition duration-300 active:scale-95',
                     variant.id === selected.id
                       ? 'border-wine-800 bg-wine-800/8 text-wine-900'
                       : 'border-espresso/12 text-mocha hover:border-wine-700/60 hover:text-wine-900',
@@ -165,7 +165,7 @@ export default function ProductDetailPage() {
             </div>
 
             {/* flavor + weight facts */}
-            <dl className="mt-6 grid grid-cols-3 gap-x-4 border-t border-espresso/8 pt-5 text-center sm:text-start">
+            <dl className="mt-5 grid grid-cols-3 gap-x-3 border-t border-espresso/8 pt-4 text-center sm:text-start">
               <div>
                 <dt className="text-[0.64rem] text-mocha">طعم</dt>
                 <dd className="mt-1 flex items-center justify-center gap-1.5 text-[0.84rem] font-bold text-wine-950 sm:justify-start">
@@ -184,18 +184,18 @@ export default function ProductDetailPage() {
             </dl>
 
             {error && (
-              <p role="alert" className="mt-4 rounded-lg bg-red-50 px-4 py-2.5 text-center text-xs font-bold text-red-700 ring-1 ring-red-200">
+              <p role="alert" className="mt-3 rounded-lg bg-red-50 px-4 py-2.5 text-center text-xs font-bold text-red-700 ring-1 ring-red-200">
                 {error}
               </p>
             )}
           </div>
 
           {/* price + action column */}
-          <div className="flex flex-col gap-4 border-t border-espresso/8 pt-5 lg:border-e lg:border-t-0 lg:ps-8 lg:pt-0">
+          <div className="flex flex-col gap-3.5 border-t border-espresso/8 pt-4 lg:border-e lg:border-t-0 lg:ps-6 lg:pt-0">
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-[0.68rem] text-mocha">قیمت هر عدد</p>
-                <p className="mt-1 text-2xl font-extrabold text-wine-900">{formatPrice(selected.price)}</p>
+                <p className="mt-1 text-[1.85rem] font-extrabold text-wine-900 sm:text-[1.95rem]">{formatPrice(selected.price)}</p>
               </div>
               <QuantitySelector
                 quantity={qty}
@@ -208,11 +208,11 @@ export default function ProductDetailPage() {
               type="button"
               onClick={handleAdd}
               disabled={!selected.available}
-              className="btn-lux btn-wine sheen rounded-xl py-4 text-base disabled:cursor-not-allowed disabled:opacity-45"
+              className="btn-lux btn-wine sheen rounded-xl py-3.5 text-[0.98rem] disabled:cursor-not-allowed disabled:opacity-45"
             >
               {selected.available ? 'افزودن به سبد خرید' : 'ناموجود'}
             </button>
-            <p className="text-center text-[0.7rem] leading-6 text-mocha lg:text-start">
+            <p className="text-center text-[0.68rem] leading-6 text-mocha lg:text-start">
               جمع این بخش: {formatPrice(selected.price * qty)}
               <span className="mx-2 text-mocha-light">·</span>
               ارسال رایگان برای سبد بالای {formatPrice(FREE_SHIPPING_THRESHOLD)}
@@ -221,7 +221,7 @@ export default function ProductDetailPage() {
         </div>
 
         {related.length > 0 && (
-          <section className="mt-20" aria-label="محصولات مرتبط">
+          <section className="mt-16" aria-label="محصولات مرتبط">
             <div className="mb-8 flex items-end justify-between gap-6">
               <div>
                 <p className="kicker font-display">You may also like</p>
