@@ -6,26 +6,31 @@
 // the official recipes, and a small about/contact seam.
 // ============================================================
 
+import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { FLAVORS, PRODUCTS } from '../data/products';
+import { FLAVORS, PRODUCTS, getFlavor } from '../data/products';
 import { RECIPES } from '../data/recipes';
 import { formatNumber } from '../utils/format';
 import { soundService } from '../services/soundService';
 import ProductCard from '../components/ProductCard';
-import DessertShowcase from '../components/DessertShowcase';
+import ProductVisual from '../components/ProductVisual';
 import { useReveal } from '../hooks/useReveal';
 import { cn } from '../utils/cn';
 
-// No hero photo layer — the CSS-only .hero-silk gradient carries the
-// burgundy backdrop. Real dessert imagery lives in the showcase slider.
+const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
+const HERO_DISH_URL = `${import.meta.env.BASE_URL}images/hero-dish.jpg`;
 
 export default function HomePage() {
   const jellyProducts = PRODUCTS.filter((p) => p.category === 'jelly');
   const custardProducts = PRODUCTS.filter((p) => p.category === 'custard');
+  const heroTrio = ['strawberry-j', 'banana', 'mahlab-vanilla'] as const;
 
   const jellyFlavors = Object.values(FLAVORS).filter((f) => f.category === 'jelly');
   const custardFlavors = Object.values(FLAVORS).filter((f) => f.category === 'custard');
+
+  // When the production photo is absent, a compact tasting trio stands in.
+  const [dishPhoto, setDishPhoto] = useState(true);
 
   const jellyReveal = useReveal<HTMLDivElement>();
   const custardReveal = useReveal<HTMLDivElement>();
@@ -57,8 +62,13 @@ export default function HomePage() {
         className="hero-curve dark-surface relative isolate overflow-hidden bg-wine-950 text-cream-50"
         aria-label="معرفی ژینو"
       >
-        {/* Burgundy backdrop — CSS-only silk gradient, no photo layer */}
-        <div className="hero-silk grain absolute inset-0 -z-20" aria-hidden="true" />
+        {/* IMAGE 1 — burgundy backdrop photo over silk */}
+        <div className="hero-silk grain absolute inset-0 -z-30" aria-hidden="true" />
+        <div
+          className="hero-photo absolute -inset-[4%] -z-20"
+          style={{ '--hero-img': HERO_BG_URL } as CSSProperties}
+          aria-hidden="true"
+        />
         {/* legibility scrims */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-wine-950/85 via-wine-950/35 to-wine-950/90" aria-hidden="true" />
 
@@ -99,11 +109,50 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* IMAGE 2 — premium dessert showcase */}
+          {/* IMAGE 2 — the editorial dish focal */}
           <figure className="mt-5 lg:mt-0" style={{ '--rise-delay': '0.26s' } as CSSProperties}>
-            <DessertShowcase />
+            {dishPhoto ? (
+              <div className="frame-lux mx-auto w-full max-w-[26rem] lg:max-w-[30rem]">
+                <div className="overflow-hidden rounded-2xl lg:arch">
+                  <img
+                    src={HERO_DISH_URL}
+                    alt="سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی"
+                    width={1408}
+                    height={768}
+                    loading="eager"
+                    decoding="async"
+                    onError={() => setDishPhoto(false)}
+                    className="block aspect-[16/9] w-full object-cover object-[50%_55%] shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:aspect-[4/3.2]"
+                  />
+                </div>
+              </div>
+            ) : (
+              <div className="drift flex items-end justify-center gap-3 sm:gap-5">
+                {heroTrio.map((flavorId, i) => {
+                  const flavor = getFlavor(flavorId);
+                  return (
+                    <div
+                      key={flavorId}
+                      className={cn(
+                        'frame-lux arch-sm overflow-hidden shadow-[0_40px_80px_-35px_rgba(0,0,0,0.85)]',
+                        i === 1 ? 'h-44 w-[8.5rem] sm:h-56 sm:w-44' : 'h-36 w-[7rem] sm:h-48 sm:w-40',
+                      )}
+                    >
+                      <ProductVisual
+                        color={flavor.color}
+                        emoji={flavor.emoji}
+                        name={flavor.name}
+                        className="h-full w-full"
+                        emojiClassName="text-4xl sm:text-5xl"
+                        compact
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            )}
             <figcaption className="sr-only">
-              ویترین دسرهای ژینو؛ عکاسی خوراکی به سبک ژورنالی.
+              دسرهای ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی.
             </figcaption>
           </figure>
         </div>
