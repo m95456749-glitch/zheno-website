@@ -6,7 +6,7 @@
 // the official recipes, and a small about/contact seam.
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
 import { FLAVORS, PRODUCTS, getFlavor } from '../data/products';
@@ -19,7 +19,33 @@ import { useReveal } from '../hooks/useReveal';
 import { cn } from '../utils/cn';
 
 const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
-const HERO_DISH_URL = `${import.meta.env.BASE_URL}images/hero-dish.jpg`;
+
+// Hero slideshow — FINISHED / PREPARED desserts only.
+// Every file below was verified by opening the photo: a plated, ready
+// dessert. The photos in `images/products/` are powder-in-glass package
+// shots belonging to the product cards — they are never used here.
+// All four stills are 1408×768 (16:9); the small fixed frame contain-fits
+// each one without cropping, stretching or re-encoding.
+const HERO_SLIDES = [
+  {
+    src: `${import.meta.env.BASE_URL}images/hero-dish.jpg`,
+    alt: 'سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی',
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/showcase/jelly-strawberry.jpg`,
+    alt: 'ژله توت‌فرنگی آماده در لیوان شیشه‌ای، کنار توت‌فرنگی تازه',
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/showcase/custard-vanilla.jpg`,
+    alt: 'کاستر وانیلی آماده در کاسه سفالی؛ عکاسی خوراکی طبیعی',
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/showcase/custard-cocoa.jpg`,
+    alt: 'کاستر کاکائویی آماده در کاسه سفالی؛ عکاسی خوراکی طبیعی',
+  },
+] as const;
+
+const HERO_SLIDE_MS = 3000;
 
 export default function HomePage() {
   const jellyProducts = PRODUCTS.filter((p) => p.category === 'jelly');
@@ -29,8 +55,23 @@ export default function HomePage() {
   const jellyFlavors = Object.values(FLAVORS).filter((f) => f.category === 'jelly');
   const custardFlavors = Object.values(FLAVORS).filter((f) => f.category === 'custard');
 
-  // When the production photo is absent, a compact tasting trio stands in.
-  const [dishPhoto, setDishPhoto] = useState(true);
+  // Slideshow: one still at a time, rotating every 3 s automatically.
+  // A slide that fails to load is dropped from the rotation; if none
+  // remain, the compact tasting trio stands in (as before).
+  const [activeSlide, setActiveSlide] = useState(0);
+  const [brokenSlides, setBrokenSlides] = useState<ReadonlySet<string>>(new Set());
+  const heroSlides = HERO_SLIDES.filter((slide) => !brokenSlides.has(slide.src));
+  const slideCount = heroSlides.length;
+  const slideIndex = slideCount > 0 ? activeSlide % slideCount : 0;
+
+  useEffect(() => {
+    if (slideCount < 2) return;
+    const id = setInterval(() => setActiveSlide((i) => (i + 1) % slideCount), HERO_SLIDE_MS);
+    return () => clearInterval(id);
+  }, [slideCount]);
+
+  const markSlideBroken = (src: string) =>
+    setBrokenSlides((prev) => (prev.has(src) ? prev : new Set(prev).add(src)));
 
   const jellyReveal = useReveal<HTMLDivElement>();
   const custardReveal = useReveal<HTMLDivElement>();
@@ -109,21 +150,50 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* IMAGE 2 — the editorial dish focal */}
+          {/* IMAGE 2 — finished-dessert slideshow (small fixed frame) */}
           <figure className="mt-5 lg:mt-0" style={{ '--rise-delay': '0.26s' } as CSSProperties}>
-            {dishPhoto ? (
+            {slideCount > 0 ? (
               <div className="frame-lux mx-auto w-full max-w-[26rem] lg:max-w-[30rem]">
-                <div className="overflow-hidden rounded-2xl lg:arch">
-                  <img
-                    src={HERO_DISH_URL}
-                    alt="سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی"
-                    width={1408}
-                    height={768}
-                    loading="eager"
-                    decoding="async"
-                    onError={() => setDishPhoto(false)}
-                    className="block aspect-[16/9] w-full object-cover object-[50%_55%] shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:aspect-[4/3.2]"
-                  />
+                <div className="relative overflow-hidden rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:arch">
+                  <div
+                    role="group"
+                    aria-label="دسرهای آماده‌شده از پودر ژله و کاستر ژینو"
+                    className="relative aspect-[16/9] w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)] lg:aspect-[4/3.2]"
+                  >
+                    {heroSlides.map((slide, i) => (
+                      <img
+                        key={slide.src}
+                        src={slide.src}
+                        alt={slide.alt}
+                        width={1408}
+                        height={768}
+                        loading={i === 0 ? 'eager' : 'lazy'}
+                        decoding="async"
+                        onError={() => markSlideBroken(slide.src)}
+                        aria-hidden={i !== slideIndex}
+                        className={cn(
+                          'absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ease-in-out motion-reduce:transition-none',
+                          i === slideIndex ? 'opacity-100' : 'opacity-0',
+                        )}
+                      />
+                    ))}
+                    {slideCount > 1 && (
+                      <div
+                        aria-hidden="true"
+                        className="absolute inset-x-0 bottom-2.5 z-10 flex items-center justify-center gap-2 sm:bottom-3.5"
+                      >
+                        {heroSlides.map((slide, i) => (
+                          <span
+                            key={slide.src}
+                            className={cn(
+                              'h-1 w-1 rounded-full transition-colors duration-500 motion-reduce:transition-none sm:h-1.5 sm:w-1.5',
+                              i === slideIndex ? 'bg-cream-50/75' : 'bg-cream-50/30',
+                            )}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             ) : (
@@ -152,7 +222,7 @@ export default function HomePage() {
               </div>
             )}
             <figcaption className="sr-only">
-              دسرهای ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی.
+              دسرهای آماده‌شده از پودر ژله و کاستر ژینو؛ عکاسی خوراکی به سبک ژورنالی.
             </figcaption>
           </figure>
         </div>
