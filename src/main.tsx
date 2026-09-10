@@ -9,6 +9,7 @@ import App from './App';
 import { CartProvider } from './context/CartContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import './index.css';
+import './admin/admin.css';
 
 // BASE_URL is "/" in dev and "/zheno-website/" in the production build,
 // so the router basename always matches the deployed sub-path.

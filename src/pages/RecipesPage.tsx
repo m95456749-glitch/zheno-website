@@ -3,7 +3,10 @@
 // Concise and useful: ingredients + steps, nothing more.
 // ============================================================
 
-import { RECIPES } from '../data/recipes';
+// list + lead go through the shared services (admin overlay
+// aware — identical output until an admin changes something)
+import { getActiveRecipes } from '../services/recipeStore';
+import { getSiteContent } from '../services/siteContent';
 import type { Recipe } from '../data/recipes';
 import PagePlate from '../components/PagePlate';
 
@@ -69,16 +72,19 @@ function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
 }
 
 export default function RecipesPage() {
+  const recipes = getActiveRecipes();
+  const content = getSiteContent();
+
   return (
     <div>
       <PagePlate
         kicker="The Recipe Notebook"
         title="دستور تهیه"
-        lead="دستور رسمی آماده‌سازی ژله و کاستر ژینو — ساده، سریع و دقیق."
+        lead={content.recipesLead}
         ghost="Recipes"
       />
       <div className="mx-auto max-w-4xl space-y-6 px-4 py-12 sm:px-6 sm:py-14">
-        {RECIPES.map((recipe, i) => (
+        {recipes.map((recipe, i) => (
           <RecipeCard key={recipe.id} recipe={recipe} index={i} />
         ))}
       </div>

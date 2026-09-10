@@ -6,7 +6,12 @@
 
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { FREE_SHIPPING_THRESHOLD, PRODUCTS, getFlavor, getProductById } from '../data/products';
+import { getFlavor } from '../data/products';
+// lookups + list come from the shared catalog service (admin
+// overlay aware); thresholds come from site settings (defaults =
+// the original constants, so the page renders identically).
+import { getCatalogMeta, getProductById, getVisibleProducts } from '../services/catalog';
+import { getSettings } from '../services/settings';
 import { formatNumber, formatPrice } from '../utils/format';
 import { useCartContext } from '../context/CartContext';
 import { cn } from '../utils/cn';
@@ -20,6 +25,9 @@ export default function ProductDetailPage() {
   const { addItemWithToast } = useCartContext();
 
   const product = id ? getProductById(id) : undefined;
+  // a product deactivated in the admin panel is not sellable —
+  // it renders exactly like a removed product (same 404 state).
+  const productActive = product ? getCatalogMeta(product.id).active !== false : false;
 
   const [selectedVariantId, setSelectedVariantId] = useState(
     () => product?.variants[0]?.id ?? '',
@@ -34,7 +42,7 @@ export default function ProductDetailPage() {
     setError(null);
   }, [id, product?.variants]);
 
-  if (!product) {
+  if (!product || !productActive) {
     return (
       <div className="mx-auto max-w-xl px-4 pt-28 text-center sm:px-6">
         <p className="font-display text-7xl text-wine-900/15">۴۰۴</p>
@@ -51,8 +59,8 @@ export default function ProductDetailPage() {
   const selected = product.variants.find((v) => v.id === selectedVariantId) ?? product.variants[0];
   if (!selected) return null;
 
-  const related = PRODUCTS.filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
-  const lowStock = selected.stock <= 30;
+  const related = getVisibleProducts().filter((p) => p.category === product.category && p.id !== product.id).slice(0, 4);
+  const lowStock = selected.stock <= getSettings().lowStockThreshold;
 
   const handleAdd = () => {
     const result = addItemWithToast(product.id, selected.id, qty);
@@ -215,7 +223,7 @@ export default function ProductDetailPage() {
             <p className="text-center text-[0.68rem] leading-6 text-mocha lg:text-start">
               جمع این بخش: {formatPrice(selected.price * qty)}
               <span className="mx-2 text-mocha-light">·</span>
-              ارسال رایگان برای سبد بالای {formatPrice(FREE_SHIPPING_THRESHOLD)}
+              ارسال رایگان برای سبد بالای {formatPrice(getSettings().freeShippingThreshold)}
             </p>
           </div>
         </div>

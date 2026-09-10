@@ -4,7 +4,11 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CartItem } from '../types';
-import { getProductById, getVariantById, FREE_SHIPPING_THRESHOLD } from '../data/products';
+// catalog lookups go through the shared service (admin overlay
+// aware); the free-shipping threshold comes from site settings
+// (default = the original constant — unchanged behaviour).
+import { getProductById, getVariantById } from '../services/catalog';
+import { getSettings } from '../services/settings';
 import { soundService } from '../services/soundService';
 
 const CART_STORAGE_KEY = 'zhino_cart';
@@ -79,6 +83,7 @@ function saveCart(items: CartItem[]) {
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>(() => loadCart());
   const prevSubtotalRef = useRef(0);
+  const freeShippingThreshold = getSettings().freeShippingThreshold;
 
   useEffect(() => {
     saveCart(items);
@@ -90,11 +95,11 @@ export function useCart() {
   }, 0);
 
   useEffect(() => {
-    if (prevSubtotalRef.current < FREE_SHIPPING_THRESHOLD && subtotal >= FREE_SHIPPING_THRESHOLD) {
+    if (prevSubtotalRef.current < freeShippingThreshold && subtotal >= freeShippingThreshold) {
       soundService.play('freeShipping');
     }
     prevSubtotalRef.current = subtotal;
-  }, [subtotal]);
+  }, [subtotal, freeShippingThreshold]);
 
   // NOTE: stock/availability decisions are computed from the current `items`
   // state (not inside a setState updater function) so the returned result
@@ -180,8 +185,8 @@ export function useCart() {
   }, []);
 
   const totalItems = items.reduce((sum, i) => sum + i.quantity, 0);
-  const isShippingFree = subtotal >= FREE_SHIPPING_THRESHOLD;
-  const remainingForFreeShipping = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
+  const isShippingFree = subtotal >= freeShippingThreshold;
+  const remainingForFreeShipping = Math.max(0, freeShippingThreshold - subtotal);
 
   return {
     items,

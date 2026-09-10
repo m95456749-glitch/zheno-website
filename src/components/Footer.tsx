@@ -1,9 +1,15 @@
 // ============================================================
 // ZHINO — site footer (short, elegant closing band)
+//
+// The three small flags at the end of the quick-links row are a
+// quiet, unlabeled region-style control (the site's hidden admin
+// entry). They read as a subtle language/region group — no
+// "Admin" wording anywhere next to them.
 // ============================================================
 
 import { Link } from 'react-router-dom';
 import { toPersianDigits } from '../utils/format';
+import { getSiteContent } from '../services/siteContent';
 
 const FOOT_LINKS = [
   { to: '/', label: 'خانه' },
@@ -13,8 +19,16 @@ const FOOT_LINKS = [
   { to: '/contact', label: 'تماس' },
 ];
 
+/** the quiet three-flag group (hidden admin entry) */
+const FLAG_REGIONS = [
+  { flag: '🇮🇷', label: 'ایران' },
+  { flag: '🇹🇷', label: 'ترکیه' },
+  { flag: '🇮🇶', label: 'عراق' },
+];
+
 export default function Footer() {
   const year = toPersianDigits(new Date().getFullYear());
+  const content = getSiteContent();
 
   return (
     <footer className="grain relative mt-14 overflow-hidden bg-noir text-cream-100">
@@ -40,14 +54,35 @@ export default function Footer() {
                 </Link>
               </li>
             ))}
+
+            {/* quiet region group — the hidden admin entry */}
+            <li>
+              <Link
+                to="/admin/login"
+                aria-label="انتخاب زبان و منطقه"
+                title="زبان و منطقه"
+                className="group/flags inline-flex items-center gap-[3px] rounded-full bg-cream-50/[0.04] px-2.5 py-[6px] ring-1 ring-cream-50/12 transition duration-300 hover:bg-cream-50/[0.08] hover:ring-cream-50/30"
+              >
+                {FLAG_REGIONS.map((region) => (
+                  <span
+                    key={region.flag}
+                    title={region.label}
+                    className="text-[0.7rem] leading-none opacity-55 saturate-[0.8] transition duration-300 group-hover/flags:opacity-95 group-hover/flags:saturate-100"
+                    aria-hidden="true"
+                  >
+                    {region.flag}
+                  </span>
+                ))}
+              </Link>
+            </li>
           </ul>
         </nav>
       </div>
 
       <div className="relative border-t border-cream-50/10">
         <div className="mx-auto flex max-w-6xl flex-col items-center justify-between gap-1.5 px-4 py-4 text-[0.72rem] text-cream-200/50 sm:flex-row sm:px-6">
-          <span>© {year} ژینو — تمامی حقوق محفوظ است.</span>
-          <span className="font-display tracking-[0.25em]">Quality, The ZHINO Way</span>
+          <span>© {year} ژینو — {content.footerCopyright}</span>
+          <span className="font-display tracking-[0.25em]">{content.footerTagline}</span>
         </div>
       </div>
     </footer>

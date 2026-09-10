@@ -1,0 +1,494 @@
+/* ============================================================
+   ZHINO — Admin Panel
+   A premium food-brand management interface on the ZHINO design
+   system: spacious ivory canvas, deep-wine navigation plate,
+   burgundy accents for actions/states, matte-gold details.
+   Burgundy is used as an accent language — never as the canvas.
+   ============================================================ */
+
+/* ── sidebar — the deep-wine plate (mirrors site page-plate) ── */
+
+.adm-sidebar {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-wine-950);
+  background-image:
+    radial-gradient(90% 55% at 100% -8%, rgba(113, 49, 59, 0.48) 0%, rgba(113, 49, 59, 0) 62%),
+    radial-gradient(70% 90% at 0% 112%, rgba(29, 7, 12, 0.85) 0%, rgba(29, 7, 12, 0) 58%),
+    linear-gradient(165deg, #43121c 0%, var(--color-wine-950) 72%);
+  border-inline-end: 1px solid rgba(250, 247, 242, 0.08);
+}
+
+/* ── navigation items ─────────────────────────────────────── */
+
+.adm-nav-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  width: 100%;
+  padding: 0.62rem 0.9rem;
+  border-radius: 0.7rem;
+  font-size: 0.84rem;
+  font-weight: 500;
+  line-height: 1.4;
+  color: rgba(243, 237, 228, 0.62);
+  transition:
+    background-color 0.25s ease,
+    color 0.25s ease;
+}
+
+.adm-nav-item:hover {
+  background-color: rgba(250, 247, 242, 0.05);
+  color: var(--color-cream-50);
+}
+
+.adm-nav-item.active {
+  background: linear-gradient(
+    90deg,
+    rgba(184, 154, 98, 0.16) 0%,
+    rgba(184, 154, 98, 0.04) 100%
+  );
+  color: var(--color-cream-50);
+  font-weight: 700;
+}
+
+/* gold hairline marker on the inner edge of the active item */
+.adm-nav-item.active::before {
+  content: '';
+  position: absolute;
+  inset-inline-start: 0;
+  top: 0.55rem;
+  bottom: 0.55rem;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--color-gold-500);
+}
+
+/* ── mobile drawer ────────────────────────────────────────── */
+
+@keyframes adm-drawer-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0.4;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* the document is RTL: the drawer is fixed to the start (right)
+   edge and slides in from the right. */
+.adm-drawer {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: 0;
+  width: min(20rem, 86vw);
+  display: flex;
+  flex-direction: column;
+  background-color: var(--color-wine-950);
+  background-image: linear-gradient(170deg, #43121c 0%, var(--color-wine-950) 70%);
+  box-shadow: -18px 0 44px -18px rgba(29, 7, 12, 0.55);
+  animation: adm-drawer-in 0.28s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── forms ────────────────────────────────────────────────── */
+
+.adm-field-label {
+  display: block;
+  margin-bottom: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: var(--color-wine-900);
+}
+
+.adm-input {
+  width: 100%;
+  border-radius: 0.7rem;
+  border: 1px solid rgba(41, 35, 33, 0.16);
+  background: #fff;
+  padding: 0.58rem 0.8rem;
+  font-size: 0.84rem;
+  font-weight: 600;
+  color: var(--color-espresso);
+  outline: none;
+  transition:
+    border-color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.adm-input::placeholder {
+  color: var(--color-mocha-light);
+  font-weight: 400;
+}
+
+.adm-input:hover {
+  border-color: rgba(113, 49, 59, 0.4);
+}
+
+.adm-input:focus {
+  border-color: var(--color-wine-800);
+  box-shadow: 0 0 0 3px rgba(113, 49, 59, 0.12);
+}
+
+.adm-input.err {
+  border-color: #d4604f;
+}
+
+.adm-input.err:focus {
+  box-shadow: 0 0 0 3px rgba(212, 96, 79, 0.15);
+}
+
+.adm-error {
+  margin-top: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #b3261e;
+}
+
+/* compact centered number input (inventory table) */
+.adm-stock-input {
+  width: 5.5rem;
+  text-align: center;
+}
+
+/* ── chips (filters) ──────────────────────────────────────── */
+
+.adm-chip {
+  border-radius: 9999px;
+  padding: 0.4rem 0.95rem;
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: var(--color-mocha);
+  background: #fff;
+  border: 1px solid rgba(41, 35, 33, 0.14);
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    box-shadow 0.2s ease;
+}
+
+.adm-chip:hover {
+  border-color: rgba(113, 49, 59, 0.45);
+  color: var(--color-wine-900);
+}
+
+.adm-chip.active {
+  background: var(--color-wine-900);
+  border-color: var(--color-wine-900);
+  color: var(--color-cream-50);
+  box-shadow: 0 8px 18px -10px rgba(90, 23, 37, 0.5);
+}
+
+/* ── badges (statuses / states) ───────────────────────────── */
+
+.adm-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  padding: 0.18rem 0.62rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.adm-badge-new {
+  background: rgba(90, 23, 37, 0.1);
+  color: var(--color-wine-900);
+  box-shadow: inset 0 0 0 1px rgba(90, 23, 37, 0.22);
+}
+
+.adm-badge-confirmed {
+  background: rgba(184, 154, 98, 0.16);
+  color: var(--color-gold-700);
+  box-shadow: inset 0 0 0 1px rgba(184, 154, 98, 0.4);
+}
+
+.adm-badge-processing {
+  background: rgba(41, 35, 33, 0.07);
+  color: var(--color-mocha);
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.14);
+}
+
+.adm-badge-shipped {
+  background: rgba(113, 49, 59, 0.12);
+  color: var(--color-wine-800);
+  box-shadow: inset 0 0 0 1px rgba(113, 49, 59, 0.25);
+}
+
+.adm-badge-delivered {
+  background: rgba(4, 120, 87, 0.09);
+  color: #047857;
+  box-shadow: inset 0 0 0 1px rgba(4, 120, 87, 0.25);
+}
+
+.adm-badge-cancelled {
+  background: rgba(185, 28, 28, 0.08);
+  color: #b3261e;
+  box-shadow: inset 0 0 0 1px rgba(185, 28, 28, 0.22);
+}
+
+.adm-badge-ok {
+  background: rgba(4, 120, 87, 0.09);
+  color: #047857;
+  box-shadow: inset 0 0 0 1px rgba(4, 120, 87, 0.25);
+}
+
+.adm-badge-warning {
+  background: rgba(184, 154, 98, 0.18);
+  color: var(--color-gold-700);
+  box-shadow: inset 0 0 0 1px rgba(184, 154, 98, 0.45);
+}
+
+.adm-badge-ghost {
+  background: rgba(41, 35, 33, 0.05);
+  color: var(--color-mocha);
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.12);
+}
+
+/* the small «نمایشی» mode chip */
+.adm-badge-demo {
+  border-radius: 9999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.66rem;
+  font-weight: 700;
+  color: var(--color-gold-700);
+  background: rgba(184, 154, 98, 0.14);
+  box-shadow: inset 0 0 0 1px rgba(184, 154, 98, 0.45);
+}
+
+/* ── data tables ──────────────────────────────────────────── */
+
+.adm-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.adm-th {
+  padding: 0.65rem 0.9rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: var(--color-mocha);
+  text-align: right;
+  border-bottom: 1px solid rgba(41, 35, 33, 0.1);
+  background: rgba(243, 237, 228, 0.5);
+  white-space: nowrap;
+}
+
+.adm-td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid rgba(41, 35, 33, 0.06);
+  vertical-align: middle;
+}
+
+.adm-table tbody tr:last-child .adm-td {
+  border-bottom: none;
+}
+
+.adm-row {
+  transition: background-color 0.15s ease;
+}
+
+.adm-row:hover {
+  background: rgba(113, 49, 59, 0.035);
+}
+
+/* ── icon buttons ─────────────────────────────────────────── */
+
+.adm-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  flex-shrink: 0;
+  border-radius: 0.6rem;
+  color: var(--color-mocha);
+  border: 1px solid rgba(41, 35, 33, 0.12);
+  background: #fff;
+  transition:
+    color 0.2s ease,
+    border-color 0.2s ease,
+    background-color 0.2s ease;
+}
+
+.adm-icon-btn:hover {
+  color: var(--color-wine-900);
+  border-color: rgba(113, 49, 59, 0.4);
+  background: rgba(113, 49, 59, 0.05);
+}
+
+/* ── status select (orders) ───────────────────────────────── */
+
+.adm-status-select {
+  appearance: none;
+  -webkit-appearance: none;
+  border-radius: 9999px;
+  border: none;
+  padding: 0.32rem 1.7rem 0.32rem 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: pointer;
+  outline: none;
+  background-repeat: no-repeat;
+  /* chevron on the inline-end side (left in RTL) */
+  background-position: left 0.65rem center;
+  background-size: 0.7rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Cpath d='m4 6 4 4 4-4' fill='none' stroke='%236e5f57' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  transition: box-shadow 0.2s ease;
+}
+
+.adm-status-select:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(113, 49, 59, 0.5);
+}
+
+.adm-status-select-new {
+  background-color: rgba(90, 23, 37, 0.1);
+  color: var(--color-wine-900);
+  box-shadow: inset 0 0 0 1px rgba(90, 23, 37, 0.25);
+}
+
+.adm-status-select-confirmed {
+  background-color: rgba(184, 154, 98, 0.18);
+  color: var(--color-gold-700);
+  box-shadow: inset 0 0 0 1px rgba(184, 154, 98, 0.45);
+}
+
+.adm-status-select-processing {
+  background-color: rgba(41, 35, 33, 0.07);
+  color: var(--color-mocha);
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.16);
+}
+
+.adm-status-select-shipped {
+  background-color: rgba(113, 49, 59, 0.12);
+  color: var(--color-wine-800);
+  box-shadow: inset 0 0 0 1px rgba(113, 49, 59, 0.28);
+}
+
+.adm-status-select-delivered {
+  background-color: rgba(4, 120, 87, 0.09);
+  color: #047857;
+  box-shadow: inset 0 0 0 1px rgba(4, 120, 87, 0.28);
+}
+
+.adm-status-select-cancelled {
+  background-color: rgba(185, 28, 28, 0.08);
+  color: #b3261e;
+  box-shadow: inset 0 0 0 1px rgba(185, 28, 28, 0.25);
+}
+
+/* ── toggle switch ────────────────────────────────────────── */
+
+.adm-toggle {
+  position: relative;
+  width: 2.4rem;
+  height: 1.35rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  border: none;
+  background: rgba(41, 35, 33, 0.18);
+  cursor: pointer;
+  transition: background-color 0.25s ease;
+}
+
+.adm-toggle::after {
+  content: '';
+  position: absolute;
+  top: 0.16rem;
+  inset-inline-start: 0.16rem;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(41, 35, 33, 0.3);
+  transition: transform 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.adm-toggle[aria-checked='true'] {
+  background: var(--color-wine-900);
+}
+
+/* RTL: the knob starts at the right edge and travels left */
+.adm-toggle[aria-checked='true']::after {
+  transform: translateX(-1.08rem);
+}
+
+/* ── dashboard stat cards ─────────────────────────────────── */
+
+.adm-stat {
+  position: relative;
+  display: block;
+  border-radius: 1.1rem;
+  background: #fff;
+  border: 1px solid rgba(41, 35, 33, 0.09);
+  box-shadow: 0 18px 36px -32px rgba(41, 35, 33, 0.35);
+  padding: 1.1rem 1.25rem;
+  transition:
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
+}
+
+/* a quiet gold→wine hairline on top of each card */
+.adm-stat::before {
+  content: '';
+  position: absolute;
+  inset-inline: 1.25rem;
+  top: 0;
+  height: 2px;
+  border-radius: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    var(--color-gold-500) 30%,
+    var(--color-wine-800) 70%,
+    transparent
+  );
+  opacity: 0.7;
+}
+
+a.adm-stat:hover {
+  transform: translateY(-2px);
+  border-color: rgba(113, 49, 59, 0.3);
+  box-shadow: 0 26px 44px -30px rgba(41, 35, 33, 0.4);
+}
+
+.adm-stat-warn::before {
+  background: linear-gradient(90deg, transparent, #d4a017 30%, #c2410c 70%, transparent);
+  opacity: 0.8;
+}
+
+/* ── modal ────────────────────────────────────────────────── */
+
+@keyframes adm-modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(14px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.adm-modal {
+  animation: adm-modal-in 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* ── reduced motion ───────────────────────────────────────── */
+
+@media (prefers-reduced-motion: reduce) {
+  .adm-drawer,
+  .adm-modal {
+    animation: none;
+  }
+  a.adm-stat:hover {
+    transform: none;
+  }
+}

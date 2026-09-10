@@ -7,12 +7,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useSearchParams } from 'react-router-dom';
 import { useCartContext } from '../context/CartContext';
-import {
-  SHIPPING_COST_EXPRESS,
-  SHIPPING_COST_STANDARD,
-  getProductById,
-  getVariantById,
-} from '../data/products';
+import { getProductById, getVariantById } from '../services/catalog';
+import { getSettings } from '../services/settings';
+import { recordLocalOrder } from '../services/orderStore';
 import { formatNumber, formatPrice } from '../utils/format';
 import { initiatePayment, verifyPayment } from '../services/api';
 import { soundService } from '../services/soundService';
@@ -82,7 +79,8 @@ export default function CheckoutPage() {
     [items],
   );
 
-  const shippingCost = shippingMethod === 'express' ? SHIPPING_COST_EXPRESS : SHIPPING_COST_STANDARD;
+  const { standardShippingCost, expressShippingCost } = getSettings();
+  const shippingCost = shippingMethod === 'express' ? expressShippingCost : standardShippingCost;
   const effectiveShipping = isShippingFree ? 0 : shippingCost;
   const total = subtotal + effectiveShipping;
 
@@ -176,7 +174,37 @@ export default function CheckoutPage() {
     } catch (err) {
       if (err instanceof Error && err.message === 'PAYMENT_API_NOT_CONFIGURED') {
         // Frontend-only mode: record the order locally and confirm.
+        // The record is a denormalized snapshot (names/prices at
+        // purchase time) managed by the admin panel's «سفارش‌ها»
+        // page. With a real backend the order is created there
+        // instead and this local record is simply not written.
         const id = `ZH-${Date.now().toString(36).toUpperCase()}`;
+        recordLocalOrder({
+          id,
+          createdAt: new Date().toISOString(),
+          status: 'new',
+          items: items.flatMap((item) => {
+            const product = getProductById(item.productId);
+            const variant = getVariantById(item.productId, item.variantId);
+            if (!product || !variant) return [];
+            return [
+              {
+                productId: item.productId,
+                variantId: item.variantId,
+                quantity: item.quantity,
+                productName: product.shortName,
+                weight: variant.weight,
+                unitPrice: variant.price,
+              },
+            ];
+          }),
+          customer,
+          address,
+          shippingMethod,
+          subtotal,
+          shippingCost: effectiveShipping,
+          total,
+        });
         setOrderId(id);
         clearCart();
         soundService.play('orderComplete');
@@ -434,7 +462,7 @@ export default function CheckoutPage() {
                 >
                   <span className="block text-sm font-bold text-wine-950">ارسال استاندارد</span>
                   <span className="mt-1.5 block text-xs text-mocha">
-                    {isShippingFree ? <span className="font-bold text-emerald-700">رایگان</span> : formatPrice(SHIPPING_COST_STANDARD)}
+                    {isShippingFree ? <span className="font-bold text-emerald-700">رایگان</span> : formatPrice(standardShippingCost)}
                   </span>
                 </button>
                 <button
@@ -451,7 +479,7 @@ export default function CheckoutPage() {
                 >
                   <span className="block text-sm font-bold text-wine-950">ارسال سریع</span>
                   <span className="mt-1.5 block text-xs text-mocha">
-                    {isShippingFree ? <span className="font-bold text-emerald-700">رایگان</span> : formatPrice(SHIPPING_COST_EXPRESS)}
+                    {isShippingFree ? <span className="font-bold text-emerald-700">رایگان</span> : formatPrice(expressShippingCost)}
                   </span>
                 </button>
               </div>

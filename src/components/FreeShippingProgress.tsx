@@ -2,14 +2,17 @@
 // ZHINO — free-shipping progress bar
 // ============================================================
 
-import { FREE_SHIPPING_THRESHOLD } from '../data/products';
+// threshold comes from site settings (default = the original
+// constant, so the bar renders identically until an admin changes it)
+import { getSettings } from '../services/settings';
 import { formatPrice } from '../utils/format';
 import { cn } from '../utils/cn';
 
 export default function FreeShippingProgress({ subtotal }: { subtotal: number }) {
-  const reached = subtotal >= FREE_SHIPPING_THRESHOLD;
-  const remaining = Math.max(0, FREE_SHIPPING_THRESHOLD - subtotal);
-  const pct = Math.min(100, Math.round((subtotal / FREE_SHIPPING_THRESHOLD) * 100));
+  const threshold = getSettings().freeShippingThreshold;
+  const reached = subtotal >= threshold;
+  const remaining = Math.max(0, threshold - subtotal);
+  const pct = Math.min(100, Math.round((subtotal / threshold) * 100));
 
   return (
     <div
@@ -27,7 +30,7 @@ export default function FreeShippingProgress({ subtotal }: { subtotal: number })
         </span>
         {!reached && (
           <span className="shrink-0 text-[0.62rem] font-semibold text-mocha">
-            {formatPrice(FREE_SHIPPING_THRESHOLD)}
+            {formatPrice(threshold)}
           </span>
         )}
       </div>

@@ -3,8 +3,12 @@
 // ============================================================
 
 import { Link } from 'react-router-dom';
-import { FLAVORS, PRODUCTS } from '../data/products';
-import { RECIPES } from '../data/recipes';
+import { FLAVORS } from '../data/products';
+// counts + story lead go through the shared services (admin
+// overlay aware — identical output until an admin changes something)
+import { getVisibleProducts } from '../services/catalog';
+import { getActiveRecipes } from '../services/recipeStore';
+import { getSiteContent } from '../services/siteContent';
 import { formatNumber } from '../utils/format';
 import { soundService } from '../services/soundService';
 import PagePlate from '../components/PagePlate';
@@ -30,8 +34,11 @@ const VALUES = [
 
 export default function AboutPage() {
   const flavors = Object.values(FLAVORS);
-  const jellyCount = PRODUCTS.filter((p) => p.category === 'jelly').length;
-  const custardCount = PRODUCTS.filter((p) => p.category === 'custard').length;
+  const products = getVisibleProducts();
+  const recipes = getActiveRecipes();
+  const content = getSiteContent();
+  const jellyCount = products.filter((p) => p.category === 'jelly').length;
+  const custardCount = products.filter((p) => p.category === 'custard').length;
   const valuesReveal = useReveal<HTMLDivElement>();
 
   return (
@@ -45,14 +52,14 @@ export default function AboutPage() {
             <span className="block font-medium text-gold-300">انتخابِ متفاوت</span>
           </>
         }
-        lead="ژینو با یک باور ساده شروع شد: دسر خوب، حق هر خانواده است. امروز با هر طعمی که انتخاب می‌کنید، بخشی از همین باور سر سفره‌ی شما می‌نشیند."
+        lead={content.aboutLead}
         ghost="Zhino"
       >
         <div className="mt-9 grid grid-cols-3 gap-4 border-t border-cream-50/10 pt-8">
           {[
-            { value: formatNumber(PRODUCTS.length), label: 'محصول' },
+            { value: formatNumber(products.length), label: 'محصول' },
             { value: formatNumber(flavors.length), label: 'طعم اصیل' },
-            { value: formatNumber(RECIPES.length), label: 'دستور اختصاصی' },
+            { value: formatNumber(recipes.length), label: 'دستور اختصاصی' },
           ].map((stat) => (
             <div key={stat.label}>
               <p className="text-2xl font-bold text-cream-50 sm:text-4xl">{stat.value}</p>
