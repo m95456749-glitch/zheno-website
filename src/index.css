@@ -29,9 +29,10 @@
   --color-cream-200: #e7ddd1; /* dividers, tracks, chips */
   --color-cream-300: #d9caba; /* decorative */
 
-  /* warm stone — the main site canvas (#B0A08F, selected; do not revert
-     to the lighter beiges #CDB99F / #B7A795) */
-  --color-cream-page: #b0a08f;
+  /* light ivory — the main site canvas (matches --color-cream-50 exactly,
+     so light surfaces across the site are one consistent ivory; no
+     beige/brown background shades) */
+  --color-cream-page: #faf7f2;
 
   /* ── muted matte gold — used very sparingly ─────────────── */
   --color-gold-300: #e0d0ab;
