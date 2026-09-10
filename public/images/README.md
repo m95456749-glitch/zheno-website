@@ -32,8 +32,12 @@ small fixed frame — the files are never cropped, stretched or re-encoded.
 
 - `products/*.jpg` — real photos, but they are **powder-in-glass package
   shots** wired to the product cards (see `products/README.md`).
-- `jelly-powder-hero.jpg` (when present on a branch) — jelly **powder**
-  photo, excluded by the owner.
+- `jelly-powder-hero.jpg` (when present on a branch) — excluded by the
+  owner. Re-inspected forensically: no camera provenance (zero JPEG
+  metadata markers) and its JPEG quantization tables are identical to
+  the retired generated showcase set's — it comes from the same
+  generation/encoder pipeline, not from the owner's camera. Not a real
+  finished-dessert photo.
 - `hero-dish.jpg` and `showcase/*.jpg` — generated stills, retired from
   the Hero (kept only as unused legacy assets).
 

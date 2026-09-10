@@ -28,7 +28,8 @@ const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
 // used in the Hero frame.
 // Never used here:
 //   - images/products/*        → powder-in-glass package shots (product cards only)
-//   - jelly-powder-hero.jpg    → powder photo (excluded by the owner)
+//   - jelly-powder-hero.jpg    → no camera provenance; encoder fingerprint identical
+//                                to the generated showcase set (excluded by the owner)
 //   - hero-dish.jpg, showcase/ → generated stills, retired from the Hero
 // Slides keep each file's true pixel size so the browser can reserve
 // layout; the frame itself contain-fits them without cropping,
