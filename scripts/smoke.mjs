@@ -121,7 +121,12 @@ async function render(path, { seed, clickAddToCart = false } = {}) {
 
   const text = rootEl?.textContent ?? '';
   const toastText = document.querySelector('[role="status"]')?.textContent ?? '';
-  const result = { text, errors, toastText };
+  // Hero slideshow inventory (imgs inside the hero section only — product
+  // cards further down the page also render images and must not be mixed in)
+  const heroImgSrcs = Array.from(
+    document.querySelectorAll('section[aria-label="معرفی ژینو"] img'),
+  ).map((img) => img.getAttribute('src') ?? '');
+  const result = { text, errors, toastText, heroImgSrcs };
   dom.window.close();
   return result;
 }
@@ -143,7 +148,7 @@ function expectNoErrors(label, errors) {
 
 // ── 1. Home ──────────────────────────────────────────────────
 {
-  const { text, errors } = await render('/zheno-website/');
+  const { text, errors, heroImgSrcs } = await render('/zheno-website/');
   if (text.trim().length > 200) ok('home renders substantial content (not blank)');
   else fail(`home looks blank (only ${text.trim().length} chars)`);
   expectContains('home', text, 'ژینو');
@@ -165,6 +170,19 @@ function expectNoErrors(label, errors) {
   expectContains('home', text, 'ژله لیمو');
   // Hero content + CTA
   expectContains('home', text, 'طعمِ اصیل');
+  // Hero slideshow: ONLY the 9 owner-uploaded real finished-dessert photos
+  const realSlides = heroImgSrcs.filter((s) => s.includes('images/IMG_20260903_002'));
+  if (realSlides.length === 9) ok('hero slideshow uses exactly the 9 real dessert photos');
+  else
+    fail(
+      `hero slideshow expected 9 real photos, found ${realSlides.length} ` +
+        `(all hero imgs: ${heroImgSrcs.join(', ')})`,
+    );
+  const bannedHeroImgs = heroImgSrcs.filter((s) =>
+    ['jelly-powder-hero', 'hero-dish', 'showcase/', 'images/products/'].some((b) => s.includes(b)),
+  );
+  if (bannedHeroImgs.length === 0) ok('hero has no powder/product/generated images');
+  else fail(`hero must not contain powder/product/generated images: ${bannedHeroImgs.join(', ')}`);
   expectNotContains('home', text, 'طعم متفاوت، برای لحظه‌هایی که متفاوت.');
   expectNotContains('home', text, 'یک تجربه متفاوت از دنیای ژله و کاستر');
   expectContains('home', text, 'مشاهده محصولات');

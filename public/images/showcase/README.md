@@ -1,6 +1,11 @@
-# ZHINO — Hero dessert showcase
+# ZHINO — Hero dessert showcase (RETIRED from the Hero)
 
-Decorative plated-dessert stills used only in the home Hero slider.
+> **Status:** no longer used by the home Hero. The Hero slideshow now shows
+> only the owner's 9 real finished-dessert photos (`../IMG_20260903_002*.jpg`,
+> see `../README.md`). These generated stills are kept as unused legacy
+> assets only — do not wire them back into the Hero.
+
+Decorative plated-dessert stills, formerly used in the home Hero slider.
 They illustrate desserts that can be made with the real ZHINO catalog
 (jelly powder + custard powder) using the official recipes.
 
