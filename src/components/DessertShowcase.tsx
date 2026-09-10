@@ -1,9 +1,13 @@
 // ============================================================
 // ZHINO — hero product-photo showcase
-// Uses only the real uploaded product images already present in
-// public/images/products. The frame follows each file's native
-// dimensions so images are not cropped, edited, re-encoded, or
-// distorted.
+// Uses ONLY the seven real uploaded photos of the hero shoot
+// (public/images/products/*, camera-EXIF batch). Files are
+// never cropped, edited, re-encoded, or distorted: the frame
+// follows each file's native dimensions and the photo is
+// presented with object-contain.
+//
+// Rotation: one photo at a time, advancing automatically every
+// exactly 3000 ms — no previous/next arrows, subtle dots only.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -19,50 +23,69 @@ type Slide = {
   height: number;
 };
 
+// Real hero-shoot photos (EXIF-verified originals). Order is the
+// display order; the first photo is shown immediately on load.
 const SLIDES: Slide[] = [
-  {
-    id: 'jelly-strawberry',
-    src: 'images/products/jelly-strawberry.jpg',
-    alt: 'پودر ژله توت فرنگی ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
-    position: '50% 50%',
-    width: 408,
-    height: 450,
-  },
-  {
-    id: 'jelly-pomegranate',
-    src: 'images/products/jelly-pomegranate.jpg',
-    alt: 'پودر ژله انار ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
-    position: '50% 50%',
-    width: 424,
-    height: 447,
-  },
-  {
-    id: 'custard-mahlab-vanilla',
-    src: 'images/products/custard-mahlab-vanilla.jpg',
-    alt: 'پودر کاستر وانیلی ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
-    position: '50% 50%',
-    width: 300,
-    height: 361,
-  },
   {
     id: 'jelly-cantaloupe',
     src: 'images/products/jelly-cantaloupe.jpg',
-    alt: 'پودر ژله طالبی ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
+    alt: 'پودر ژله طالبی ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
     position: '50% 50%',
     width: 587,
     height: 874,
   },
   {
-    id: 'custard-seven-fruit',
-    src: 'images/products/custard-seven-fruit.jpg',
-    alt: 'پودر کاستر هفت میوه ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
+    id: 'jelly-watermelon',
+    src: 'images/products/jelly-watermelon.jpg',
+    alt: 'پودر ژله هندوانه ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
     position: '50% 50%',
-    width: 288,
-    height: 349,
+    width: 586,
+    height: 874,
+  },
+  {
+    id: 'jelly-mango',
+    src: 'images/products/jelly-mango.jpg',
+    alt: 'پودر ژله انبه ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
+    position: '50% 50%',
+    width: 571,
+    height: 839,
+  },
+  {
+    id: 'jelly-mulberry',
+    src: 'images/products/jelly-mulberry.jpg',
+    alt: 'پودر ژله شاتوت ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
+    position: '50% 50%',
+    width: 571,
+    height: 814,
+  },
+  {
+    id: 'jelly-grape',
+    src: 'images/products/jelly-grape.jpg',
+    alt: 'پودر ژله انگور ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
+    position: '50% 50%',
+    width: 562,
+    height: 834,
+  },
+  {
+    id: 'jelly-kiwi',
+    src: 'images/products/jelly-kiwi.jpg',
+    alt: 'پودر ژله کیوی ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
+    position: '50% 50%',
+    width: 533,
+    height: 825,
+  },
+  {
+    id: 'jelly-lemon',
+    src: 'images/products/jelly-lemon.jpg',
+    alt: 'پودر ژله لیمو ژینو در لیوان شیشه‌ای؛ عکس واقعی محصول',
+    position: '50% 50%',
+    width: 532,
+    height: 859,
   },
 ];
 
-const AUTO_MS = 5600;
+// Exactly 3 seconds between photo changes.
+const AUTO_MS = 3000;
 
 function assetUrl(src: string) {
   return `${import.meta.env.BASE_URL}${src}`;
@@ -71,11 +94,8 @@ function assetUrl(src: string) {
 export default function DessertShowcase() {
   const [failed, setFailed] = useState<ReadonlySet<string>>(() => new Set());
   const [index, setIndex] = useState(0);
-  const [hovering, setHovering] = useState(false);
-  const [focused, setFocused] = useState(false);
   const [reducedMotion, setReducedMotion] = useState(false);
   const touchStart = useRef<{ x: number; y: number } | null>(null);
-  const paused = hovering || focused;
 
   const slides = SLIDES.filter((slide) => !failed.has(slide.id));
   const count = slides.length;
@@ -102,16 +122,19 @@ export default function DessertShowcase() {
   const goForward = useCallback(() => goTo(current + 1), [goTo, current]);
   const goBackward = useCallback(() => goTo(current - 1), [goTo, current]);
 
+  // Unconditional 3-second cadence — no hover/focus pause, so the
+  // photo really changes every exactly 3000 ms. Users who prefer
+  // reduced motion still get the 3-second change, only without the
+  // fade (instant swap instead of animation).
   useEffect(() => {
-    if (count === 0 || paused || reducedMotion) return;
+    if (count === 0) return;
 
     const tick = window.setInterval(() => {
-      if (typeof document !== 'undefined' && document.hidden) return;
       setIndex((i) => (i + 1) % count);
     }, AUTO_MS);
 
     return () => window.clearInterval(tick);
-  }, [count, paused, reducedMotion]);
+  }, [count]);
 
   const onImgError = (id: string) => {
     setFailed((prior) => {
@@ -165,14 +188,6 @@ export default function DessertShowcase() {
         role="region"
         aria-roledescription="carousel"
         aria-label="ویترین تصاویر واقعی محصولات ژینو"
-        onMouseEnter={() => setHovering(true)}
-        onMouseLeave={() => setHovering(false)}
-        onFocus={() => setFocused(true)}
-        onBlur={(event) => {
-          if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-            setFocused(false);
-          }
-        }}
         onKeyDown={onKeyDown}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
@@ -190,6 +205,7 @@ export default function DessertShowcase() {
               <div
                 key={slide.id}
                 className={cn('showcase-slide', on && 'is-on')}
+                style={reducedMotion ? { transition: 'none' } : undefined}
                 role="group"
                 aria-roledescription="slide"
                 aria-label={`${i + 1} از ${count}`}
@@ -200,7 +216,7 @@ export default function DessertShowcase() {
                   alt={on ? slide.alt : ''}
                   width={slide.width}
                   height={slide.height}
-                  loading={i === 0 ? 'eager' : 'lazy'}
+                  loading="eager"
                   decoding="async"
                   fetchPriority={i === 0 ? 'high' : 'low'}
                   onError={() => onImgError(slide.id)}
