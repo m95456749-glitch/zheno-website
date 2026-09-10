@@ -1,16 +1,13 @@
 // ============================================================
-// ZHINO — hero dessert showcase (jewel-window slider)
-// One plated visual at a time, inside the existing Hero frame.
-// Real production photos are shown without cropping — the
-// container aspect ratio matches the actual image proportions
-// (1408×768 → 116). Navigation is auto-advance with subtle
-// dot indicators only; no prev/next arrow buttons.
+// ZHINO — hero product-photo showcase
+// Uses only the real uploaded product images already present in
+// public/images/products. The frame follows each file's native
+// dimensions so images are not cropped, edited, re-encoded, or
+// distorted.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent, PointerEvent } from 'react';
-import { getFlavor } from '../data/products';
-import ProductVisual from './ProductVisual';
 import { cn } from '../utils/cn';
 
 type Slide = {
@@ -22,51 +19,50 @@ type Slide = {
   height: number;
 };
 
-// Real uploaded images only. Each file is a genuine food photo
-// that illustrates a dessert preparable from the ZHINO catalog.
-// Dimensions are the native pixel size of each file — used only
-// for intrinsic sizing hints, never to crop or stretch.
 const SLIDES: Slide[] = [
   {
-    id: 'trio',
-    src: 'images/hero-dish.jpg',
-    alt: 'سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی',
+    id: 'jelly-strawberry',
+    src: 'images/products/jelly-strawberry.jpg',
+    alt: 'پودر ژله توت فرنگی ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
     position: '50% 50%',
-    width: 1408,
-    height: 768,
+    width: 408,
+    height: 450,
   },
   {
-    id: 'strawberry-jelly',
-    src: 'images/showcase/jelly-strawberry.jpg',
-    alt: 'ژله توت‌فرنگی ژینو، آماده شده طبق دستور تهیه، در لیوان ساده کنار توت‌فرنگی تازه',
+    id: 'jelly-pomegranate',
+    src: 'images/products/jelly-pomegranate.jpg',
+    alt: 'پودر ژله انار ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
     position: '50% 50%',
-    width: 1408,
-    height: 768,
+    width: 424,
+    height: 447,
   },
   {
-    id: 'vanilla-custard',
-    src: 'images/showcase/custard-vanilla.jpg',
-    alt: 'کاستر محلبی وانیلی ژینو، پخته‌شده با شیر و شکر، در کاسه سرامیکی',
+    id: 'custard-mahlab-vanilla',
+    src: 'images/products/custard-mahlab-vanilla.jpg',
+    alt: 'پودر کاستر وانیلی ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
     position: '50% 50%',
-    width: 1408,
-    height: 768,
+    width: 300,
+    height: 361,
   },
   {
-    id: 'cocoa-custard',
-    src: 'images/showcase/custard-cocoa.jpg',
-    alt: 'کاستر کاکائو ژینو، غلیظ و قاشق‌خور، در کاسه سرامیکی کنار پنجره',
+    id: 'jelly-cantaloupe',
+    src: 'images/products/jelly-cantaloupe.jpg',
+    alt: 'پودر ژله طالبی ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
     position: '50% 50%',
-    width: 1408,
-    height: 768,
+    width: 587,
+    height: 874,
+  },
+  {
+    id: 'custard-seven-fruit',
+    src: 'images/products/custard-seven-fruit.jpg',
+    alt: 'پودر کاستر هفت میوه ژینو در لیوان شیشه‌ای؛ تصویر واقعی محصول آپلود شده',
+    position: '50% 50%',
+    width: 288,
+    height: 349,
   },
 ];
 
-const FALLBACK_FLAVORS = ['strawberry-j', 'banana', 'mahlab-vanilla'] as const;
 const AUTO_MS = 5600;
-
-// Native aspect ratio of every real uploaded photo (1408×768 = 11∶6).
-// The frame adopts this ratio so no image is ever cropped.
-const NATIVE_ASPECT = '11 / 6';
 
 function assetUrl(src: string) {
   return `${import.meta.env.BASE_URL}${src}`;
@@ -84,6 +80,7 @@ export default function DessertShowcase() {
   const slides = SLIDES.filter((slide) => !failed.has(slide.id));
   const count = slides.length;
   const current = count > 0 ? ((index % count) + count) % count : 0;
+  const currentSlide = slides[current];
 
   useEffect(() => {
     const mq = window.matchMedia?.('(prefers-reduced-motion: reduce)');
@@ -95,15 +92,15 @@ export default function DessertShowcase() {
   }, []);
 
   const goTo = useCallback(
-    (next: number) => {
+    (target: number) => {
       if (count === 0) return;
-      setIndex(((next % count) + count) % count);
+      setIndex(((target % count) + count) % count);
     },
     [count],
   );
 
-  const goNext = useCallback(() => goTo(current + 1), [goTo, current]);
-  const goPrev = useCallback(() => goTo(current - 1), [goTo, current]);
+  const goForward = useCallback(() => goTo(current + 1), [goTo, current]);
+  const goBackward = useCallback(() => goTo(current - 1), [goTo, current]);
 
   useEffect(() => {
     if (count === 0 || paused || reducedMotion) return;
@@ -114,14 +111,14 @@ export default function DessertShowcase() {
     }, AUTO_MS);
 
     return () => window.clearInterval(tick);
-  }, [count, paused, reducedMotion, current]);
+  }, [count, paused, reducedMotion]);
 
   const onImgError = (id: string) => {
-    setFailed((prev) => {
-      if (prev.has(id)) return prev;
-      const next = new Set(prev);
-      next.add(id);
-      return next;
+    setFailed((prior) => {
+      if (prior.has(id)) return prior;
+      const updated = new Set(prior);
+      updated.add(id);
+      return updated;
     });
   };
 
@@ -139,17 +136,17 @@ export default function DessertShowcase() {
     const dx = event.clientX - start.x;
     const dy = event.clientY - start.y;
     if (Math.abs(dx) < 48 || Math.abs(dx) < Math.abs(dy)) return;
-    if (dx < 0) goNext();
-    else goPrev();
+    if (dx < 0) goForward();
+    else goBackward();
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'ArrowLeft') {
       event.preventDefault();
-      goNext();
+      goForward();
     } else if (event.key === 'ArrowRight') {
       event.preventDefault();
-      goPrev();
+      goBackward();
     } else if (event.key === 'Home') {
       event.preventDefault();
       goTo(0);
@@ -159,43 +156,15 @@ export default function DessertShowcase() {
     }
   };
 
-  if (count === 0) {
-    return (
-      <div className="frame-lux mx-auto w-full max-w-[28rem] lg:max-w-[32rem]">
-        <div className="drift flex items-end justify-center gap-3 sm:gap-5">
-          {FALLBACK_FLAVORS.map((flavorId, i) => {
-            const flavor = getFlavor(flavorId);
-            return (
-              <div
-                key={flavorId}
-                className={cn(
-                  'frame-lux arch-sm overflow-hidden shadow-[0_40px_80px_-35px_rgba(0,0,0,0.85)]',
-                  i === 1 ? 'h-44 w-[8.5rem] sm:h-56 sm:w-44' : 'h-36 w-[7rem] sm:h-48 sm:w-40',
-                )}
-              >
-                <ProductVisual
-                  color={flavor.color}
-                  emoji={flavor.emoji}
-                  name={flavor.name}
-                  className="h-full w-full"
-                  emojiClassName="text-4xl sm:text-5xl"
-                  compact
-                />
-              </div>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
+  if (count === 0 || !currentSlide) return null;
 
   return (
-    <div className="frame-lux mx-auto w-full max-w-[28rem] lg:max-w-[32rem]">
+    <div className="frame-lux mx-auto w-full max-w-[18rem] sm:max-w-[20rem] lg:max-w-[21rem]">
       <div
-        className="showcase-stage overflow-hidden rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)]"
+        className="showcase-stage rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)]"
         role="region"
         aria-roledescription="carousel"
-        aria-label="ویترین دسر ژینو"
+        aria-label="ویترین تصاویر واقعی محصولات ژینو"
         onMouseEnter={() => setHovering(true)}
         onMouseLeave={() => setHovering(false)}
         onFocus={() => setFocused(true)}
@@ -211,10 +180,9 @@ export default function DessertShowcase() {
           touchStart.current = null;
         }}
       >
-        {/* Aspect ratio matches the native 11∶6 of every real photo so the frame grows to the image, not the other way around. */}
         <div
-          className="relative w-full"
-          style={{ aspectRatio: NATIVE_ASPECT }}
+          className="relative w-full transition-[aspect-ratio] duration-500 ease-out"
+          style={{ aspectRatio: `${currentSlide.width} / ${currentSlide.height}` }}
         >
           {slides.map((slide, i) => {
             const on = i === current;
@@ -227,7 +195,6 @@ export default function DessertShowcase() {
                 aria-label={`${i + 1} از ${count}`}
                 aria-hidden={on ? undefined : true}
               >
-                {/* object-contain keeps the full photo visible even if a browser rounds the aspect ratio; the native 11∶6 frame means there is no letterbox in practice. */}
                 <img
                   src={assetUrl(slide.src)}
                   alt={on ? slide.alt : ''}
@@ -247,15 +214,14 @@ export default function DessertShowcase() {
 
           <div className="showcase-vignette" aria-hidden="true" />
 
-          {/* Subtle dot indicators only — no prev/next arrow buttons */}
           {count > 1 && (
-            <div className="showcase-dots" role="group" aria-label="انتخاب دسر">
+            <div className="showcase-dots" role="group" aria-label="انتخاب تصویر محصول">
               <span className="showcase-dots-rule" aria-hidden="true" />
               {slides.map((slide, i) => (
                 <button
                   key={slide.id}
                   type="button"
-                  aria-label={`دسر ${i + 1}`}
+                  aria-label={`تصویر ${i + 1}`}
                   aria-current={i === current ? 'true' : undefined}
                   className={cn('showcase-dot', i === current && 'is-on')}
                   onClick={() => goTo(i)}
