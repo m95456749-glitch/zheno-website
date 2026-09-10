@@ -4,6 +4,7 @@
 
 import { useState } from 'react';
 import { soundService } from '../services/soundService';
+import { getSiteContent } from '../services/siteContent';
 import { cn } from '../utils/cn';
 import PagePlate from '../components/PagePlate';
 
@@ -16,6 +17,7 @@ const inputClass = (hasError: boolean) =>
   );
 
 export default function ContactPage() {
+  const content = getSiteContent();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [message, setMessage] = useState('');
@@ -46,7 +48,7 @@ export default function ContactPage() {
       <PagePlate
         kicker="Get in Touch"
         title="تماس با ژینو"
-        lead="سؤال، پیشنهاد یا انتقادی دارید؟ از طریق فرم زیر برای ما بنویسید؛ در ساعات کاری پاسخ می‌دهیم."
+        lead={content.contactLead}
         ghost="Contact"
       />
 

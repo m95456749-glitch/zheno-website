@@ -6,7 +6,7 @@
 import { createContext, useContext, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useCart } from '../hooks/useCart';
-import { getProductById } from '../data/products';
+import { getProductById } from '../services/catalog';
 
 interface AddResult {
   success: boolean;

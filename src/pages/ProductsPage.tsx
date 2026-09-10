@@ -4,7 +4,9 @@
 
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PRODUCTS } from '../data/products';
+// list + counts go through the shared catalog service (admin
+// overlay aware — identical output until an admin changes something)
+import { getVisibleProducts } from '../services/catalog';
 import type { ProductCategory } from '../types';
 import { formatNumber } from '../utils/format';
 import { cn } from '../utils/cn';
@@ -27,18 +29,20 @@ export default function ProductsPage() {
 
   const gridReveal = useReveal<HTMLDivElement>();
 
+  const products = useMemo(() => getVisibleProducts(), []);
+
   const counts = useMemo(
     () => ({
-      all: PRODUCTS.length,
-      jelly: PRODUCTS.filter((p) => p.category === 'jelly').length,
-      custard: PRODUCTS.filter((p) => p.category === 'custard').length,
+      all: products.length,
+      jelly: products.filter((p) => p.category === 'jelly').length,
+      custard: products.filter((p) => p.category === 'custard').length,
     }),
-    [],
+    [products],
   );
 
   const filtered = useMemo(
-    () => (active === 'all' ? PRODUCTS : PRODUCTS.filter((p) => p.category === active)),
-    [active],
+    () => (active === 'all' ? products : products.filter((p) => p.category === active)),
+    [active, products],
   );
 
   const setFilter = (filter: Filter) => {

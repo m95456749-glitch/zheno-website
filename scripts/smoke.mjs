@@ -47,6 +47,7 @@ try {
       'import.meta.env.VITE_API_BASE_URL': '""',
       'import.meta.env.VITE_ENABLE_CHECKOUT': '"true"',
       'import.meta.env.VITE_ENABLE_ACCOUNT': '"false"',
+      'import.meta.env.VITE_ADMIN_AUTH_MODE': '"demo"',
     },
   });
   appCode = result.outputFiles[0].text;
@@ -126,7 +127,9 @@ async function render(path, { seed, clickAddToCart = false } = {}) {
   const heroImgSrcs = Array.from(
     document.querySelectorAll('section[aria-label="معرفی ژینو"] img'),
   ).map((img) => img.getAttribute('src') ?? '');
-  const result = { text, errors, toastText, heroImgSrcs };
+  // link hrefs (e.g. to verify the hidden footer entry)
+  const links = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
+  const result = { text, errors, toastText, heroImgSrcs, links };
   dom.window.close();
   return result;
 }
@@ -346,6 +349,154 @@ function expectNoErrors(label, errors) {
   const r = await render('/zheno-website/this-page-does-not-exist');
   expectContains('404 page', r.text, 'صفحه یافت نشد');
   expectNoErrors('404 page', r.errors);
+}
+
+// ── 13. Hidden admin entry — the quiet three-flag footer group ──
+{
+  const { text, links, errors } = await render('/zheno-website/');
+  expectContains('footer flags', text, '🇮🇷');
+  expectContains('footer flags', text, '🇹');
+  expectContains('footer flags', text, '🇮🇶');
+  if (links.some((h) => h.includes('/admin/login'))) ok('footer flag group links to /admin/login');
+  else fail('footer flag group must link to /admin/login');
+  expectNoErrors('footer flags', errors);
+}
+
+// ── 14. Admin login page (honest demo-auth disclosure) ──────
+{
+  const { text, errors } = await render('/zheno-website/admin/login');
+  expectContains('admin login', text, 'ورود به پنل مدیریت');
+  expectContains('admin login', text, 'احراز هویت واقعی');
+  expectNotContains('admin login', text, 'سفارش‌های در انتظار');
+  expectNoErrors('admin login', errors);
+}
+
+// ── 15. Admin guard — no session means the login page ───────
+{
+  const { text, errors } = await render('/zheno-website/admin');
+  expectContains('admin guard', text, 'ورود به پنل مدیریت');
+  expectNoErrors('admin guard', errors);
+}
+{
+  const { text, errors } = await render('/zheno-website/admin/products');
+  expectContains('admin deep-link guard', text, 'ورود به پنل مدیریت');
+  expectNoErrors('admin deep-link guard', errors);
+}
+
+// ── 16. Demo login flow → dashboard (in-memory session) ─────
+{
+  const errors = [];
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (e) => {
+    const msg = String(e?.message ?? e);
+    if (/Could not load|ENOTFOUND|EAI_AGAIN|network|Not implemented/i.test(msg)) return;
+    errors.push('jsdomError: ' + msg);
+  });
+  virtualConsole.on('error', (...args) => {
+    errors.push('console.error: ' + args.map(String).join(' '));
+  });
+
+  const dom = new JSDOM(SHELL, {
+    url: 'http://localhost/zheno-website/admin/login',
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+    beforeParse(window) {
+      window.scrollTo = () => undefined;
+      window.scrollBy = () => undefined;
+      // seed one recorded order (exactly what the frontend-only checkout writes)
+      window.localStorage.setItem(
+        'zhino_admin_orders_v1',
+        JSON.stringify([
+          {
+            id: 'ZH-SMOKE01',
+            createdAt: new Date().toISOString(),
+            status: 'new',
+            items: [
+              {
+                productId: 'jelly-strawberry',
+                variantId: 'jelly-strawberry-250',
+                quantity: 3,
+                productName: 'ژله توت فرنگی',
+                weight: '۲۵۰ گرم',
+                unitPrice: 200000,
+              },
+            ],
+            customer: { firstName: 'سارا', lastName: 'محمدی', phone: '09120000000', email: '' },
+            address: { province: 'تهران', city: 'تهران', address: 'خیابان نمونه', postalCode: '1234567890' },
+            shippingMethod: 'standard',
+            subtotal: 600000,
+            shippingCost: 50000,
+            total: 650000,
+          },
+        ]),
+      );
+    },
+  });
+
+  const { document } = dom.window;
+  const script = document.createElement('script');
+  script.textContent = appCode;
+  document.body.appendChild(script);
+
+  const deadline = Date.now() + 12000;
+  let loginForm = null;
+  while (Date.now() < deadline) {
+    const form = document.querySelector('form');
+    if (form && document.querySelector('input[autocomplete="username"]')) {
+      loginForm = form;
+      break;
+    }
+    await sleep(100);
+  }
+
+  if (!loginForm) {
+    fail('admin login form did not render');
+  } else {
+    // fill the controlled inputs the way a user would (native setter + input event)
+    const setReactValue = (input, value) => {
+      const proto =
+        input.tagName === 'TEXTAREA'
+          ? dom.window.HTMLTextAreaElement.prototype
+          : dom.window.HTMLInputElement.prototype;
+      Object.getOwnPropertyDescriptor(proto, 'value').set.call(input, value);
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+    setReactValue(document.querySelector('input[autocomplete="username"]'), 'admin');
+    setReactValue(document.querySelector('input[type="password"]'), 'demo-1234');
+    loginForm.dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+    const text = () => document.getElementById('root')?.textContent ?? '';
+    const textDeadline = Date.now() + 12000;
+    let sawDashboard = false;
+    while (Date.now() < textDeadline) {
+      if (text().includes('سفارش‌های در انتظار')) {
+        sawDashboard = true;
+        break;
+      }
+      await sleep(100);
+    }
+    if (sawDashboard) {
+      ok('demo login reaches the dashboard (in-memory session)');
+      const t = text();
+      expectContains('admin dashboard', t, 'ZH-SMOKE01');
+      expectContains('admin dashboard', t, 'سارا');
+      expectContains('admin dashboard', t, '۶۵۰٬۰۰۰ تومان');
+      // main admin navigation is present
+      expectContains('admin dashboard', t, 'محصولات');
+      expectContains('admin dashboard', t, 'سفارش‌ها');
+      expectContains('admin dashboard', t, 'موجودی');
+      expectContains('admin dashboard', t, 'تنظیمات');
+      expectContains('admin dashboard', t, 'خروج');
+      // demo-mode disclosure is visible
+      expectContains('admin dashboard', t, 'نمایشی');
+    } else {
+      fail('demo login did not reach the dashboard (text: ' + text().slice(0, 220) + ')');
+    }
+  }
+
+  dom.window.close();
+  expectNoErrors('admin login flow', errors);
 }
 
 console.log(failures === 0 ? '\nAll smoke checks passed.' : `\n${failures} check(s) failed.`);

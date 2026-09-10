@@ -7,12 +7,9 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useCartContext } from '../context/CartContext';
-import {
-  SHIPPING_COST_STANDARD,
-  getFlavor,
-  getProductById,
-  getVariantById,
-} from '../data/products';
+import { getFlavor } from '../data/products';
+import { getProductById, getVariantById } from '../services/catalog';
+import { getSettings } from '../services/settings';
 import { formatNumber, formatPrice } from '../utils/format';
 import { soundService } from '../services/soundService';
 import FreeShippingProgress from '../components/FreeShippingProgress';
@@ -25,7 +22,7 @@ export default function CartPage() {
   const [lineError, setLineError] = useState<string | null>(null);
   const navigate = useNavigate();
 
-  const shippingCost = items.length === 0 || isShippingFree ? 0 : SHIPPING_COST_STANDARD;
+  const shippingCost = items.length === 0 || isShippingFree ? 0 : getSettings().standardShippingCost;
   const total = subtotal + shippingCost;
 
   const flashError = (message: string) => {
