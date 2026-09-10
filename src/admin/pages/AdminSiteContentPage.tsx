@@ -3,6 +3,7 @@
 // Only the strings the site already shows are editable (see
 // src/services/siteContent.ts). Defaults are the exact current
 // texts, so the storefront renders identically until changed.
+// UI: one form, one primary «ذخیره» button, quiet «بازنشانی».
 // ============================================================
 
 import { useState } from 'react';
@@ -84,8 +85,8 @@ export default function AdminSiteContentPage() {
           </Field>
         ))}
 
-        <div className="flex flex-col gap-3 border-t border-espresso/8 pt-5 sm:flex-row">
-          <button type="button" onClick={save} className="btn-lux btn-wine flex-1 rounded-xl">
+        <div className="flex flex-col gap-3 border-t border-espresso/8 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <button type="button" onClick={save} className="btn-lux btn-wine rounded-xl sm:min-w-48">
             ذخیره تغییرات
           </button>
           <button
@@ -97,17 +98,16 @@ export default function AdminSiteContentPage() {
               }
             }}
             disabled={!changed}
-            className="btn-lux btn-line-dark rounded-xl disabled:cursor-not-allowed disabled:opacity-40"
+            className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:no-underline"
           >
-            بازنشانی
+            بازنشانی به متن‌های اولیه
           </button>
         </div>
       </div>
 
       <p className="mt-5 text-[0.7rem] leading-6 text-mocha">
         این بخش فقط متن‌هایی را که سایت فعلاً نمایش می‌دهد ویرایش می‌کند؛ ساختار و طرح‌بندی صفحات
-        دست‌نخورده می‌ماند. تا زمانی که تغییری ذخیره نشود، سایت دقیقاً همان متن‌های فعلی را
-        نشان می‌دهد.
+        دست‌نخورده می‌ماند.
       </p>
     </div>
   );

@@ -3,13 +3,13 @@
 // One source of truth: the same variant stock the storefront's
 // cart/checkout logic uses (via src/services/catalog.ts).
 // No second inventory system — only the existing stock field.
+// UI: a single editable list; the number itself is the control.
 // ============================================================
 
 import { useEffect, useMemo, useState } from 'react';
 import { setVariantStock, useCatalog } from '../../services/catalog';
 import { getSettings } from '../../services/settings';
 import { getFlavor } from '../../data/products';
-import { formatNumber } from '../../utils/format';
 import { SavedFlash } from '../components/ui';
 import { cn } from '../../utils/cn';
 
@@ -66,9 +66,6 @@ export default function AdminInventoryPage() {
     [catalog],
   );
 
-  const lowCount = rows.filter((r) => r.variant.stock > 0 && r.variant.stock <= settings.lowStockThreshold).length;
-  const outCount = rows.filter((r) => r.variant.stock === 0).length;
-
   const save = (productId: string, variantId: string, stock: number) => {
     setVariantStock(productId, variantId, stock);
     const key = `${productId}__${variantId}`;
@@ -78,22 +75,6 @@ export default function AdminInventoryPage() {
 
   return (
     <div>
-      {/* summary */}
-      <div className="mb-5 grid grid-cols-3 gap-3">
-        <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-espresso/10">
-          <p className="text-[0.68rem] font-bold text-mocha">کل اقلام</p>
-          <p className="mt-0.5 text-lg font-extrabold text-wine-950">{formatNumber(rows.length)}</p>
-        </div>
-        <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-gold-500/40">
-          <p className="text-[0.68rem] font-bold text-gold-700">کم‌موجود</p>
-          <p className="mt-0.5 text-lg font-extrabold text-gold-700">{formatNumber(lowCount)}</p>
-        </div>
-        <div className="rounded-xl bg-white px-4 py-3 ring-1 ring-red-300">
-          <p className="text-[0.68rem] font-bold text-red-600">اتمام موجودی</p>
-          <p className="mt-0.5 text-lg font-extrabold text-red-600">{formatNumber(outCount)}</p>
-        </div>
-      </div>
-
       <SavedFlash show={savedId !== null} />
 
       {/* desktop table */}
@@ -187,10 +168,9 @@ export default function AdminInventoryPage() {
         })}
       </ul>
 
-      <p className="mt-5 max-w-2xl text-[0.7rem] leading-6 text-mocha">
-        آستانه هشدار کم‌موجودی: {formatNumber(settings.lowStockThreshold)} عدد — از بخش تنظیمات قابل
-        تغییر است. این صفحه دقیقاً همان فیلد موجودی را ویرایش می‌کند که منطق سبد خرید و
-        تسویه‌حساب فروشگاه از آن استفاده می‌کند؛ منبعی جداگانه ساخته نشده است.
+      <p className="mt-6 max-w-2xl text-[0.7rem] leading-6 text-mocha">
+        عدد موجودی هر ردیف را تغییر دهید و بیرون از کادر کلیک کنید تا ذخیره شود. اگر موجودی از
+        آستانه هشدار (تنظیمات) کمتر شود، وضعیت «کم‌موجود» نمایش داده می‌شود.
       </p>
     </div>
   );

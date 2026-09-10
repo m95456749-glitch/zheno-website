@@ -75,12 +75,8 @@ export default function AdminLoginPage() {
       <main className="flex flex-1 items-start justify-center px-4 py-10 sm:items-center sm:py-14">
         <div className="w-full max-w-md">
           <div className="text-center">
-            <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-wine-900 text-2xl font-extrabold text-gold-300 shadow-lg shadow-wine-900/25 ring-1 ring-wine-900/15">
-              ژ
-            </span>
-            <p className="kicker mt-5 font-display">Zhino · Admin</p>
-            <h1 className="mt-2 text-2xl font-bold text-wine-950">ورود به پنل مدیریت</h1>
-            <p className="mt-2 text-[0.8rem] leading-7 text-mocha">
+            <h1 className="text-2xl font-bold text-wine-950">ورود به پنل مدیریت</h1>
+            <p className="mt-2 text-[0.82rem] leading-7 text-mocha">
               مدیریت محصولات، سفارش‌ها و محتوای فروشگاه ژینو.
             </p>
           </div>

@@ -2,6 +2,8 @@
 // ZHINO — admin: order management
 // Orders recorded by the existing checkout (frontend-only mode:
 // same browser). Simple six-state workflow, no customer CRM.
+// UI: one filter menu + one card per order; the primary action
+// is the status select on each order.
 // ============================================================
 
 import { useMemo, useState } from 'react';
@@ -24,13 +26,6 @@ export default function AdminOrdersPage() {
   const orders = useStoredOrders();
   const [filter, setFilter] = useState<StatusFilter>('all');
 
-  const counts = useMemo(() => {
-    const c = new Map<OrderStatus, number>();
-    for (const s of ORDER_STATUSES) c.set(s.id, 0);
-    for (const o of orders) c.set(o.status, (c.get(o.status) ?? 0) + 1);
-    return c;
-  }, [orders]);
-
   const filtered = useMemo(
     () => (filter === 'all' ? orders : orders.filter((o) => o.status === filter)),
     [orders, filter],
@@ -38,25 +33,24 @@ export default function AdminOrdersPage() {
 
   return (
     <div>
-      {/* status filter */}
-      <div className="mb-5 flex flex-wrap gap-2">
-        <button
-          type="button"
-          onClick={() => setFilter('all')}
-          className={cn('adm-chip', filter === 'all' && 'active')}
+      {/* one simple filter */}
+      <div className="mb-5 flex items-center gap-2.5">
+        <label htmlFor="order-status-filter" className="text-[0.78rem] font-bold text-mocha">
+          نمایش:
+        </label>
+        <select
+          id="order-status-filter"
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as StatusFilter)}
+          className="adm-input sm:w-56"
         >
-          همه ({formatNumber(orders.length)})
-        </button>
-        {ORDER_STATUSES.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            onClick={() => setFilter(s.id)}
-            className={cn('adm-chip', filter === s.id && 'active')}
-          >
-            {s.label} ({formatNumber(counts.get(s.id) ?? 0)})
-          </button>
-        ))}
+          <option value="all">همه سفارش‌ها</option>
+          {ORDER_STATUSES.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
       </div>
 
       {filtered.length === 0 ? (
@@ -81,7 +75,7 @@ export default function AdminOrdersPage() {
 function OrderCard({ order }: { order: StoredOrder }) {
   return (
     <li className="panel-lux overflow-hidden rounded-2xl">
-      {/* header row */}
+      {/* header — id, date, total, and the one primary control */}
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-espresso/8 bg-cream-100/50 px-5 py-3.5">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           <span
@@ -113,7 +107,7 @@ function OrderCard({ order }: { order: StoredOrder }) {
       <div className="grid gap-5 px-5 py-4 lg:grid-cols-[1.1fr_0.9fr]">
         {/* items + totals */}
         <div>
-          <h3 className="kicker mb-2.5 font-display">Items</h3>
+          <h3 className="mb-2.5 text-[0.7rem] font-bold text-mocha">اقلام سفارش</h3>
           <ul className="space-y-2">
             {order.items.map((item, i) => (
               <li
@@ -155,7 +149,7 @@ function OrderCard({ order }: { order: StoredOrder }) {
         {/* customer + address (as collected by the existing checkout) */}
         <div className="space-y-3.5 text-[0.78rem]">
           <div>
-            <h3 className="kicker mb-1.5 font-display">Customer</h3>
+            <h3 className="mb-1.5 text-[0.7rem] font-bold text-mocha">مشتری</h3>
             <p className="font-bold text-espresso">
               {order.customer.firstName} {order.customer.lastName}
             </p>
@@ -169,7 +163,7 @@ function OrderCard({ order }: { order: StoredOrder }) {
             )}
           </div>
           <div>
-            <h3 className="kicker mb-1.5 font-display">Address</h3>
+            <h3 className="mb-1.5 text-[0.7rem] font-bold text-mocha">آدرس تحویل</h3>
             <p className="font-semibold leading-6 text-espresso">
               {order.address.province} — {order.address.city}
             </p>

@@ -3,6 +3,7 @@
 // Minimal on purpose: the shipping numbers the site already
 // uses + the low-stock alert threshold. No payment gateways,
 // no extra switches (src/services/settings.ts).
+// UI: one form, one primary «ذخیره» button, quiet «بازنشانی».
 // ============================================================
 
 import { useState } from 'react';
@@ -99,8 +100,8 @@ export default function AdminSettingsPage() {
           </p>
         )}
 
-        <div className="flex flex-col gap-3 border-t border-espresso/8 pt-5 sm:flex-row">
-          <button type="button" onClick={save} className="btn-lux btn-wine flex-1 rounded-xl">
+        <div className="flex flex-col gap-3 border-t border-espresso/8 pt-5 sm:flex-row sm:items-center sm:justify-between">
+          <button type="button" onClick={save} className="btn-lux btn-wine rounded-xl sm:min-w-48">
             ذخیره تنظیمات
           </button>
           <button
@@ -112,9 +113,9 @@ export default function AdminSettingsPage() {
               }
             }}
             disabled={!changed}
-            className="btn-lux btn-line-dark rounded-xl disabled:cursor-not-allowed disabled:opacity-40"
+            className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:no-underline"
           >
-            بازنشانی
+            بازنشانی به مقادیر اولیه
           </button>
         </div>
       </div>
@@ -122,7 +123,7 @@ export default function AdminSettingsPage() {
       <p className="mt-5 text-[0.7rem] leading-6 text-mocha">
         این مقادیر دقیقاً همان اعدادی هستند که سبد خرید، نوار پیشرفت ارسال رایگان و
         تسویه‌حساب فروشگاه از آن‌ها استفاده می‌کنند؛ ذخیره تغییرات بلافاصله روی همین منطق
-        اعمال می‌شود. درگاه پرداخت در این فاز پیاده‌سازی نمی‌شود.
+        اعمال می‌شود.
       </p>
     </div>
   );

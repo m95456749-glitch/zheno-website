@@ -1,8 +1,10 @@
 // ============================================================
 // ZHINO — admin shell
-// Deep-wine navigation plate (desktop sidebar / mobile drawer)
-// on a spacious ivory canvas. The storefront header, footer and
-// sounds never appear inside the admin area.
+// Deliberately minimal: one sidebar (desktop) / one drawer
+// (mobile), seven plain sections, a «مشاهده سایت» link and a
+// «خروج» button. No nested menus, no duplicate controls.
+// Deep-wine navigation plate on a spacious ivory canvas; the
+// storefront header, footer and sounds never appear here.
 // ============================================================
 
 import { useEffect, useState } from 'react';
@@ -31,7 +33,7 @@ function Brand() {
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
   return (
-    <ul className="space-y-1">
+    <ul className="space-y-1.5">
       {ADMIN_NAV.map((item) => {
         const Icon = item.icon;
         return (
@@ -41,7 +43,7 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
               onClick={onNavigate}
               className={({ isActive }) => cn('adm-nav-item', isActive && 'active')}
             >
-              <Icon className="h-[1.05rem] w-[1.05rem] shrink-0" />
+              <Icon className="h-5 w-5 shrink-0" />
               <span>{item.label}</span>
             </NavLink>
           </li>
@@ -51,16 +53,25 @@ function NavList({ onNavigate }: { onNavigate?: () => void }) {
   );
 }
 
-function DemoNote() {
+/** «مشاهده سایت» + «خروج» — the only two items after the sections */
+function NavFooter({ onNavigate }: { onNavigate?: () => void }) {
+  const { logout } = useAdminAuth();
   return (
-    <p className="mx-1 mb-2 rounded-lg bg-gold-500/10 px-3 py-2 text-[0.64rem] leading-5 text-gold-300/90 ring-1 ring-gold-500/25">
-      حالت نمایشی — احراز هویت واقعی هنوز متصل نشده است.
-    </p>
+    <div className="space-y-1.5 border-t border-cream-50/10 px-3 py-4">
+      <Link to="/" onClick={onNavigate} className="adm-nav-item adm-nav-item-quiet">
+        <IconExternal className="h-5 w-5 shrink-0" />
+        <span>مشاهده سایت</span>
+      </Link>
+      <button type="button" onClick={logout} className="adm-nav-item adm-nav-item-quiet">
+        <IconLogout className="h-5 w-5 shrink-0" />
+        <span>خروج</span>
+      </button>
+    </div>
   );
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const { logout, isDemo } = useAdminAuth();
+  const { isDemo } = useAdminAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { pathname } = useLocation();
 
@@ -91,43 +102,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <nav className="flex-1 overflow-y-auto px-3 pb-4">
             <NavList />
           </nav>
-          <div className="space-y-1 border-t border-cream-50/10 px-3 py-4">
-            {isDemo && <DemoNote />}
-            <Link to="/" className="adm-nav-item">
-              <IconExternal className="h-[1.05rem] w-[1.05rem] shrink-0" />
-              <span>مشاهده سایت</span>
-            </Link>
-            <button type="button" onClick={logout} className="adm-nav-item">
-              <IconLogout className="h-[1.05rem] w-[1.05rem] shrink-0" />
-              <span>خروج</span>
-            </button>
-          </div>
+          <NavFooter />
         </div>
       </aside>
 
-      {/* ── mobile top bar ──────────────────────────────────── */}
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-espresso/10 bg-cream-50/90 px-3 backdrop-blur-md lg:hidden">
+      {/* ── mobile top bar — menu, title, logout: nothing else ── */}
+      <header className="sticky top-0 z-40 flex h-14 items-center justify-between gap-2 border-b border-espresso/10 bg-cream-50/90 px-3 backdrop-blur-md lg:hidden">
         <button
           type="button"
           onClick={() => setDrawerOpen(true)}
           aria-label="باز کردن منوی مدیریت"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-wine-900 ring-1 ring-espresso/12 transition hover:bg-wine-900/5"
+          className="flex h-10 items-center gap-1.5 rounded-lg px-2.5 text-wine-900 ring-1 ring-espresso/12 transition hover:bg-wine-900/5"
         >
           <IconMenu className="h-5 w-5" />
+          <span className="text-[0.78rem] font-bold">منو</span>
         </button>
-        <div className="flex items-center gap-2">
-          <span className="flex h-7 w-7 items-center justify-center rounded-md bg-wine-900 text-[0.8rem] font-extrabold text-gold-300">
-            ژ
-          </span>
-          <span className="text-sm font-bold text-wine-950">پنل مدیریت</span>
-        </div>
-        <Link
-          to="/"
-          aria-label="مشاهده سایت"
-          className="flex h-9 w-9 items-center justify-center rounded-lg text-mocha ring-1 ring-espresso/12 transition hover:bg-wine-900/5 hover:text-wine-900"
-        >
-          <IconExternal className="h-[1.05rem] w-[1.05rem]" />
-        </Link>
+        <span className="text-sm font-bold text-wine-950">{current.label}</span>
+        <LogoutButton />
       </header>
 
       {/* ── mobile drawer ───────────────────────────────────── */}
@@ -156,41 +147,47 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
             <nav className="flex-1 overflow-y-auto px-3 pb-4">
               <NavList onNavigate={() => setDrawerOpen(false)} />
             </nav>
-            <div className="space-y-1 border-t border-cream-50/10 px-3 py-4">
-              {isDemo && <DemoNote />}
-              <Link to="/" onClick={() => setDrawerOpen(false)} className="adm-nav-item">
-                <IconExternal className="h-[1.05rem] w-[1.05rem] shrink-0" />
-                <span>مشاهده سایت</span>
-              </Link>
-              <button type="button" onClick={logout} className="adm-nav-item">
-                <IconLogout className="h-[1.05rem] w-[1.05rem] shrink-0" />
-                <span>خروج</span>
-              </button>
-            </div>
+            <NavFooter onNavigate={() => setDrawerOpen(false)} />
           </div>
         </div>
       )}
 
       {/* ── main content ────────────────────────────────────── */}
       <main className="lg:ms-[17rem]">
-        <div className="mx-auto max-w-5xl px-4 pb-16 pt-6 sm:px-6 lg:px-8 lg:pt-10">
-          <div className="mb-7 flex flex-wrap items-center justify-between gap-3">
-            <div>
+        <div className="mx-auto max-w-4xl px-4 pb-16 pt-7 sm:px-6 lg:px-8 lg:pt-10">
+          <div className="mb-8">
+            <div className="flex flex-wrap items-center gap-3">
               <h1 className="text-[1.45rem] font-bold text-wine-950 sm:text-[1.7rem]">{current.label}</h1>
-              <span
-                className="mt-2 block h-px w-14 bg-gradient-to-l from-gold-500 to-transparent"
-                aria-hidden="true"
-              />
+              {isDemo && (
+                <span className="adm-badge-demo" title="احراز هویت واقعی متصل نیست — این نسخه فقط نمایشی است">
+                  نمایشی
+                </span>
+              )}
             </div>
-            {isDemo && (
-              <span className="adm-badge-demo" title="احراز هویت واقعی متصل نیست — این نسخه فقط نمایشی است">
-                نمایشی
-              </span>
-            )}
+            <p className="mt-2 text-[0.82rem] leading-6 text-mocha">{current.desc}</p>
+            <span
+              className="mt-3 block h-px w-14 bg-gradient-to-l from-gold-500 to-transparent"
+              aria-hidden="true"
+            />
           </div>
           {children}
         </div>
       </main>
     </div>
+  );
+}
+
+/** small labeled «خروج» for the mobile top bar */
+function LogoutButton() {
+  const { logout } = useAdminAuth();
+  return (
+    <button
+      type="button"
+      onClick={logout}
+      className="flex h-10 items-center gap-1.5 rounded-lg px-3 text-[0.78rem] font-bold text-mocha ring-1 ring-espresso/12 transition hover:bg-wine-900/5 hover:text-wine-900"
+    >
+      <IconLogout className="h-[1.05rem] w-[1.05rem]" />
+      <span>خروج</span>
+    </button>
   );
 }
