@@ -1,7 +1,7 @@
 // ============================================================
 // ZHINO — home page (compact, product-first)
 // A short premium hero (both official photos kept) flows
-// straight into ALL 15 products — the real content of the
+// straight into ALL 22 products — the real content of the
 // page. Below the grid: a compact flavor index (#flavors),
 // the official recipes, and a small about/contact seam.
 // ============================================================
@@ -95,7 +95,7 @@ export default function HomePage() {
               className="rise mx-auto mt-3.5 max-w-md text-[0.88rem] font-light leading-7 text-cream-200/75 lg:mx-0 lg:mt-4 lg:text-[0.95rem]"
               style={{ '--rise-delay': '0.3s' } as CSSProperties}
             >
-              یک تجربه متفاوت از دنیای ژله و کاستر
+              طعم متفاوت، برای لحظه‌هایی که متفاوت.
             </p>
 
             <div
@@ -165,7 +165,7 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ══ PRODUCTS — the main content: all 15 ══════════════ */}
+      {/* ══ PRODUCTS — the main content: all 22 ══════════════ */}
       <section className="bg-cream-page" aria-label="محصولات ژینو">
         <div className="mx-auto max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pb-16 sm:pt-16">
           <header className="text-center">

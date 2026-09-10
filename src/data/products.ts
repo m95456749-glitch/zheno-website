@@ -63,6 +63,59 @@ export const FLAVORS: Record<FlavorId, Flavor> = {
     emoji: '🍒',
     category: 'jelly',
   },
+  // Jelly Flavors — season 2 (7 new real-photo products)
+  watermelon: {
+    id: 'watermelon',
+    name: 'هندوانه',
+    color: '#D8425A',
+    emoji: '🍉',
+    category: 'jelly',
+  },
+  // NOTE: the supplier's packet prints «ژله خربزه»; the store sells this
+  // melon packet as «طالبی» (owner-confirmed same product).
+  'cantaloupe-j': {
+    id: 'cantaloupe-j',
+    name: 'طالبی',
+    color: '#E89A3D',
+    emoji: '🍈',
+    category: 'jelly',
+  },
+  // NOTE: the packet prints «ژله توت سیاه» — same fruit as «شاتوت».
+  mulberry: {
+    id: 'mulberry',
+    name: 'شاتوت',
+    color: '#6E2B5B',
+    emoji: '🫐',
+    category: 'jelly',
+  },
+  mango: {
+    id: 'mango',
+    name: 'انبه',
+    color: '#EE9029',
+    emoji: '🥭',
+    category: 'jelly',
+  },
+  grape: {
+    id: 'grape',
+    name: 'انگور',
+    color: '#7B4FA0',
+    emoji: '🍇',
+    category: 'jelly',
+  },
+  kiwi: {
+    id: 'kiwi',
+    name: 'کیوی',
+    color: '#8CB53E',
+    emoji: '🥝',
+    category: 'jelly',
+  },
+  lemon: {
+    id: 'lemon',
+    name: 'لیمو',
+    color: '#E7C41B',
+    emoji: '🍋',
+    category: 'jelly',
+  },
   // Custard Flavors
   banana: {
     id: 'banana',
@@ -290,7 +343,163 @@ export const PRODUCTS: Product[] = [
   },
 
   // ────────────────────────────────────────
+  // JELLY POWDER — season 2 (7 new flavors, real product photos)
+  // ────────────────────────────────────────
+  {
+    id: 'jelly-watermelon',
+    category: 'jelly',
+    flavorId: 'watermelon',
+    name: 'پودر ژله هندوانه ژینو',
+    shortName: 'ژله هندوانه',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-watermelon.jpg',
+    variants: [
+      {
+        id: 'jelly-watermelon-250',
+        productId: 'jelly-watermelon',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-WML-250',
+        stock: 45,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: 'jelly-cantaloupe',
+    category: 'jelly',
+    flavorId: 'cantaloupe-j',
+    name: 'پودر ژله طالبی ژینو',
+    shortName: 'ژله طالبی',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-cantaloupe.jpg',
+    variants: [
+      {
+        id: 'jelly-cantaloupe-250',
+        productId: 'jelly-cantaloupe',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-CAN-250',
+        stock: 40,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: 'jelly-mulberry',
+    category: 'jelly',
+    flavorId: 'mulberry',
+    name: 'پودر ژله شاتوت ژینو',
+    shortName: 'ژله شاتوت',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-mulberry.jpg',
+    variants: [
+      {
+        id: 'jelly-mulberry-250',
+        productId: 'jelly-mulberry',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-MUB-250',
+        stock: 35,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: 'jelly-mango',
+    category: 'jelly',
+    flavorId: 'mango',
+    name: 'پودر ژله انبه ژینو',
+    shortName: 'ژله انبه',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-mango.jpg',
+    variants: [
+      {
+        id: 'jelly-mango-250',
+        productId: 'jelly-mango',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-MNG-250',
+        stock: 50,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: 'jelly-grape',
+    category: 'jelly',
+    flavorId: 'grape',
+    name: 'پودر ژله انگور ژینو',
+    shortName: 'ژله انگور',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-grape.jpg',
+    variants: [
+      {
+        id: 'jelly-grape-250',
+        productId: 'jelly-grape',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-GRP-250',
+        stock: 45,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: 'jelly-kiwi',
+    category: 'jelly',
+    flavorId: 'kiwi',
+    name: 'پودر ژله کیوی ژینو',
+    shortName: 'ژله کیوی',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-kiwi.jpg',
+    variants: [
+      {
+        id: 'jelly-kiwi-250',
+        productId: 'jelly-kiwi',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-KWI-250',
+        stock: 40,
+        available: true,
+      },
+    ],
+  },
+  {
+    id: 'jelly-lemon',
+    category: 'jelly',
+    flavorId: 'lemon',
+    name: 'پودر ژله لیمو ژینو',
+    shortName: 'ژله لیمو',
+    categoryLabel: 'پودر ژله',
+    imageUrl: 'images/products/jelly-lemon.jpg',
+    variants: [
+      {
+        id: 'jelly-lemon-250',
+        productId: 'jelly-lemon',
+        weight: '۲۵۰ گرم',
+        weightGrams: 250,
+        price: 200000,
+        sku: 'ZJ-LEM-250',
+        stock: 55,
+        available: true,
+      },
+    ],
+  },
+
+  // ────────────────────────────────────────
   // CUSTARD POWDER — پودر کاستر
+  // Each photo below was matched by READING the flavor printed on the
+  // glass («کاستر موز», «کاستر طالبی», …) — never by filename or color.
+  // The printed label is the source of truth; do not re-map.
+  // NOTE: the vanilla photo prints «کاستر وانیلی»; the catalog keeps the
+  // store name «محلبی وانیلی» for that same vanilla product.
   // ────────────────────────────────────────
   {
     id: 'custard-banana',
@@ -299,6 +508,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر موز ژینو',
     shortName: 'کاستر موز',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-banana.jpg',
     featured: true,
     variants: [
       {
@@ -320,6 +530,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر طالبی ژینو',
     shortName: 'کاستر طالبی',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-cantaloupe.jpg',
     variants: [
       {
         id: 'custard-cantaloupe-250',
@@ -340,6 +551,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر توت فرنگی ژینو',
     shortName: 'کاستر توت فرنگی',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-strawberry.jpg',
     variants: [
       {
         id: 'custard-strawberry-250',
@@ -360,6 +572,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر کاکائو ژینو',
     shortName: 'کاستر کاکائو',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-chocolate.jpg',
     variants: [
       {
         id: 'custard-chocolate-250',
@@ -380,6 +593,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر هفت میوه ژینو',
     shortName: 'کاستر هفت میوه',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-seven-fruit.jpg',
     variants: [
       {
         id: 'custard-seven-fruit-250',
@@ -400,6 +614,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر پرتقال ژینو',
     shortName: 'کاستر پرتقال',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-orange.jpg',
     variants: [
       {
         id: 'custard-orange-250',
@@ -420,6 +635,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر محلبی وانیلی ژینو',
     shortName: 'کاستر محلبی وانیلی',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-mahlab-vanilla.jpg',
     special: true,
     featured: true,
     variants: [

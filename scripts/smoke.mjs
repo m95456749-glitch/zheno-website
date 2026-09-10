@@ -149,15 +149,31 @@ function expectNoErrors(label, errors) {
   expectContains('home', text, 'ژینو');
   expectContains('home', text, 'پودر ژله');
   expectContains('home', text, 'پودر کاستر');
-  // All 15 products render on the homepage (8 jelly + 7 custard)
+  // All 22 products render on the homepage (15 jelly + 7 custard)
   expectContains('home', text, 'ژله انار');
   expectContains('home', text, 'ژله آلبالو');
   expectContains('home', text, 'ژله توت فرنگی');
   expectContains('home', text, 'کاستر موز');
   expectContains('home', text, 'کاستر محلبی وانیلی');
+  // Season-2 jelly cards (7 new real-photo flavors)
+  expectContains('home', text, 'ژله هندوانه');
+  expectContains('home', text, 'ژله طالبی');
+  expectContains('home', text, 'ژله شاتوت');
+  expectContains('home', text, 'ژله انبه');
+  expectContains('home', text, 'ژله انگور');
+  expectContains('home', text, 'ژله کیوی');
+  expectContains('home', text, 'ژله لیمو');
   // Hero content + CTA
   expectContains('home', text, 'طعمِ اصیل');
+  expectContains('home', text, 'طعم متفاوت، برای لحظه‌هایی که متفاوت.');
+  expectNotContains('home', text, 'یک تجربه متفاوت از دنیای ژله و کاستر');
   expectContains('home', text, 'مشاهده محصولات');
+  // All 7 custard cards render with their verified photos' products
+  expectContains('home', text, 'کاستر طالبی');
+  expectContains('home', text, 'کاستر توت فرنگی');
+  expectContains('home', text, 'کاستر کاکائو');
+  expectContains('home', text, 'کاستر هفت میوه');
+  expectContains('home', text, 'کاستر پرتقال');
   // Recipes + flavor index present
   expectContains('home', text, 'دستور تهیه');
   // The old spelling must be gone everywhere

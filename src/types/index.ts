@@ -8,6 +8,9 @@ export type FlavorId =
   // Jelly flavors
   | 'pomegranate' | 'strawberry-j' | 'peach' | 'raspberry'
   | 'blueberry' | 'orange-j' | 'pineapple' | 'sour-cherry'
+  // Jelly flavors (second season — real product photos)
+  | 'watermelon' | 'cantaloupe-j' | 'mulberry' | 'mango'
+  | 'grape' | 'kiwi' | 'lemon'
   // Custard flavors
   | 'banana' | 'cantaloupe' | 'strawberry-c' | 'chocolate'
   | 'seven-fruit' | 'orange-c' | 'mahlab-vanilla';
