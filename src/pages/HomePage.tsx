@@ -1,6 +1,7 @@
 // ============================================================
 // ZHINO — home page (compact, product-first)
-// A short premium hero (both official photos kept) flows
+// A short premium hero (burgundy backdrop + the real
+// finished-dessert photo slideshow) flows
 // straight into ALL 22 products — the real content of the
 // page. Below the grid: a compact flavor index (#flavors),
 // the official recipes, and a small about/contact seam.
@@ -21,27 +22,71 @@ import { cn } from '../utils/cn';
 const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
 
 // Hero slideshow — FINISHED / PREPARED desserts only.
-// Every file below was verified by opening the photo: a plated, ready
-// dessert. The photos in `images/products/` are powder-in-glass package
-// shots belonging to the product cards — they are never used here.
-// All four stills are 1408×768 (16:9); the small fixed frame contain-fits
-// each one without cropping, stretching or re-encoding.
+// These are the owner's 9 real finished-dessert photos (audit-verified),
+// shot in one Android session on 2026-09-03 00:17–00:19 and uploaded
+// unchanged (byte-identical to the originals). They are the ONLY images
+// used in the Hero frame.
+// Never used here:
+//   - images/products/*        → powder-in-glass package shots (product cards only)
+//   - jelly-powder-hero.jpg    → powder photo (excluded by the owner)
+//   - hero-dish.jpg, showcase/ → generated stills, retired from the Hero
+// Slides keep each file's true pixel size so the browser can reserve
+// layout; the frame itself contain-fits them without cropping,
+// stretching or re-encoding the files.
 const HERO_SLIDES = [
   {
-    src: `${import.meta.env.BASE_URL}images/hero-dish.jpg`,
-    alt: 'سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی',
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002041.jpg`,
+    alt: 'دسر آمادهٔ کهربایی‌رنگ با جزئیات سفید؛ عکس واقعی از دسرهای ژینو',
+    width: 1080,
+    height: 873,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/showcase/jelly-strawberry.jpg`,
-    alt: 'ژله توت‌فرنگی آماده در لیوان شیشه‌ای، کنار توت‌فرنگی تازه',
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002115.jpg`,
+    alt: 'دسر زرد آماده؛ عکس واقعی از دسرهای ژینو',
+    width: 910,
+    height: 858,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/showcase/custard-vanilla.jpg`,
-    alt: 'کاستر وانیلی آماده در کاسه سفالی؛ عکاسی خوراکی طبیعی',
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002139.jpg`,
+    alt: 'دسر دو رنگ سبز و کهربایی در صحنه‌ای تیره؛ عکس واقعی از دسرهای ژینو',
+    width: 938,
+    height: 866,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/showcase/custard-cocoa.jpg`,
-    alt: 'کاستر کاکائویی آماده در کاسه سفالی؛ عکاسی خوراکی طبیعی',
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002159.jpg`,
+    alt: 'دسر قرمز روشن آماده؛ عکس واقعی از دسرهای ژینو',
+    width: 891,
+    height: 868,
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002226.jpg`,
+    alt: 'دسر قرمز تیره در پس‌زمینه‌ای تیره؛ عکس واقعی از دسرهای ژینو',
+    width: 870,
+    height: 876,
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002256.jpg`,
+    alt: 'دسر نارنجی‌رنگ آماده؛ عکس واقعی از دسرهای ژینو',
+    width: 835,
+    height: 820,
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002320.jpg`,
+    alt: 'دسر کرمی‌رنگ با عنصر قرمز؛ عکس واقعی از دسرهای ژینو',
+    width: 858,
+    height: 853,
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002353.jpg`,
+    alt: 'دسر آبی‌رنگ آماده؛ عکس واقعی از دسرهای ژینو',
+    width: 856,
+    height: 835,
+  },
+  {
+    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002418.jpg`,
+    alt: 'دسر سرخ تیره در صحنه‌ای تاریک؛ عکس واقعی از دسرهای ژینو',
+    width: 851,
+    height: 862,
   },
 ] as const;
 
@@ -165,8 +210,8 @@ export default function HomePage() {
                         key={slide.src}
                         src={slide.src}
                         alt={slide.alt}
-                        width={1408}
-                        height={768}
+                        width={slide.width}
+                        height={slide.height}
                         loading={i === 0 ? 'eager' : 'lazy'}
                         decoding="async"
                         onError={() => markSlideBroken(slide.src)}
@@ -222,7 +267,7 @@ export default function HomePage() {
               </div>
             )}
             <figcaption className="sr-only">
-              دسرهای آماده‌شده از پودر ژله و کاستر ژینو؛ عکاسی خوراکی به سبک ژورنالی.
+              دسرهای آماده‌شده از پودر ژله و کاستر ژینو؛ عکس‌های واقعی از دسرهای آماده.
             </figcaption>
           </figure>
         </div>
