@@ -21,6 +21,19 @@ wiring it to a product.
 | `jelly-orange`      | پرتقال       | `jelly-orange.jpg`       | ژله پرتقال         |
 | `jelly-pineapple`   | آناناس       | `jelly-pineapple.jpg`    | ژله آناناس         |
 | `jelly-sour-cherry` | آلبالو       | `jelly-sour-cherry.jpg`  | ژله آلبالو         |
+| `jelly-watermelon`  | هندوانه      | `jelly-watermelon.jpg`   | ژله هندوانه        |
+| `jelly-cantaloupe`  | طالبی        | `jelly-cantaloupe.jpg`   | ژله خربزه †        |
+| `jelly-mulberry`    | شاتوت        | `jelly-mulberry.jpg`     | ژله توت سیاه ‡     |
+| `jelly-mango`       | انبه         | `jelly-mango.jpg`        | ژله انبه           |
+| `jelly-grape`       | انگور        | `jelly-grape.jpg`        | ژله انگور          |
+| `jelly-kiwi`        | کیوی         | `jelly-kiwi.jpg`         | ژله کیوی           |
+| `jelly-lemon`       | لیمو         | `jelly-lemon.jpg`        | ژله لیمو           |
+
+† Season 2: the packet prints «ژله خربزه»; the store sells this melon packet
+under the name «طالبی» (owner-confirmed same product — do not re-map).
+
+‡ Season 2: the packet prints «ژله توت سیاه» — «توت سیاه» and «شاتوت» are the
+same fruit (mulberry); the card keeps the store name «شاتوت».
 
 Custard products have no production photography yet. They deliberately carry no
 `imageUrl` and fall back to the catalog-driven plated visual in `ProductVisual`.

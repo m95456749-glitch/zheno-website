@@ -18,7 +18,7 @@ const fail = (msg) => {
 const ok = (msg) => console.log('PASS: ' + msg);
 
 // Official catalog (see task spec / README)
-const expectedJelly = ['انار', 'توت فرنگی', 'هلو', 'تمشک', 'بلوبری', 'پرتقال', 'آناناس', 'آلبالو'];
+const expectedJelly = ['انار', 'توت فرنگی', 'هلو', 'تمشک', 'بلوبری', 'پرتقال', 'آناناس', 'آلبالو', 'هندوانه', 'طالبی', 'شاتوت', 'انبه', 'انگور', 'کیوی', 'لیمو'];
 const expectedCustard = ['موز', 'طالبی', 'توت فرنگی', 'کاکائو', 'هفت میوه', 'پرتقال', 'محلبی وانیلی'];
 
 // Parse product blocks: id / category / flavorId / name / shortName
@@ -35,11 +35,11 @@ const products = [...src.matchAll(productRe)].map((m) => ({
 const jelly = products.filter((p) => p.category === 'jelly');
 const custard = products.filter((p) => p.category === 'custard');
 
-if (products.length === 15) ok(`product count = 15`);
-else fail(`expected 15 products, found ${products.length}`);
+if (products.length === 22) ok(`product count = 22`);
+else fail(`expected 22 products, found ${products.length}`);
 
-if (jelly.length === 8) ok('jelly count = 8');
-else fail(`expected 8 jelly products, found ${jelly.length}`);
+if (jelly.length === 15) ok('jelly count = 15');
+else fail(`expected 15 jelly products, found ${jelly.length}`);
 
 if (custard.length === 7) ok('custard count = 7');
 else fail(`expected 7 custard products, found ${custard.length}`);
@@ -55,16 +55,16 @@ for (const name of expectedCustard) {
 
 // Standard weight + price: 250g / 200,000 Tomans for every variant
 const priceCount = (src.match(/price: 200000/g) ?? []).length;
-if (priceCount === 15) ok('all 15 variants priced at 200000');
-else fail(`expected 15 variants at price 200000, found ${priceCount}`);
+if (priceCount === 22) ok('all 22 variants priced at 200000');
+else fail(`expected 22 variants at price 200000, found ${priceCount}`);
 
 const gramsCount = (src.match(/weightGrams: 250/g) ?? []).length;
-if (gramsCount === 15) ok('all 15 variants weigh 250g');
-else fail(`expected 15 variants at 250g, found ${gramsCount}`);
+if (gramsCount === 22) ok('all 22 variants weigh 250g');
+else fail(`expected 22 variants at 250g, found ${gramsCount}`);
 
 const weightLabelCount = (src.match(/weight: '２５０ گرم'|weight: '۲۵۰ گرم'/g) ?? []).length;
-if (weightLabelCount === 15) ok("all 15 variants labeled '۲۵۰ گرم'");
-else fail(`expected 15 weight labels '۲۵۰ گرم', found ${weightLabelCount}`);
+if (weightLabelCount === 22) ok("all 22 variants labeled '۲۵۰ گرم'");
+else fail(`expected 22 weight labels '۲۵۰ گرم', found ${weightLabelCount}`);
 
 // Unique ids + SKUs
 const ids = new Set(products.map((p) => p.id));
@@ -72,7 +72,7 @@ if (ids.size === products.length) ok('product ids are unique');
 else fail('duplicate product ids detected');
 
 const skus = [...src.matchAll(/sku: '([^']+)'/g)].map((m) => m[1]);
-if (new Set(skus).size === skus.length && skus.length === 15) ok('SKUs are unique (15)');
+if (new Set(skus).size === skus.length && skus.length === 22) ok('SKUs are unique (22)');
 else fail(`SKU problem: found ${skus.length} skus, ${new Set(skus).size} unique`);
 
 // Every flavorId referenced by a product must exist in FLAVORS
@@ -106,6 +106,12 @@ else fail(`expected 7 'پودر کاستر' labels, found ${kasterLabels}`);
 // inspecting the photo. Custard has no production photography yet, so
 // those products intentionally carry no imageUrl and fall back to the
 // catalog-driven plated visual in ProductVisual.
+//
+// Season-2 notes (owner-confirmed, do not "fix"):
+//  • jelly-cantaloupe uses the photo whose packet prints «ژله خربزه» —
+//    the store sells this melon packet under the name «طالبی».
+//  • jelly-mulberry uses the photo whose packet prints «ژله توت سیاه» —
+//    «توت سیاه» and «شاتوت» are the same fruit (mulberry).
 // ────────────────────────────────────────────────────────────
 const expectedImages = {
   'jelly-pomegranate': 'images/products/jelly-pomegranate.jpg',
@@ -116,6 +122,13 @@ const expectedImages = {
   'jelly-orange': 'images/products/jelly-orange.jpg',
   'jelly-pineapple': 'images/products/jelly-pineapple.jpg',
   'jelly-sour-cherry': 'images/products/jelly-sour-cherry.jpg',
+  'jelly-watermelon': 'images/products/jelly-watermelon.jpg',
+  'jelly-cantaloupe': 'images/products/jelly-cantaloupe.jpg',
+  'jelly-mulberry': 'images/products/jelly-mulberry.jpg',
+  'jelly-mango': 'images/products/jelly-mango.jpg',
+  'jelly-grape': 'images/products/jelly-grape.jpg',
+  'jelly-kiwi': 'images/products/jelly-kiwi.jpg',
+  'jelly-lemon': 'images/products/jelly-lemon.jpg',
 };
 
 // Pull the imageUrl declared inside each product block
