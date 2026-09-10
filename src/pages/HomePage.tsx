@@ -6,31 +6,25 @@
 // the official recipes, and a small about/contact seam.
 // ============================================================
 
-import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { Link } from 'react-router-dom';
-import { FLAVORS, PRODUCTS, getFlavor } from '../data/products';
+import { FLAVORS, PRODUCTS } from '../data/products';
 import { RECIPES } from '../data/recipes';
 import { formatNumber } from '../utils/format';
 import { soundService } from '../services/soundService';
 import ProductCard from '../components/ProductCard';
-import ProductVisual from '../components/ProductVisual';
+import DessertShowcase from '../components/DessertShowcase';
 import { useReveal } from '../hooks/useReveal';
 import { cn } from '../utils/cn';
 
 const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
-const HERO_DISH_URL = `${import.meta.env.BASE_URL}images/hero-dish.jpg`;
 
 export default function HomePage() {
   const jellyProducts = PRODUCTS.filter((p) => p.category === 'jelly');
   const custardProducts = PRODUCTS.filter((p) => p.category === 'custard');
-  const heroTrio = ['strawberry-j', 'banana', 'mahlab-vanilla'] as const;
 
   const jellyFlavors = Object.values(FLAVORS).filter((f) => f.category === 'jelly');
   const custardFlavors = Object.values(FLAVORS).filter((f) => f.category === 'custard');
-
-  // When the production photo is absent, a compact tasting trio stands in.
-  const [dishPhoto, setDishPhoto] = useState(true);
 
   const jellyReveal = useReveal<HTMLDivElement>();
   const custardReveal = useReveal<HTMLDivElement>();
@@ -91,13 +85,6 @@ export default function HomePage() {
               طعمِ اصیل، انتخابِ <span className="font-semibold text-cream-50">متفاوت</span>
             </h1>
 
-            <p
-              className="rise mx-auto mt-3.5 max-w-md text-[0.88rem] font-light leading-7 text-cream-200/75 lg:mx-0 lg:mt-4 lg:text-[0.95rem]"
-              style={{ '--rise-delay': '0.3s' } as CSSProperties}
-            >
-              طعم متفاوت، برای لحظه‌هایی که متفاوت.
-            </p>
-
             <div
               className="rise mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 lg:mt-8 lg:justify-start"
               style={{ '--rise-delay': '0.42s' } as CSSProperties}
@@ -116,50 +103,11 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* IMAGE 2 — the editorial dish focal */}
+          {/* IMAGE 2 — premium dessert showcase */}
           <figure className="mt-5 lg:mt-0" style={{ '--rise-delay': '0.26s' } as CSSProperties}>
-            {dishPhoto ? (
-              <div className="frame-lux mx-auto w-full max-w-[26rem] lg:max-w-[30rem]">
-                <div className="overflow-hidden rounded-2xl lg:arch">
-                  <img
-                    src={HERO_DISH_URL}
-                    alt="سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی"
-                    width={1408}
-                    height={768}
-                    loading="eager"
-                    decoding="async"
-                    onError={() => setDishPhoto(false)}
-                    className="block aspect-[16/9] w-full object-cover object-[50%_55%] shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:aspect-[4/3.2]"
-                  />
-                </div>
-              </div>
-            ) : (
-              <div className="drift flex items-end justify-center gap-3 sm:gap-5">
-                {heroTrio.map((flavorId, i) => {
-                  const flavor = getFlavor(flavorId);
-                  return (
-                    <div
-                      key={flavorId}
-                      className={cn(
-                        'frame-lux arch-sm overflow-hidden shadow-[0_40px_80px_-35px_rgba(0,0,0,0.85)]',
-                        i === 1 ? 'h-44 w-[8.5rem] sm:h-56 sm:w-44' : 'h-36 w-[7rem] sm:h-48 sm:w-40',
-                      )}
-                    >
-                      <ProductVisual
-                        color={flavor.color}
-                        emoji={flavor.emoji}
-                        name={flavor.name}
-                        className="h-full w-full"
-                        emojiClassName="text-4xl sm:text-5xl"
-                        compact
-                      />
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+            <DessertShowcase />
             <figcaption className="sr-only">
-              دسرهای ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی.
+              ویترین دسرهای ژینو؛ عکاسی خوراکی به سبک ژورنالی.
             </figcaption>
           </figure>
         </div>
@@ -198,15 +146,15 @@ export default function HomePage() {
       {/* ══ FLAVOR INDEX — compact discovery chips ══════════ */}
       <section
         id="flavors"
-        className="mt-14 scroll-mt-24 border-y border-espresso/6 bg-cream-100/70 py-8 sm:py-10"
+        className="mt-14 scroll-mt-24 bg-wine-800 py-8 text-cream-50 sm:py-10"
         aria-label="طعم‌های ژینو"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
-            <h2 className="text-[1.05rem] font-medium text-wine-950">کشف طعم‌های ژینو</h2>
-            <p className="mt-1.5 text-[0.72rem] leading-6 text-mocha">
+            <h2 className="text-[1.05rem] font-medium text-cream-50">کشف طعم‌های ژینو</h2>
+            <p className="mt-1.5 text-[0.72rem] leading-6 text-cream-200/80">
               {formatNumber(jellyFlavors.length)} طعم پودر ژله
-              <span className="mx-2 text-mocha-light" aria-hidden="true">·</span>
+              <span className="mx-2 text-cream-200/45" aria-hidden="true">·</span>
               {formatNumber(custardFlavors.length)} طعم پودر کاستر
             </p>
           </div>
@@ -217,11 +165,11 @@ export default function HomePage() {
               { label: 'پودر کاستر', flavors: custardFlavors },
             ].map((row) => (
               <div key={row.label} className="flex flex-wrap items-center justify-center gap-2">
-                <span className="ml-1 text-[0.72rem] font-bold text-wine-900">{row.label}</span>
+                <span className="ml-1 text-[0.72rem] font-bold text-cream-50">{row.label}</span>
                 {row.flavors.map((flavor) => (
                   <span
                     key={flavor.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-espresso/8 bg-cream-50 px-3 py-1 text-[0.72rem] font-medium text-espresso transition hover:border-wine-700/50"
+                    className="inline-flex items-center gap-1.5 rounded-full border border-cream-50/15 bg-cream-50 px-3 py-1 text-[0.72rem] font-medium text-espresso transition hover:border-gold-400/55"
                   >
                     <span
                       className="h-2 w-2 rounded-full"
@@ -238,55 +186,57 @@ export default function HomePage() {
       </section>
 
       {/* ══ RECIPES — the two official methods ═══════════════ */}
-      <section className="mx-auto max-w-4xl px-4 pt-14 sm:px-6" aria-label="دستورهای پیشنهادی">
-        <div className="flex items-end justify-between gap-6">
-          <div>
-            <p className="kicker font-display">From The Kitchen</p>
-            <h2 className="mt-3 text-[1.65rem] font-light text-wine-950 sm:text-[2.1rem]">دستور تهیه</h2>
+      <section className="bg-wine-800 pb-14 pt-10 text-cream-50 sm:pb-16 sm:pt-12" aria-label="دستورهای پیشنهادی">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6">
+          <div className="flex items-end justify-between gap-6">
+            <div>
+              <p className="kicker kicker-dark font-display">From The Kitchen</p>
+              <h2 className="mt-3 text-[1.65rem] font-light text-cream-50 sm:text-[2.1rem]">دستور تهیه</h2>
+            </div>
+            <Link
+              to="/recipes"
+              className="group hidden shrink-0 items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50 sm:inline-flex"
+            >
+              جزئیات دستورها
+              <span className="transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+            </Link>
           </div>
+
+          <div ref={recipesReveal} className="panel-lux mt-6 rounded-xl">
+            {RECIPES.map((recipe, i) => (
+              <Link
+                key={recipe.id}
+                to="/recipes"
+                className={cn(
+                  'group flex items-center gap-4 px-5 py-4 transition hover:bg-cream-100/70 sm:gap-5 sm:px-7 sm:py-5',
+                  i === 0 && 'border-b border-espresso/8',
+                )}
+              >
+                <span
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cream-100 to-cream-200 text-2xl ring-1 ring-espresso/8 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
+                  aria-hidden="true"
+                >
+                  {recipe.emoji}
+                </span>
+                <span className="min-w-0 flex-1">
+                  <span className="block text-[0.95rem] font-semibold text-wine-950 sm:text-[1rem]">{recipe.title}</span>
+                  <span className="mt-0.5 block truncate text-[0.74rem] leading-6 text-mocha">
+                    {recipe.summary}
+                  </span>
+                </span>
+                <span className="text-wine-700 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+              </Link>
+            ))}
+          </div>
+
           <Link
             to="/recipes"
-            className="group hidden shrink-0 items-center gap-2 text-sm font-medium text-wine-900 transition hover:text-wine-700 sm:inline-flex"
+            className="group mt-5 inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50 sm:hidden"
           >
             جزئیات دستورها
             <span className="transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
           </Link>
         </div>
-
-        <div ref={recipesReveal} className="panel-lux mt-6 rounded-xl">
-          {RECIPES.map((recipe, i) => (
-            <Link
-              key={recipe.id}
-              to="/recipes"
-              className={cn(
-                'group flex items-center gap-4 px-5 py-4 transition hover:bg-cream-100/70 sm:gap-5 sm:px-7 sm:py-5',
-                i === 0 && 'border-b border-espresso/8',
-              )}
-            >
-              <span
-                className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cream-100 to-cream-200 text-2xl ring-1 ring-espresso/8 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
-                aria-hidden="true"
-              >
-                {recipe.emoji}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[0.95rem] font-semibold text-wine-950 sm:text-[1rem]">{recipe.title}</span>
-                <span className="mt-0.5 block truncate text-[0.74rem] leading-6 text-mocha">
-                  {recipe.summary}
-                </span>
-              </span>
-              <span className="text-wine-700 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
-            </Link>
-          ))}
-        </div>
-
-        <Link
-          to="/recipes"
-          className="group mt-5 inline-flex items-center gap-2 text-sm font-medium text-wine-900 transition hover:text-wine-700 sm:hidden"
-        >
-          جزئیات دستورها
-          <span className="transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
-        </Link>
       </section>
 
       {/* ══ CLOSING — a thin wine seam into the story ═══════ */}

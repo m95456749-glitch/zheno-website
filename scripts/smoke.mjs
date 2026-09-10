@@ -165,7 +165,7 @@ function expectNoErrors(label, errors) {
   expectContains('home', text, 'ژله لیمو');
   // Hero content + CTA
   expectContains('home', text, 'طعمِ اصیل');
-  expectContains('home', text, 'طعم متفاوت، برای لحظه‌هایی که متفاوت.');
+  expectNotContains('home', text, 'طعم متفاوت، برای لحظه‌هایی که متفاوت.');
   expectNotContains('home', text, 'یک تجربه متفاوت از دنیای ژله و کاستر');
   expectContains('home', text, 'مشاهده محصولات');
   // All 7 custard cards render with their verified photos' products
