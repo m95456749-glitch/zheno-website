@@ -184,16 +184,12 @@ body {
   position: absolute;
   inset: 0;
   opacity: 0;
-  /* outgoing photo fades out first… */
-  transition: opacity 0.28s ease;
+  transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1);
   pointer-events: none;
 }
 
 .showcase-slide.is-on {
   opacity: 1;
-  /* …incoming photo fades in only after the previous one is fully
-     gone, so exactly one photo is visible at any moment. */
-  transition: opacity 0.34s ease 0.28s;
   z-index: 1;
 }
 
