@@ -17,7 +17,8 @@ import DessertShowcase from '../components/DessertShowcase';
 import { useReveal } from '../hooks/useReveal';
 import { cn } from '../utils/cn';
 
-const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
+// No hero photo layer — the CSS-only .hero-silk gradient carries the
+// burgundy backdrop. Real dessert imagery lives in the showcase slider.
 
 export default function HomePage() {
   const jellyProducts = PRODUCTS.filter((p) => p.category === 'jelly');
@@ -56,13 +57,8 @@ export default function HomePage() {
         className="hero-curve dark-surface relative isolate overflow-hidden bg-wine-950 text-cream-50"
         aria-label="معرفی ژینو"
       >
-        {/* IMAGE 1 — burgundy backdrop photo over silk */}
-        <div className="hero-silk grain absolute inset-0 -z-30" aria-hidden="true" />
-        <div
-          className="hero-photo absolute -inset-[4%] -z-20"
-          style={{ '--hero-img': HERO_BG_URL } as CSSProperties}
-          aria-hidden="true"
-        />
+        {/* Burgundy backdrop — CSS-only silk gradient, no photo layer */}
+        <div className="hero-silk grain absolute inset-0 -z-20" aria-hidden="true" />
         {/* legibility scrims */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-b from-wine-950/85 via-wine-950/35 to-wine-950/90" aria-hidden="true" />
 
@@ -245,9 +241,8 @@ export default function HomePage() {
         aria-label="درباره ژینو"
       >
         <p className="kicker kicker-dark font-display">The Zhino Story</p>
-        <p className="mx-auto mt-4 max-w-xl text-[1.02rem] font-light leading-8 sm:text-lg sm:leading-9">
-          دسر خوب، حق هر خانواده است —{' '}
-          <span className="font-semibold text-cream-50">کیفیت واقعی، انتخاب ژینو.</span>
+        <p className="mx-auto mt-4 max-w-xl text-[1.15rem] font-light leading-9 sm:text-xl sm:leading-10">
+          <span className="font-semibold text-cream-50">کیفیت خوب،انتخاب ما.</span>
         </p>
         <div className="mt-6 flex items-center justify-center gap-8">
           <Link to="/about" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50">

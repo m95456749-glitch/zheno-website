@@ -1,9 +1,10 @@
 // ============================================================
 // ZHINO — hero dessert showcase (jewel-window slider)
 // One plated visual at a time, inside the existing Hero frame.
-// Real production photos are never rewritten; CSS object-fit
-// only positions them in the window. Decorative slides are
-// extra editorial imagery, not catalog product shots.
+// Real production photos are shown without cropping — the
+// container aspect ratio matches the actual image proportions
+// (1408×768 → 116). Navigation is auto-advance with subtle
+// dot indicators only; no prev/next arrow buttons.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
@@ -21,12 +22,16 @@ type Slide = {
   height: number;
 };
 
+// Real uploaded images only. Each file is a genuine food photo
+// that illustrates a dessert preparable from the ZHINO catalog.
+// Dimensions are the native pixel size of each file — used only
+// for intrinsic sizing hints, never to crop or stretch.
 const SLIDES: Slide[] = [
   {
     id: 'trio',
     src: 'images/hero-dish.jpg',
     alt: 'سه دسر ژله‌ای ژینو در ظرف‌های شیشه‌ای؛ عکاسی خوراکی به سبک ژورنالی',
-    position: '50% 55%',
+    position: '50% 50%',
     width: 1408,
     height: 768,
   },
@@ -34,7 +39,7 @@ const SLIDES: Slide[] = [
     id: 'strawberry-jelly',
     src: 'images/showcase/jelly-strawberry.jpg',
     alt: 'ژله توت‌فرنگی ژینو، آماده شده طبق دستور تهیه، در لیوان ساده کنار توت‌فرنگی تازه',
-    position: '48% 50%',
+    position: '50% 50%',
     width: 1408,
     height: 768,
   },
@@ -50,7 +55,7 @@ const SLIDES: Slide[] = [
     id: 'cocoa-custard',
     src: 'images/showcase/custard-cocoa.jpg',
     alt: 'کاستر کاکائو ژینو، غلیظ و قاشق‌خور، در کاسه سرامیکی کنار پنجره',
-    position: '55% 50%',
+    position: '50% 50%',
     width: 1408,
     height: 768,
   },
@@ -58,6 +63,10 @@ const SLIDES: Slide[] = [
 
 const FALLBACK_FLAVORS = ['strawberry-j', 'banana', 'mahlab-vanilla'] as const;
 const AUTO_MS = 5600;
+
+// Native aspect ratio of every real uploaded photo (1408×768 = 11∶6).
+// The frame adopts this ratio so no image is ever cropped.
+const NATIVE_ASPECT = '11 / 6';
 
 function assetUrl(src: string) {
   return `${import.meta.env.BASE_URL}${src}`;
@@ -93,8 +102,8 @@ export default function DessertShowcase() {
     [count],
   );
 
-  const goPrev = useCallback(() => goTo(current - 1), [goTo, current]);
   const goNext = useCallback(() => goTo(current + 1), [goTo, current]);
+  const goPrev = useCallback(() => goTo(current - 1), [goTo, current]);
 
   useEffect(() => {
     if (count === 0 || paused || reducedMotion) return;
@@ -152,7 +161,7 @@ export default function DessertShowcase() {
 
   if (count === 0) {
     return (
-      <div className="frame-lux mx-auto w-full max-w-[26rem] lg:max-w-[30rem]">
+      <div className="frame-lux mx-auto w-full max-w-[28rem] lg:max-w-[32rem]">
         <div className="drift flex items-end justify-center gap-3 sm:gap-5">
           {FALLBACK_FLAVORS.map((flavorId, i) => {
             const flavor = getFlavor(flavorId);
@@ -181,7 +190,7 @@ export default function DessertShowcase() {
   }
 
   return (
-    <div className="frame-lux mx-auto w-full max-w-[26rem] lg:max-w-[30rem]">
+    <div className="frame-lux mx-auto w-full max-w-[28rem] lg:max-w-[32rem]">
       <div
         className="showcase-stage overflow-hidden rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)]"
         role="region"
@@ -202,7 +211,11 @@ export default function DessertShowcase() {
           touchStart.current = null;
         }}
       >
-        <div className="relative aspect-[16/9] w-full lg:aspect-[4/3.2]">
+        {/* Aspect ratio matches the native 11∶6 of every real photo so the frame grows to the image, not the other way around. */}
+        <div
+          className="relative w-full"
+          style={{ aspectRatio: NATIVE_ASPECT }}
+        >
           {slides.map((slide, i) => {
             const on = i === current;
             return (
@@ -214,6 +227,7 @@ export default function DessertShowcase() {
                 aria-label={`${i + 1} از ${count}`}
                 aria-hidden={on ? undefined : true}
               >
+                {/* object-contain keeps the full photo visible even if a browser rounds the aspect ratio; the native 11∶6 frame means there is no letterbox in practice. */}
                 <img
                   src={assetUrl(slide.src)}
                   alt={on ? slide.alt : ''}
@@ -224,7 +238,7 @@ export default function DessertShowcase() {
                   fetchPriority={i === 0 ? 'high' : 'low'}
                   onError={() => onImgError(slide.id)}
                   draggable={false}
-                  className="block h-full w-full object-cover"
+                  className="block h-full w-full object-contain"
                   style={{ objectPosition: slide.position }}
                 />
               </div>
@@ -233,44 +247,22 @@ export default function DessertShowcase() {
 
           <div className="showcase-vignette" aria-hidden="true" />
 
+          {/* Subtle dot indicators only — no prev/next arrow buttons */}
           {count > 1 && (
-            <>
-              <button
-                type="button"
-                className="showcase-ctrl end-2.5 sm:end-3"
-                aria-label="دسر بعدی"
-                onClick={goNext}
-              >
-                <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-                  <path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                className="showcase-ctrl start-2.5 sm:start-3"
-                aria-label="دسر قبلی"
-                onClick={goPrev}
-              >
-                <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
-                  <path d="M7.5 4.5 13 10l-5.5 5.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-              </button>
-
-              <div className="showcase-dots" role="group" aria-label="انتخاب دسر">
-                <span className="showcase-dots-rule" aria-hidden="true" />
-                {slides.map((slide, i) => (
-                  <button
-                    key={slide.id}
-                    type="button"
-                    aria-label={`دسر ${i + 1}`}
-                    aria-current={i === current ? 'true' : undefined}
-                    className={cn('showcase-dot', i === current && 'is-on')}
-                    onClick={() => goTo(i)}
-                  />
-                ))}
-                <span className="showcase-dots-rule is-flip" aria-hidden="true" />
-              </div>
-            </>
+            <div className="showcase-dots" role="group" aria-label="انتخاب دسر">
+              <span className="showcase-dots-rule" aria-hidden="true" />
+              {slides.map((slide, i) => (
+                <button
+                  key={slide.id}
+                  type="button"
+                  aria-label={`دسر ${i + 1}`}
+                  aria-current={i === current ? 'true' : undefined}
+                  className={cn('showcase-dot', i === current && 'is-on')}
+                  onClick={() => goTo(i)}
+                />
+              ))}
+              <span className="showcase-dots-rule is-flip" aria-hidden="true" />
+            </div>
           )}
         </div>
       </div>

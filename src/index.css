@@ -101,16 +101,18 @@ body {
 
 /* ------------------------------------------------------------
    Hero backdrop layers
-   IMAGE 1 slot: public/images/hero-bg.jpg (set via --hero-img).
-   Beneath it a slow-burning burgundy silk; above it scrims.
+   Pure CSS burgundy silk — no raster photo. A deep conic
+   gradient layered with warm radial highlights creates the
+   premium velvet feel without an external image asset.
    ------------------------------------------------------------ */
 
 .hero-silk {
   background-color: var(--color-wine-950);
   background-image:
-    radial-gradient(60% 80% at 70% 12%, rgba(113, 49, 59, 0.42) 0%, rgba(113, 49, 59, 0) 60%),
-    radial-gradient(80% 120% at 8% 96%, rgba(42, 11, 18, 0.95) 0%, rgba(42, 11, 18, 0) 55%),
-    conic-gradient(from 195deg at 58% 42%, #2a0b12 0deg, #43121c 60deg, #5a1725 140deg, #43121c 245deg, #2a0b12 360deg);
+    radial-gradient(70% 90% at 72% 10%, rgba(113, 49, 59, 0.48) 0%, rgba(113, 49, 59, 0) 55%),
+    radial-gradient(85% 120% at 6% 98%, rgba(42, 11, 18, 0.95) 0%, rgba(42, 11, 18, 0) 50%),
+    radial-gradient(50% 40% at 50% 50%, rgba(184, 154, 98, 0.04) 0%, rgba(184, 154, 98, 0) 60%),
+    conic-gradient(from 195deg at 55% 40%, #2a0b12 0deg, #43121c 55deg, #5a1725 130deg, #43121c 240deg, #2a0b12 360deg);
 }
 
 .hero-silk::before {
@@ -121,35 +123,6 @@ body {
     radial-gradient(45% 60% at 28% 30%, rgba(184, 154, 98, 0.05) 0%, rgba(184, 154, 98, 0) 60%),
     radial-gradient(55% 70% at 76% 72%, rgba(113, 49, 59, 0.28) 0%, rgba(113, 49, 59, 0) 62%);
   transform: rotate(-7deg);
-}
-
-.hero-photo {
-  background-image: var(--hero-img, none);
-  background-size: cover;
-  background-repeat: no-repeat;
-  background-position: 50% 60%;
-  opacity: 0.9;
-}
-
-@media (min-width: 1024px) {
-  .hero-photo {
-    background-position: 62% center;
-  }
-}
-
-/* very slow ken-burns on the hero photo layer */
-@keyframes slow-burn {
-  from {
-    transform: scale(1.015);
-  }
-  to {
-    transform: scale(1.06);
-  }
-}
-
-.slow-burn {
-  animation: slow-burn 26s ease-in-out infinite alternate;
-  will-change: transform;
 }
 
 /* ------------------------------------------------------------
@@ -228,47 +201,6 @@ body {
   box-shadow: inset 0 0 0 1px rgba(250, 247, 242, 0.16);
 }
 
-.showcase-ctrl {
-  position: absolute;
-  top: 50%;
-  z-index: 3;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 2.5rem;
-  height: 2.5rem;
-  padding: 0;
-  border: 0;
-  transform: translateY(-50%);
-  border-radius: 9999px;
-  color: var(--color-cream-50);
-  cursor: pointer;
-  background: rgba(29, 7, 12, 0.32);
-  box-shadow:
-    inset 0 0 0 1px rgba(250, 247, 242, 0.28),
-    inset 0 0 0 2px rgba(184, 154, 98, 0.18);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  opacity: 0.72;
-  transition:
-    opacity 0.3s ease,
-    background-color 0.3s ease,
-    box-shadow 0.3s ease;
-}
-
-.showcase-ctrl:hover,
-.showcase-ctrl:focus-visible {
-  opacity: 1;
-  background: rgba(29, 7, 12, 0.52);
-  box-shadow:
-    inset 0 0 0 1px rgba(250, 247, 242, 0.42),
-    inset 0 0 0 2px rgba(184, 154, 98, 0.38);
-}
-
-.showcase-stage:hover .showcase-ctrl {
-  opacity: 0.92;
-}
-
 .showcase-dots {
   position: absolute;
   z-index: 3;
@@ -337,15 +269,15 @@ body {
 }
 
 @media (min-width: 640px) {
-  .showcase-ctrl {
-    width: 2.25rem;
-    height: 2.25rem;
+  .showcase-dot::after {
+    width: 0.46rem;
+    height: 0.46rem;
   }
 }
 
 @media (min-width: 1024px) {
   .showcase-stage {
-    border-radius: 11rem 11rem 1.25rem 1.25rem;
+    border-radius: 7rem 7rem 1.25rem 1.25rem;
   }
 }
 
