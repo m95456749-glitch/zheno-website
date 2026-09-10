@@ -1,10 +1,10 @@
 # ZHINO — Product photography
 
-Real production photos of the jelly powders, one file per product.
+Real production photos of the jelly and custard powders, one file per product.
 
 ## Ground truth: the printed label, not the filename
 
-Every photo has the flavor name printed on the glass («ژله انار», «ژله بلوبری», …).
+Every photo has the flavor name printed on the glass («ژله انار», «کاستر موز», …).
 **That printed label is the source of truth.** Filenames were previously wrong, so a
 filename must never be trusted on its own — open the picture and read the label before
 wiring it to a product.
@@ -35,9 +35,21 @@ under the name «طالبی» (owner-confirmed same product — do not re-map).
 ‡ Season 2: the packet prints «ژله توت سیاه» — «توت سیاه» and «شاتوت» are the
 same fruit (mulberry); the card keeps the store name «شاتوت».
 
-Custard products have no production photography yet. They deliberately carry no
-`imageUrl` and fall back to the catalog-driven plated visual in `ProductVisual`.
-Do not invent, generate, or borrow images for them.
+| Product id               | Product        | File                          | Label in the photo |
+| ------------------------ | -------------- | ----------------------------- | ------------------ |
+| `custard-banana`         | موز            | `custard-banana.jpg`          | کاستر موز          |
+| `custard-cantaloupe`     | طالبی          | `custard-cantaloupe.jpg`      | کاستر طالبی        |
+| `custard-strawberry`     | توت فرنگی      | `custard-strawberry.jpg`      | کاستر توت فرنگی    |
+| `custard-chocolate`      | کاکائو         | `custard-chocolate.jpg`       | کاستر کاکائو       |
+| `custard-seven-fruit`    | هفت میوه       | `custard-seven-fruit.jpg`     | کاستر هفت میوه     |
+| `custard-orange`         | پرتقال         | `custard-orange.jpg`          | کاستر پرتقال       |
+| `custard-mahlab-vanilla` | محلبی وانیلی   | `custard-mahlab-vanilla.jpg`  | کاستر وانیلی §     |
+
+§ Custard: the photo prints «کاستر وانیلی»; the card keeps the store name
+«محلبی وانیلی» for that same vanilla product (do not re-map).
+
+Products without a photo fall back to the catalog-driven plated visual in
+`ProductVisual`. Do not invent, generate, or borrow images for them.
 
 ## How it is wired
 

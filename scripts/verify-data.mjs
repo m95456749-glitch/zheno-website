@@ -100,18 +100,20 @@ else fail(`expected 7 'پودر کاستر' labels, found ${kasterLabels}`);
 // ────────────────────────────────────────────────────────────
 // Product ↔ real photo mapping
 //
-// Each jelly photograph carries the flavor name printed on the glass
-// («ژله انار», «ژله بلوبری», …). That baked-in label — not the filename —
+// Each product photograph carries the flavor name printed on the glass
+// («ژله انار», «کاستر موز», …). That baked-in label — not the filename —
 // is the ground truth, and each mapping below was confirmed by visually
-// inspecting the photo. Custard has no production photography yet, so
-// those products intentionally carry no imageUrl and fall back to the
-// catalog-driven plated visual in ProductVisual.
+// inspecting the photo. (Products without a photo fall back to the
+// catalog-driven plated visual in ProductVisual.)
 //
 // Season-2 notes (owner-confirmed, do not "fix"):
 //  • jelly-cantaloupe uses the photo whose packet prints «ژله خربزه» —
 //    the store sells this melon packet under the name «طالبی».
 //  • jelly-mulberry uses the photo whose packet prints «ژله توت سیاه» —
 //    «توت سیاه» and «شاتوت» are the same fruit (mulberry).
+// Custard note (verified from the printed label, do not re-map):
+//  • custard-mahlab-vanilla uses the photo printed «کاستر وانیلی» — the
+//    catalog keeps the store name «محلبی وانیلی» for that vanilla product.
 // ────────────────────────────────────────────────────────────
 const expectedImages = {
   'jelly-pomegranate': 'images/products/jelly-pomegranate.jpg',
@@ -129,6 +131,13 @@ const expectedImages = {
   'jelly-grape': 'images/products/jelly-grape.jpg',
   'jelly-kiwi': 'images/products/jelly-kiwi.jpg',
   'jelly-lemon': 'images/products/jelly-lemon.jpg',
+  'custard-banana': 'images/products/custard-banana.jpg',
+  'custard-cantaloupe': 'images/products/custard-cantaloupe.jpg',
+  'custard-strawberry': 'images/products/custard-strawberry.jpg',
+  'custard-chocolate': 'images/products/custard-chocolate.jpg',
+  'custard-seven-fruit': 'images/products/custard-seven-fruit.jpg',
+  'custard-orange': 'images/products/custard-orange.jpg',
+  'custard-mahlab-vanilla': 'images/products/custard-mahlab-vanilla.jpg',
 };
 
 // Pull the imageUrl declared inside each product block
@@ -155,11 +164,11 @@ if (new Set(usedImages).size === usedImages.length)
   ok('every product photo is used by exactly one product');
 else fail('the same photo is assigned to more than one product');
 
-// Custard products must NOT invent photography they do not have
-const custardWithImages = custard.filter((p) => declaredImages.get(p.id));
-if (custardWithImages.length === 0)
-  ok('no custard product claims a photo (plated fallback is used)');
-else fail(`custard products must not have images: ${custardWithImages.map((p) => p.id).join(', ')}`);
+// Every custard product now has its own verified production photo
+const custardWithoutImages = custard.filter((p) => !declaredImages.get(p.id));
+if (custardWithoutImages.length === 0)
+  ok('all 7 custard products claim their verified photo');
+else fail(`custard products missing images: ${custardWithoutImages.map((p) => p.id).join(', ')}`);
 
 // Nothing may still point at the old unsorted camera filenames
 if (!src.includes('images/IMG_')) ok('no legacy IMG_* paths remain in the catalog');

@@ -165,7 +165,15 @@ function expectNoErrors(label, errors) {
   expectContains('home', text, 'ژله لیمو');
   // Hero content + CTA
   expectContains('home', text, 'طعمِ اصیل');
+  expectContains('home', text, 'طعم متفاوت، برای لحظه‌هایی که متفاوت.');
+  expectNotContains('home', text, 'یک تجربه متفاوت از دنیای ژله و کاستر');
   expectContains('home', text, 'مشاهده محصولات');
+  // All 7 custard cards render with their verified photos' products
+  expectContains('home', text, 'کاستر طالبی');
+  expectContains('home', text, 'کاستر توت فرنگی');
+  expectContains('home', text, 'کاستر کاکائو');
+  expectContains('home', text, 'کاستر هفت میوه');
+  expectContains('home', text, 'کاستر پرتقال');
   // Recipes + flavor index present
   expectContains('home', text, 'دستور تهیه');
   // The old spelling must be gone everywhere

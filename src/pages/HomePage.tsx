@@ -95,7 +95,7 @@ export default function HomePage() {
               className="rise mx-auto mt-3.5 max-w-md text-[0.88rem] font-light leading-7 text-cream-200/75 lg:mx-0 lg:mt-4 lg:text-[0.95rem]"
               style={{ '--rise-delay': '0.3s' } as CSSProperties}
             >
-              یک تجربه متفاوت از دنیای ژله و کاستر
+              طعم متفاوت، برای لحظه‌هایی که متفاوت.
             </p>
 
             <div

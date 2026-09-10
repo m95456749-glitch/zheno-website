@@ -495,6 +495,11 @@ export const PRODUCTS: Product[] = [
 
   // ────────────────────────────────────────
   // CUSTARD POWDER — پودر کاستر
+  // Each photo below was matched by READING the flavor printed on the
+  // glass («کاستر موز», «کاستر طالبی», …) — never by filename or color.
+  // The printed label is the source of truth; do not re-map.
+  // NOTE: the vanilla photo prints «کاستر وانیلی»; the catalog keeps the
+  // store name «محلبی وانیلی» for that same vanilla product.
   // ────────────────────────────────────────
   {
     id: 'custard-banana',
@@ -503,6 +508,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر موز ژینو',
     shortName: 'کاستر موز',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-banana.jpg',
     featured: true,
     variants: [
       {
@@ -524,6 +530,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر طالبی ژینو',
     shortName: 'کاستر طالبی',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-cantaloupe.jpg',
     variants: [
       {
         id: 'custard-cantaloupe-250',
@@ -544,6 +551,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر توت فرنگی ژینو',
     shortName: 'کاستر توت فرنگی',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-strawberry.jpg',
     variants: [
       {
         id: 'custard-strawberry-250',
@@ -564,6 +572,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر کاکائو ژینو',
     shortName: 'کاستر کاکائو',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-chocolate.jpg',
     variants: [
       {
         id: 'custard-chocolate-250',
@@ -584,6 +593,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر هفت میوه ژینو',
     shortName: 'کاستر هفت میوه',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-seven-fruit.jpg',
     variants: [
       {
         id: 'custard-seven-fruit-250',
@@ -604,6 +614,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر پرتقال ژینو',
     shortName: 'کاستر پرتقال',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-orange.jpg',
     variants: [
       {
         id: 'custard-orange-250',
@@ -624,6 +635,7 @@ export const PRODUCTS: Product[] = [
     name: 'پودر کاستر محلبی وانیلی ژینو',
     shortName: 'کاستر محلبی وانیلی',
     categoryLabel: 'پودر کاستر',
+    imageUrl: 'images/products/custard-mahlab-vanilla.jpg',
     special: true,
     featured: true,
     variants: [

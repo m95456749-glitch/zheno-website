@@ -68,21 +68,21 @@ export default function ProductDetailPage() {
       {/* wine seam carrying the page header language */}
       <div className="page-plate dark-surface relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/30 to-transparent" aria-hidden="true" />
-        <div className="relative mx-auto max-w-5xl px-4 pt-5 sm:px-6">
+        <div className="relative mx-auto max-w-4xl px-4 pt-5 sm:px-6">
           <div className="flex justify-start">
             <BackButton fallback="/products" />
           </div>
         </div>
-        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-5xl px-4 pb-3 pt-3 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
+        <nav aria-label="مسیر صفحه" className="relative mx-auto max-w-4xl px-4 pb-3 pt-3 text-[0.72rem] font-medium text-cream-200/60 sm:px-6">
           <Link to="/" className="transition hover:text-cream-50">خانه</Link>
           <span className="mx-2 text-cream-200/35">/</span>
           <Link to="/products" className="transition hover:text-cream-50">محصولات</Link>
           <span className="mx-2 text-cream-200/35">/</span>
           <span className="text-cream-100">{product.shortName}</span>
         </nav>
-        <div className="relative mx-auto grid max-w-5xl grid-cols-1 items-center gap-6 px-4 pb-1 pt-2 sm:px-6 lg:grid-cols-[0.88fr_1fr] lg:gap-10">
+        <div className="relative mx-auto grid max-w-4xl grid-cols-1 items-center gap-5 px-4 pb-1 pt-2 sm:px-6 lg:grid-cols-[0.88fr_1fr] lg:gap-8">
           {/* arched plate visual */}
-          <div className="arch-unveil mx-auto w-full max-w-[20.5rem] sm:max-w-[22rem] lg:max-w-[23rem]">
+          <div className="arch-unveil mx-auto w-full max-w-[18rem] sm:max-w-[19.5rem] lg:max-w-[20.5rem]">
             <figure className="frame-lux arch overflow-hidden shadow-[0_55px_100px_-45px_rgba(0,0,0,0.85)]">
               <ProductVisual
                 color={flavor.color}
@@ -97,7 +97,7 @@ export default function ProductDetailPage() {
           </div>
 
           {/* identity */}
-          <div className="pb-8 lg:pb-10 lg:text-right">
+          <div className="pb-6 lg:pb-8 lg:text-right">
             <div className="flex flex-wrap items-center gap-2.5 lg:justify-end">
               <span className="font-display text-[0.62rem] uppercase tracking-[0.4em] text-cream-200/70">
                 {product.category === 'jelly' ? 'Jelly' : 'Custard'}
@@ -113,14 +113,14 @@ export default function ProductDetailPage() {
                 </span>
               )}
             </div>
-            <h1 className="mt-3.5 text-[1.72rem] font-light leading-[1.5] text-cream-50 sm:text-[2.18rem] sm:leading-[1.48] lg:text-[2.3rem]">
+            <h1 className="mt-3 text-[1.6rem] font-light leading-[1.5] text-cream-50 sm:text-[2rem] sm:leading-[1.48] lg:text-[2.1rem]">
               {product.name}
             </h1>
-            <p className="mt-3 max-w-lg text-[0.9rem] font-light leading-7 text-cream-200/72 lg:mr-0 lg:ml-auto">
+            <p className="mt-2.5 max-w-lg text-[0.9rem] font-light leading-7 text-cream-200/72 lg:mr-0 lg:ml-auto">
               طعم <span className="font-semibold text-cream-50">{flavor.name}</span> — در بسته‌بندی {selected.weight}؛
               آماده‌ی یک دسر مجلسی با دست‌پخت خودتان.
             </p>
-            <div className="mt-5 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[0.75rem] text-cream-200/72 lg:justify-end">
+            <div className="mt-4 flex flex-wrap items-center justify-center gap-x-5 gap-y-2 text-[0.75rem] text-cream-200/72 lg:justify-end">
               <span className="flex items-center gap-2">
                 <span className={cn('h-1.5 w-1.5 rounded-full', selected.available ? 'bg-emerald-400' : 'bg-red-400')} aria-hidden="true" />
                 {selected.available ? 'موجود' : 'ناموجود'}
@@ -135,8 +135,8 @@ export default function ProductDetailPage() {
       </div>
 
       {/* purchase desk on cream */}
-      <div className="mx-auto -mt-6 max-w-5xl px-4 sm:px-6">
-        <div className="panel-lux grid gap-5 rounded-[1.35rem] p-4.5 sm:p-6 lg:grid-cols-[1.08fr_0.92fr] lg:gap-6">
+      <div className="mx-auto -mt-6 max-w-4xl px-4 sm:px-6">
+        <div className="panel-lux grid gap-4 rounded-[1.35rem] p-4 sm:p-5 lg:grid-cols-[1.08fr_0.92fr] lg:gap-5">
           <div>
             {/* packaging selector */}
             <p className="mb-2 text-[0.72rem] font-bold text-espresso">بسته‌بندی</p>
@@ -195,7 +195,7 @@ export default function ProductDetailPage() {
             <div className="flex items-end justify-between gap-3">
               <div>
                 <p className="text-[0.68rem] text-mocha">قیمت هر عدد</p>
-                <p className="mt-1 text-[1.85rem] font-extrabold text-wine-900 sm:text-[1.95rem]">{formatPrice(selected.price)}</p>
+                <p className="mt-1 text-[1.7rem] font-extrabold text-wine-900 sm:text-[1.8rem]">{formatPrice(selected.price)}</p>
               </div>
               <QuantitySelector
                 quantity={qty}
@@ -221,8 +221,8 @@ export default function ProductDetailPage() {
         </div>
 
         {related.length > 0 && (
-          <section className="mt-16" aria-label="محصولات مرتبط">
-            <div className="mb-8 flex items-end justify-between gap-6">
+          <section className="mt-12" aria-label="محصولات مرتبط">
+            <div className="mb-6 flex items-end justify-between gap-6">
               <div>
                 <p className="kicker font-display">You may also like</p>
                 <h2 className="mt-3 text-2xl font-light text-wine-950 sm:text-[1.8rem]">طعم‌های مرتبط</h2>
