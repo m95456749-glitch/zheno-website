@@ -102,18 +102,16 @@ body {
 
 /* ------------------------------------------------------------
    Hero backdrop layers
-   Pure CSS burgundy silk — no raster photo. A deep conic
-   gradient layered with warm radial highlights creates the
-   premium velvet feel without an external image asset.
+   IMAGE 1 slot: public/images/hero-bg.jpg (set via --hero-img).
+   Beneath it a burgundy silk; above it scrims.
    ------------------------------------------------------------ */
 
 .hero-silk {
   background-color: var(--color-wine-950);
   background-image:
-    radial-gradient(70% 90% at 72% 10%, rgba(113, 49, 59, 0.48) 0%, rgba(113, 49, 59, 0) 55%),
-    radial-gradient(85% 120% at 6% 98%, rgba(42, 11, 18, 0.95) 0%, rgba(42, 11, 18, 0) 50%),
-    radial-gradient(50% 40% at 50% 50%, rgba(184, 154, 98, 0.04) 0%, rgba(184, 154, 98, 0) 60%),
-    conic-gradient(from 195deg at 55% 40%, #2a0b12 0deg, #43121c 55deg, #5a1725 130deg, #43121c 240deg, #2a0b12 360deg);
+    radial-gradient(60% 80% at 70% 12%, rgba(139, 48, 64, 0.42) 0%, rgba(139, 48, 64, 0) 60%),
+    radial-gradient(80% 120% at 8% 96%, rgba(42, 11, 18, 0.95) 0%, rgba(42, 11, 18, 0) 55%),
+    conic-gradient(from 195deg at 58% 42%, #2a0b12 0deg, #43121c 60deg, #5a1725 140deg, #43121c 245deg, #2a0b12 360deg);
 }
 
 .hero-silk::before {
@@ -122,8 +120,22 @@ body {
   inset: -15%;
   background-image:
     radial-gradient(45% 60% at 28% 30%, rgba(184, 154, 98, 0.05) 0%, rgba(184, 154, 98, 0) 60%),
-    radial-gradient(55% 70% at 76% 72%, rgba(113, 49, 59, 0.28) 0%, rgba(113, 49, 59, 0) 62%);
+    radial-gradient(55% 70% at 76% 72%, rgba(139, 48, 64, 0.28) 0%, rgba(139, 48, 64, 0) 62%);
   transform: rotate(-7deg);
+}
+
+.hero-photo {
+  background-image: var(--hero-img, none);
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: 50% 60%;
+  opacity: 0.9;
+}
+
+@media (min-width: 1024px) {
+  .hero-photo {
+    background-position: 62% center;
+  }
 }
 
 /* ------------------------------------------------------------
@@ -165,121 +177,6 @@ body {
 
 .arch-sm {
   border-radius: 7rem 7rem 0.875rem 0.875rem;
-}
-
-/* ------------------------------------------------------------
-   Hero dessert showcase — jewel-window slider
-   Quiet controls, cross-fade only. The arched frame stays the
-   brand silhouette; nothing here changes the site palette.
-   ------------------------------------------------------------ */
-
-.showcase-stage {
-  position: relative;
-  background: var(--color-noir);
-  touch-action: pan-y;
-  user-select: none;
-}
-
-.showcase-slide {
-  position: absolute;
-  inset: 0;
-  opacity: 0;
-  transition: opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1);
-  pointer-events: none;
-}
-
-.showcase-slide.is-on {
-  opacity: 1;
-  z-index: 1;
-}
-
-.showcase-vignette {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  background: radial-gradient(78% 68% at 50% 46%, rgba(29, 7, 12, 0) 42%, rgba(29, 7, 12, 0.32) 100%);
-  box-shadow: inset 0 0 0 1px rgba(250, 247, 242, 0.16);
-}
-
-.showcase-dots {
-  position: absolute;
-  z-index: 3;
-  left: 50%;
-  bottom: 0.7rem;
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  transform: translateX(-50%);
-  pointer-events: auto;
-}
-
-.showcase-dots-rule {
-  display: block;
-  width: 1.1rem;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(184, 154, 98, 0.7));
-}
-
-.showcase-dots-rule.is-flip {
-  background: linear-gradient(90deg, rgba(184, 154, 98, 0.7), transparent);
-}
-
-.showcase-dot {
-  position: relative;
-  width: 1.35rem;
-  height: 1.35rem;
-  padding: 0;
-  border: 0;
-  cursor: pointer;
-  background: transparent;
-}
-
-.showcase-dot::after {
-  content: '';
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 0.42rem;
-  height: 0.42rem;
-  border-radius: 9999px;
-  background: rgba(250, 247, 242, 0.42);
-  transform: translate(-50%, -50%);
-  transition:
-    transform 0.3s ease,
-    background-color 0.3s ease,
-    border-radius 0.3s ease,
-    width 0.3s ease,
-    height 0.3s ease;
-}
-
-.showcase-dot.is-on::after {
-  width: 0.46rem;
-  height: 0.46rem;
-  border-radius: 1px;
-  background: var(--color-gold-400);
-  transform: translate(-50%, -50%) rotate(45deg);
-}
-
-.showcase-dot:hover::after {
-  background: rgba(250, 247, 242, 0.8);
-}
-
-.showcase-dot.is-on:hover::after {
-  background: var(--color-gold-300);
-}
-
-@media (min-width: 640px) {
-  .showcase-dot::after {
-    width: 0.46rem;
-    height: 0.46rem;
-  }
-}
-
-@media (min-width: 1024px) {
-  .showcase-stage {
-    border-radius: 7rem 7rem 1.25rem 1.25rem;
-  }
 }
 
 /* ------------------------------------------------------------
