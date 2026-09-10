@@ -4,6 +4,8 @@
 // overlay (src/services/catalog.ts). Existing ZHINO products
 // and their data are the base and stay intact; «بازنشانی»
 // restores them exactly.
+// UI: one primary action («افزودن محصول»), a simple search +
+// category filter, and small labeled «ویرایش» / «حذف» buttons.
 // ============================================================
 
 import { useMemo, useState } from 'react';
@@ -21,7 +23,7 @@ import { getSettings } from '../../services/settings';
 import { formatNumber, formatPrice, toPersianDigits } from '../../utils/format';
 import ProductVisual from '../../components/ProductVisual';
 import { Field, Modal, SavedFlash, Toggle } from '../components/ui';
-import { IconPencil, IconPlus, IconSearch, IconTrash } from '../Icons';
+import { IconPlus, IconSearch } from '../Icons';
 import { cn } from '../../utils/cn';
 
 type CategoryFilter = 'all' | ProductCategory;
@@ -60,7 +62,6 @@ export default function AdminProductsPage() {
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Product | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
   const products = useMemo(() => {
@@ -78,13 +79,11 @@ export default function AdminProductsPage() {
   const openCreate = () => {
     setCreating(true);
     setEditing(null);
-    setConfirmDelete(null);
   };
 
   const openEdit = (product: Product) => {
     setEditing(product);
     setCreating(false);
-    setConfirmDelete(null);
   };
 
   const closeForm = () => {
@@ -97,15 +96,11 @@ export default function AdminProductsPage() {
     window.setTimeout(() => setSaved(false), 2000);
   };
 
-  const askDelete = (id: string) => {
-    setConfirmDelete(id);
-    window.setTimeout(() => setConfirmDelete((cur) => (cur === id ? null : cur)), 4000);
-  };
-
-  const doDelete = (id: string) => {
-    removeProduct(id);
-    setConfirmDelete(null);
-    flashSaved();
+  const doDelete = (product: Product) => {
+    if (window.confirm(`محصول «${product.shortName}» حذف شود؟`)) {
+      removeProduct(product.id);
+      flashSaved();
+    }
   };
 
   const stockTone = (stock: number) =>
@@ -113,52 +108,41 @@ export default function AdminProductsPage() {
 
   return (
     <div>
-      {/* toolbar */}
-      <div className="mb-5 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap items-center gap-2">
-          {(
-            [
-              { id: 'all', label: 'همه' },
-              { id: 'jelly', label: 'پودر ژله' },
-              { id: 'custard', label: 'پودر کاستر' },
-            ] as const
-          ).map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => setFilter(tab.id)}
-              className={cn('adm-chip', filter === tab.id && 'active')}
-            >
-              {tab.label}
-              {tab.id === 'all' && ` (${formatNumber(catalog.length)})`}
-            </button>
-          ))}
+      {/* toolbar — search, filter, one primary action */}
+      <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+        <div className="relative flex-1 sm:min-w-44">
+          <IconSearch className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mocha-light" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="جستجوی محصول…"
+            className="adm-input ps-9"
+            aria-label="جستجوی محصول"
+          />
         </div>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1 md:w-56 md:flex-none">
-            <IconSearch className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mocha-light" />
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="جستجو (نام یا SKU)"
-              className="adm-input ps-9"
-              aria-label="جستجوی محصول"
-            />
-          </div>
-          <button type="button" onClick={openCreate} className="btn-lux btn-wine !px-4 !py-2.5 text-[0.8rem]">
-            <IconPlus className="h-4 w-4" />
-            افزودن محصول
-          </button>
-        </div>
+        <select
+          value={filter}
+          onChange={(e) => setFilter(e.target.value as CategoryFilter)}
+          aria-label="فیلتر دسته‌بندی"
+          className="adm-input sm:w-40"
+        >
+          <option value="all">همه دسته‌ها</option>
+          <option value="jelly">پودر ژله</option>
+          <option value="custard">پودر کاستر</option>
+        </select>
+        <button type="button" onClick={openCreate} className="btn-lux btn-wine !px-5 !py-2.5 text-[0.85rem]">
+          <IconPlus className="h-4 w-4" />
+          افزودن محصول
+        </button>
       </div>
 
       <SavedFlash show={saved} />
 
       {products.length === 0 ? (
         <div className="panel-lux rounded-2xl p-12 text-center">
-          <p className="text-sm font-bold text-wine-950">محصولی مطابق فیلتر پیدا نشد.</p>
-          <p className="mt-2 text-[0.76rem] leading-7 text-mocha">
-            فیلتر یا عبارت جستجو را تغییر دهید، یا محصول جدیدی اضافه کنید.
+          <p className="text-sm font-bold text-wine-950">محصولی پیدا نشد.</p>
+          <p className="mt-2 text-[0.78rem] leading-7 text-mocha">
+            جستجو یا فیلتر را تغییر دهید، یا با دکمه «افزودن محصول» محصول جدیدی بسازید.
           </p>
         </div>
       ) : (
@@ -169,11 +153,10 @@ export default function AdminProductsPage() {
               <thead>
                 <tr>
                   <th className="adm-th">محصول</th>
-                  <th className="adm-th">دسته و طعم</th>
                   <th className="adm-th">قیمت</th>
                   <th className="adm-th">موجودی</th>
-                  <th className="adm-th">فعال</th>
-                  <th className="adm-th">عملیات</th>
+                  <th className="adm-th">نمایش در فروشگاه</th>
+                  <th className="adm-th"> </th>
                 </tr>
               </thead>
               <tbody>
@@ -195,74 +178,49 @@ export default function AdminProductsPage() {
                             compact
                           />
                           <div className="min-w-0">
-                            <p className="truncate text-[0.82rem] font-bold text-espresso">{product.name}</p>
-                            <p dir="ltr" className="mt-0.5 truncate text-right text-[0.66rem] text-mocha">
-                              {variant.sku}
+                            <p className="truncate text-[0.85rem] font-bold text-espresso">{product.name}</p>
+                            <p className="mt-0.5 truncate text-[0.68rem] text-mocha">
+                              {product.categoryLabel} · {flavor.name} ·{' '}
+                              <span dir="ltr">{variant.sku}</span>
                             </p>
                           </div>
                         </div>
                       </td>
-                      <td className="adm-td text-[0.78rem] text-mocha">
-                        {product.categoryLabel} · {flavor.name}
-                      </td>
-                      <td className="adm-td whitespace-nowrap text-[0.8rem] font-bold text-espresso">
+                      <td className="adm-td whitespace-nowrap text-[0.82rem] font-bold text-espresso">
                         {formatPrice(variant.price)}
                       </td>
-                      <td className={cn('adm-td text-[0.82rem] font-extrabold', stockTone(variant.stock))}>
+                      <td className={cn('adm-td text-[0.85rem] font-extrabold', stockTone(variant.stock))}>
                         {formatNumber(variant.stock)}
                       </td>
                       <td className="adm-td">
-                        <div className="flex flex-col items-start gap-1">
+                        <div className="flex items-center gap-2">
                           <Toggle
                             checked={meta.active}
                             onChange={(on) => {
                               setProductActive(product.id, on);
                               flashSaved();
                             }}
-                            label={`فعال بودن ${product.shortName}`}
+                            label={`نمایش ${product.shortName} در فروشگاه`}
                           />
                           {!meta.active && <span className="adm-badge adm-badge-cancelled">غیرفعال</span>}
                         </div>
                       </td>
                       <td className="adm-td">
-                        <div className="flex items-center justify-end gap-1.5">
-                          {confirmDelete === product.id ? (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => doDelete(product.id)}
-                                className="rounded-lg bg-red-600 px-2.5 py-1.5 text-[0.68rem] font-bold text-white transition hover:bg-red-700"
-                              >
-                                تأیید حذف
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => setConfirmDelete(null)}
-                                className="rounded-lg px-2 py-1.5 text-[0.68rem] font-bold text-mocha ring-1 ring-espresso/15 transition hover:bg-cream-100"
-                              >
-                                انصراف
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                type="button"
-                                onClick={() => openEdit(product)}
-                                aria-label={`ویرایش ${product.shortName}`}
-                                className="adm-icon-btn"
-                              >
-                                <IconPencil className="h-4 w-4" />
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => askDelete(product.id)}
-                                aria-label={`حذف ${product.shortName}`}
-                                className="adm-icon-btn hover:!border-red-300 hover:!bg-red-50 hover:!text-red-600"
-                              >
-                                <IconTrash className="h-4 w-4" />
-                              </button>
-                            </>
-                          )}
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => openEdit(product)}
+                            className="adm-btn-sm"
+                          >
+                            ویرایش
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => doDelete(product)}
+                            className="adm-btn-sm adm-btn-sm-danger"
+                          >
+                            حذف
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -293,7 +251,7 @@ export default function AdminProductsPage() {
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold text-espresso">{product.name}</p>
                       <p className="mt-0.5 truncate text-[0.7rem] text-mocha">
-                        {product.categoryLabel} · {flavor.name} · {variant.weight}
+                        {product.categoryLabel} · {flavor.name}
                       </p>
                       <div className="mt-2 flex items-center justify-between">
                         <span className="text-sm font-extrabold text-wine-900">{formatPrice(variant.price)}</span>
@@ -311,48 +269,21 @@ export default function AdminProductsPage() {
                           setProductActive(product.id, on);
                           flashSaved();
                         }}
-                        label={`فعال بودن ${product.shortName}`}
+                        label={`نمایش ${product.shortName} در فروشگاه`}
                       />
                       {!meta.active && <span className="adm-badge adm-badge-cancelled">غیرفعال</span>}
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      {confirmDelete === product.id ? (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => doDelete(product.id)}
-                            className="rounded-lg bg-red-600 px-3 py-2 text-[0.7rem] font-bold text-white"
-                          >
-                            تأیید حذف
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setConfirmDelete(null)}
-                            className="rounded-lg px-2.5 py-2 text-[0.7rem] font-bold text-mocha ring-1 ring-espresso/15"
-                          >
-                            انصراف
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            type="button"
-                            onClick={() => openEdit(product)}
-                            aria-label={`ویرایش ${product.shortName}`}
-                            className="adm-icon-btn"
-                          >
-                            <IconPencil className="h-4 w-4" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => askDelete(product.id)}
-                            aria-label={`حذف ${product.shortName}`}
-                            className="adm-icon-btn hover:!border-red-300 hover:!bg-red-50 hover:!text-red-600"
-                          >
-                            <IconTrash className="h-4 w-4" />
-                          </button>
-                        </>
-                      )}
+                    <div className="flex items-center gap-2">
+                      <button type="button" onClick={() => openEdit(product)} className="adm-btn-sm">
+                        ویرایش
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => doDelete(product)}
+                        className="adm-btn-sm adm-btn-sm-danger"
+                      >
+                        حذف
+                      </button>
                     </div>
                   </div>
                 </li>
@@ -362,11 +293,10 @@ export default function AdminProductsPage() {
         </>
       )}
 
-      {/* footer note + reset */}
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+      {/* quiet secondary action */}
+      <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-[0.7rem] leading-6 text-mocha">
-          تغییرات روی همان داده‌های فروشگاه اعمال می‌شوند (در این نسخه نمایشی: همین مرورگر)؛
-          اتصال دائمی با لایه بک‌اند در فاز بعد انجام می‌شود.
+          تغییرات روی همان داده‌های فروشگاه اعمال می‌شوند (در این نسخه نمایشی: همین مرورگر).
         </p>
         <button
           type="button"

@@ -4,6 +4,8 @@
 // the default and stay intact; «بازنشانی» restores them).
 // Changes flow to the site's recipes pages via
 // src/services/recipeStore.ts.
+// UI: one primary action («افزودن دستور») + small labeled
+// «ویرایش» / «حذف» buttons per recipe.
 // ============================================================
 
 import { useState } from 'react';
@@ -16,7 +18,7 @@ import {
 } from '../../services/recipeStore';
 import type { ProductCategory } from '../../types';
 import { Field, SavedFlash } from '../components/ui';
-import { IconPencil, IconPlus, IconTrash } from '../Icons';
+import { IconPlus } from '../Icons';
 import { cn } from '../../utils/cn';
 
 interface RecipeFormState {
@@ -40,8 +42,9 @@ export default function AdminRecipesPage() {
 
   return (
     <div>
+      {/* toolbar — one primary action + one quiet reset */}
       <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="max-w-xl text-[0.75rem] leading-6 text-mocha">
+        <p className="max-w-xl text-[0.78rem] leading-6 text-mocha">
           تغییرات بلافاصله در بخش «دستور تهیه» سایت (همین مرورگر) اعمال می‌شود.
         </p>
         <div className="flex items-center gap-3">
@@ -60,7 +63,7 @@ export default function AdminRecipesPage() {
           <button
             type="button"
             onClick={() => setEditingId('new')}
-            className="btn-lux btn-wine !px-4 !py-2.5 text-[0.8rem]"
+            className="btn-lux btn-wine !px-5 !py-2.5 text-[0.85rem]"
           >
             <IconPlus className="h-4 w-4" />
             افزودن دستور
@@ -110,24 +113,22 @@ export default function AdminRecipesPage() {
                   </div>
                   <p className="mt-1 text-[0.75rem] leading-6 text-mocha">{recipe.summary}</p>
                 </div>
-                <div className="flex shrink-0 gap-1.5">
+                <div className="flex shrink-0 gap-2">
                   <button
                     type="button"
                     onClick={() => setEditingId(recipe.id)}
-                    aria-label={`ویرایش ${recipe.title}`}
-                    className="adm-icon-btn"
+                    className="adm-btn-sm"
                   >
-                    <IconPencil className="h-4 w-4" />
+                    ویرایش
                   </button>
                   <button
                     type="button"
                     onClick={() => {
                       if (window.confirm(`دستور «${recipe.title}» حذف شود؟`)) removeRecipe(recipe.id);
                     }}
-                    aria-label={`حذف ${recipe.title}`}
-                    className="adm-icon-btn hover:!border-red-300 hover:!bg-red-50 hover:!text-red-600"
+                    className="adm-btn-sm adm-btn-sm-danger"
                   >
-                    <IconTrash className="h-4 w-4" />
+                    حذف
                   </button>
                 </div>
               </div>
@@ -139,7 +140,7 @@ export default function AdminRecipesPage() {
       {recipes.length === 0 && (
         <div className="panel-lux rounded-2xl p-12 text-center">
           <p className="text-sm font-bold text-wine-950">دستوری وجود ندارد.</p>
-          <p className="mt-2 text-[0.76rem] leading-7 text-mocha">
+          <p className="mt-2 text-[0.78rem] leading-7 text-mocha">
             دو دستور رسمی ژله و کاستر به‌عنوان پیش‌فرض نگهداری می‌شوند؛ با «بازنشانی» برمی‌گردند.
           </p>
         </div>
