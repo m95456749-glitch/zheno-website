@@ -28,48 +28,66 @@ const HERO_BG_URL = `url("${withSiteBase('images/hero-bg.jpg')}")`;
 // Hero slideshow — FINISHED / PREPARED desserts only.
 // These are the owner's 9 real finished-dessert photos (audit-verified),
 // shot in one Android session on 2026-09-03 00:17–00:19. They are the ONLY
-// images used in the Hero frame. Four files had blank outer chrome baked
-// in (002041's side bars + white strips; thin white edge bands on
-// 002115/002139/002159) — only those empty outer bands were trimmed, the
-// dessert photographs themselves are untouched (same pixels, same EXIF
-// provenance, dimensions updated below).
+// images used in the Hero frame.
+//
+// BLANK OUTER MARGIN PASS (this branch): every one of the 9 files was
+// re-measured column-by-column / row-by-row (a column or row counts as
+// blank when ≥90% of its pixels are near-white ≥232 on R, G and B). Only
+// the fully blank outer bands listed below were trimmed — every removed
+// strip measured 96–100% near-white, so no dessert, plate, glass, fruit,
+// decoration or photographic edge was touched. Aspect ratio is untouched,
+// so nothing is stretched; each file was re-encoded with its own original
+// camera quantization tables (`jpeg:preserve-settings`), so colours and
+// detail are unchanged.
+//   002041  left 8px + right 7px white bars   (890×873 → 875×873)
+//   002115  left 3px + right 1px white edge   (880×858 → 876×858)
+//   002139  left 3px + right 4px + top 2px    (882×863 → 875×861)
+//   002159  left 3px white edge               (877×868 → 874×868)
+//   002226  left 1px white edge               (870×876 → 869×876)
+//   002320  top 2px white strip               (858×853 → 858×851)
+//   002256 / 002353 / 002418 — no blank outer margin found; byte-identical,
+//                              not modified at all.
+// All 9 still carry their original Android-camera EXIF.
 // Never used here:
 //   - images/products/*        → powder-in-glass package shots (product cards only)
 //   - jelly-powder-hero.jpg    → no camera provenance; encoder fingerprint identical
 //                                to the generated showcase set (excluded by the owner)
 //   - hero-dish.jpg, showcase/ → generated stills, retired from the Hero
 // Slides keep each file's true pixel size so the browser can reserve
-// layout; the frame itself contain-fits them without cropping,
+// layout; the compact square frame contain-fits them without cropping,
 // stretching or re-encoding the files.
+// Every slide is within ~2% of square (0.987–1.026 w/h), which is why the
+// Hero frame below is square: the photo fills it edge to edge instead of
+// floating in a wide letterbox.
 const HERO_SLIDES = [
   {
     src: withSiteBase('images/IMG_20260903_002041.jpg'),
     alt: 'دسر آمادهٔ کهربایی‌رنگ با جزئیات سفید؛ عکس واقعی از دسرهای ژینو',
-    width: 890,
+    width: 875,
     height: 873,
   },
   {
     src: withSiteBase('images/IMG_20260903_002115.jpg'),
     alt: 'دسر زرد آماده؛ عکس واقعی از دسرهای ژینو',
-    width: 880,
+    width: 876,
     height: 858,
   },
   {
     src: withSiteBase('images/IMG_20260903_002139.jpg'),
     alt: 'دسر دو رنگ سبز و کهربایی در صحنه‌ای تیره؛ عکس واقعی از دسرهای ژینو',
-    width: 882,
-    height: 863,
+    width: 875,
+    height: 861,
   },
   {
     src: withSiteBase('images/IMG_20260903_002159.jpg'),
     alt: 'دسر قرمز روشن آماده؛ عکس واقعی از دسرهای ژینو',
-    width: 877,
+    width: 874,
     height: 868,
   },
   {
     src: withSiteBase('images/IMG_20260903_002226.jpg'),
     alt: 'دسر قرمز تیره در پس‌زمینه‌ای تیره؛ عکس واقعی از دسرهای ژینو',
-    width: 870,
+    width: 869,
     height: 876,
   },
   {
@@ -82,7 +100,7 @@ const HERO_SLIDES = [
     src: withSiteBase('images/IMG_20260903_002320.jpg'),
     alt: 'دسر کرمی‌رنگ با عنصر قرمز؛ عکس واقعی از دسرهای ژینو',
     width: 858,
-    height: 853,
+    height: 851,
   },
   {
     src: withSiteBase('images/IMG_20260903_002353.jpg'),
@@ -205,15 +223,18 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* IMAGE 2 — finished-dessert slideshow (small fixed frame) */}
+          {/* IMAGE 2 — finished-dessert slideshow (compact frame)
+              The frame is square because every slide is within ~2% of
+              square: object-contain then fills it edge to edge instead of
+              leaving the wide side letterbox the old 4/3 frame created. */}
           <figure className="mt-5 lg:mt-0" style={{ '--rise-delay': '0.26s' } as CSSProperties}>
             {slideCount > 0 ? (
-              <div className="frame-lux mx-auto w-full max-w-[19rem] sm:max-w-[22rem] lg:max-w-[30rem]">
-                <div className="relative overflow-hidden rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:arch">
+              <div className="frame-lux mx-auto w-full max-w-[17.5rem] sm:max-w-[20.5rem] lg:max-w-[30rem]">
+                <div className="relative overflow-hidden rounded-[1.35rem] shadow-[0_18px_36px_-24px_rgba(0,0,0,0.55),0_3px_10px_-6px_rgba(0,0,0,0.3)] ring-1 ring-cream-50/10 lg:arch">
                   <div
                     role="group"
                     aria-label="دسرهای آماده‌شده از پودر ژله و کاستر ژینو"
-                    className="relative aspect-[4/3] w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)] lg:aspect-[4/3.2]"
+                    className="relative aspect-square w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)]"
                   >
                     {heroSlides.map((slide, i) => (
                       <img
