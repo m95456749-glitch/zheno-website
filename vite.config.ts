@@ -35,18 +35,20 @@ function spa404Fallback(): Plugin {
 
 // https://vite.dev/config/
 export default defineConfig({
-  // Repository deployment: https://<user>.github.io/zheno-website/
-  base: "/zheno-website/",
+  // Root deployment: the custom domain https://zheno.devs.surf/ serves
+  // the site from "/". (The router + asset URLs detect the legacy
+  // /zheno-website/ repository sub-path at runtime, so one build
+  // works on both mounts — see src/utils/siteBase.ts.)
+  base: "/",
   plugins: [
     react(),
     tailwindcss(),
-    // vite-plugin-singlefile's recommended build config overrides `base`
-    // with "./", which breaks the GitHub Pages sub-path deployment
-    // (BASE_URL becomes "./" and the router basename breaks with it).
-    // overrideConfig is applied AFTER that override, restoring the base.
+    // Pin the base back to "/" after vite-plugin-singlefile's
+    // recommended build config (it would otherwise override `base`
+    // with "./", breaking root-absolute asset URLs).
     viteSingleFile({
       overrideConfig: {
-        base: "/zheno-website/",
+        base: "/",
       },
     }),
     spa404Fallback(),

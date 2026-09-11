@@ -7,6 +7,7 @@
 // ============================================================
 
 import { useState } from 'react';
+import { withSiteBase } from '../utils/siteBase';
 
 interface Props {
   color: string;
@@ -31,8 +32,9 @@ export default function ProductVisual({
 }: Props) {
   const [imgFailed, setImgFailed] = useState(false);
 
-  // Real production photo: same frame, resolved against the Vite base
-  // so it works both in dev ("/") and on GitHub Pages ("/zheno-website/").
+  // Real production photo: same frame, resolved against the runtime
+  // mount point so it works in dev ("/"), on the custom domain ("/"),
+  // and on the repository sub-path ("/zheno-website/").
   // If the file ever fails to load, fall through to the plated visual —
   // the page never shows a broken image.
   if (imageUrl && !imgFailed) {
@@ -44,7 +46,7 @@ export default function ProductVisual({
         style={{ backgroundColor: 'var(--color-cream-100)' }}
       >
         <img
-          src={`${import.meta.env.BASE_URL}${imageUrl}`}
+          src={withSiteBase(imageUrl)}
           alt={name}
           loading="lazy"
           decoding="async"
