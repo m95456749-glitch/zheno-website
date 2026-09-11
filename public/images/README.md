@@ -8,9 +8,11 @@
 
 ## Hero slideshow (IMAGE 2 — the small dessert frame)
 
-The rotating frame uses **only the owner's 9 real finished-dessert photos**,
-uploaded unchanged (byte-identical to the originals) from one Android
-session on 2026-09-03 00:17–00:19:
+The rotating frame uses **only the owner's 9 real finished-dessert photos**
+from one Android session on 2026-09-03 00:17–00:19. Blank outer chrome
+baked into 4 files was trimmed (002041's side bars + white strips;
+thin white edge bands on 002115/002139/002159) — dessert pixels and
+EXIF provenance untouched:
 
 | # | File | Verified |
 | - | ---- | -------- |
@@ -26,7 +28,8 @@ session on 2026-09-03 00:17–00:19:
 
 Rotation: one photo at a time, every 3000 ms, subtle opacity crossfade,
 no arrows, subtle dots only. Every slide is `object-contain` inside the
-small fixed frame — the files are never cropped, stretched or re-encoded.
+small fixed frame — the dessert photographs are never cropped,
+stretched or distorted (only the blank outer bands above were trimmed).
 
 ### Never used in the Hero slideshow
 

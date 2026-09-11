@@ -20,15 +20,19 @@ import { soundService } from '../services/soundService';
 import ProductCard from '../components/ProductCard';
 import ProductVisual from '../components/ProductVisual';
 import { useReveal } from '../hooks/useReveal';
+import { withSiteBase } from '../utils/siteBase';
 import { cn } from '../utils/cn';
 
-const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
+const HERO_BG_URL = `url("${withSiteBase('images/hero-bg.jpg')}")`;
 
 // Hero slideshow — FINISHED / PREPARED desserts only.
 // These are the owner's 9 real finished-dessert photos (audit-verified),
-// shot in one Android session on 2026-09-03 00:17–00:19 and uploaded
-// unchanged (byte-identical to the originals). They are the ONLY images
-// used in the Hero frame.
+// shot in one Android session on 2026-09-03 00:17–00:19. They are the ONLY
+// images used in the Hero frame. Four files had blank outer chrome baked
+// in (002041's side bars + white strips; thin white edge bands on
+// 002115/002139/002159) — only those empty outer bands were trimmed, the
+// dessert photographs themselves are untouched (same pixels, same EXIF
+// provenance, dimensions updated below).
 // Never used here:
 //   - images/products/*        → powder-in-glass package shots (product cards only)
 //   - jelly-powder-hero.jpg    → no camera provenance; encoder fingerprint identical
@@ -39,55 +43,55 @@ const HERO_BG_URL = `url("${import.meta.env.BASE_URL}images/hero-bg.jpg")`;
 // stretching or re-encoding the files.
 const HERO_SLIDES = [
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002041.jpg`,
+    src: withSiteBase('images/IMG_20260903_002041.jpg'),
     alt: 'دسر آمادهٔ کهربایی‌رنگ با جزئیات سفید؛ عکس واقعی از دسرهای ژینو',
-    width: 1080,
+    width: 890,
     height: 873,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002115.jpg`,
+    src: withSiteBase('images/IMG_20260903_002115.jpg'),
     alt: 'دسر زرد آماده؛ عکس واقعی از دسرهای ژینو',
-    width: 910,
+    width: 880,
     height: 858,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002139.jpg`,
+    src: withSiteBase('images/IMG_20260903_002139.jpg'),
     alt: 'دسر دو رنگ سبز و کهربایی در صحنه‌ای تیره؛ عکس واقعی از دسرهای ژینو',
-    width: 938,
-    height: 866,
+    width: 882,
+    height: 863,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002159.jpg`,
+    src: withSiteBase('images/IMG_20260903_002159.jpg'),
     alt: 'دسر قرمز روشن آماده؛ عکس واقعی از دسرهای ژینو',
-    width: 891,
+    width: 877,
     height: 868,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002226.jpg`,
+    src: withSiteBase('images/IMG_20260903_002226.jpg'),
     alt: 'دسر قرمز تیره در پس‌زمینه‌ای تیره؛ عکس واقعی از دسرهای ژینو',
     width: 870,
     height: 876,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002256.jpg`,
+    src: withSiteBase('images/IMG_20260903_002256.jpg'),
     alt: 'دسر نارنجی‌رنگ آماده؛ عکس واقعی از دسرهای ژینو',
     width: 835,
     height: 820,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002320.jpg`,
+    src: withSiteBase('images/IMG_20260903_002320.jpg'),
     alt: 'دسر کرمی‌رنگ با عنصر قرمز؛ عکس واقعی از دسرهای ژینو',
     width: 858,
     height: 853,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002353.jpg`,
+    src: withSiteBase('images/IMG_20260903_002353.jpg'),
     alt: 'دسر آبی‌رنگ آماده؛ عکس واقعی از دسرهای ژینو',
     width: 856,
     height: 835,
   },
   {
-    src: `${import.meta.env.BASE_URL}images/IMG_20260903_002418.jpg`,
+    src: withSiteBase('images/IMG_20260903_002418.jpg'),
     alt: 'دسر سرخ تیره در صحنه‌ای تاریک؛ عکس واقعی از دسرهای ژینو',
     width: 851,
     height: 862,
@@ -204,12 +208,12 @@ export default function HomePage() {
           {/* IMAGE 2 — finished-dessert slideshow (small fixed frame) */}
           <figure className="mt-5 lg:mt-0" style={{ '--rise-delay': '0.26s' } as CSSProperties}>
             {slideCount > 0 ? (
-              <div className="frame-lux mx-auto w-full max-w-[26rem] lg:max-w-[30rem]">
+              <div className="frame-lux mx-auto w-full max-w-[19rem] sm:max-w-[22rem] lg:max-w-[30rem]">
                 <div className="relative overflow-hidden rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:arch">
                   <div
                     role="group"
                     aria-label="دسرهای آماده‌شده از پودر ژله و کاستر ژینو"
-                    className="relative aspect-[16/9] w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)] lg:aspect-[4/3.2]"
+                    className="relative aspect-[4/3] w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)] lg:aspect-[4/3.2]"
                   >
                     {heroSlides.map((slide, i) => (
                       <img

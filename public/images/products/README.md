@@ -55,9 +55,10 @@ Products without a photo fall back to the catalog-driven plated visual in
 
 `src/data/products.ts` is the single source of truth: each product carries an
 `imageUrl` (site-root-relative, e.g. `images/products/jelly-peach.jpg`).
-`ProductCard` → `ProductVisual` resolves it against the Vite base path, so the
-same field also feeds the cart and product-detail pages. Adding a photo to a new
-product means setting `imageUrl` — no component changes.
+`ProductCard` → `ProductVisual` resolves it against the site's runtime mount
+base (see `src/utils/siteBase.ts`), so the same field also feeds the cart
+and product-detail pages. Adding a photo to a new product means setting
+`imageUrl` — no component changes.
 
 Framing is presentation-only (`object-cover` in CSS); the source files are never
 cropped or re-encoded.

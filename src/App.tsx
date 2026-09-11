@@ -7,10 +7,11 @@
 //   - everything else — the existing storefront, unchanged:
 //     same Layout, same routes, same guards.
 //
-// GitHub Pages: the router basename follows BASE_URL
-// (/zheno-website/) set in main.tsx, and the built 404.html
-// fallback (vite.config.ts) keeps deep links + refresh working
-// for /admin/* exactly like every other route.
+// GitHub Pages: the router basename is resolved from the actual
+// mount point at runtime ("/" on the custom domain, "/zheno-website"
+// on the repository URL — see main.tsx / utils/siteBase.ts), and the
+// built 404.html fallback (vite.config.ts) keeps deep links +
+// refresh working for /admin/* exactly like every other route.
 // ============================================================
 
 import { Navigate, Route, Routes } from 'react-router-dom';

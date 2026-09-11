@@ -8,12 +8,15 @@ import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { CartProvider } from './context/CartContext';
 import ErrorBoundary from './components/ErrorBoundary';
+import { getSiteBase } from './utils/siteBase';
 import './index.css';
 import './admin/admin.css';
 
-// BASE_URL is "/" in dev and "/zheno-website/" in the production build,
-// so the router basename always matches the deployed sub-path.
-const basename = import.meta.env.BASE_URL.replace(/\/+$/, '') || '/';
+// Resolved from the actual mount point at runtime: "/" on the custom
+// domain (and in dev), "/zheno-website" on the repository URL. A
+// hardcoded basename here is what rendered a blank page wherever the
+// mount point disagreed with it.
+const basename = getSiteBase();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

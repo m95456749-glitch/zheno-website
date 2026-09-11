@@ -2,9 +2,11 @@
 // ZHINO — production-equivalent runtime smoke test (Node + jsdom)
 //
 // Bundles the real app source (src/main.tsx) with esbuild using the same
-// production defines Vite uses (BASE_URL=/zheno-website/, NODE_ENV,
-// frontend-only API mode), executes it in jsdom per route, and asserts
-// the app renders content instead of a blank page.
+// production defines Vite uses (BASE_URL=/, NODE_ENV, frontend-only
+// API mode), executes it in jsdom per route, and asserts the app
+// renders content instead of a blank page — on BOTH the custom-domain
+// root ("/...") and the legacy repository sub-path
+// ("/zheno-website/...").
 //
 // Note: jsdom cannot execute <script type="module">, so the dist bundle
 // (an ES module by design) is verified separately: single-file output,
@@ -40,7 +42,7 @@ try {
     logLevel: 'silent',
     define: {
       'process.env.NODE_ENV': '"production"',
-      'import.meta.env.BASE_URL': '"/zheno-website/"',
+      'import.meta.env.BASE_URL': '"/"',
       'import.meta.env.MODE': '"production"',
       'import.meta.env.DEV': 'false',
       'import.meta.env.PROD': 'true',
@@ -200,6 +202,43 @@ function expectNoErrors(label, errors) {
   // The old spelling must be gone everywhere
   expectNotContains('home', text, 'کاستارد');
   expectNoErrors('home', errors);
+}
+
+// ── 1b. Custom-domain root mount (https://zheno.devs.surf/) ───
+// The same build must render at "/" — a hardcoded sub-path basename
+// here is what produced the blank white page on the custom domain.
+{
+  const { text, errors, heroImgSrcs } = await render('/');
+  if (text.trim().length > 200) ok('root home renders substantial content (not blank)');
+  else fail(`root home looks blank (only ${text.trim().length} chars)`);
+  expectContains('root home', text, 'ژینو');
+  expectContains('root home', text, 'طعمِ اصیل');
+  expectContains('root home', text, 'مشاهده محصولات');
+  const rooted = heroImgSrcs.filter((s) => s.startsWith('/images/'));
+  if (rooted.length === 9) ok('root hero images resolve from the domain root (/images/…)');
+  else fail(`root hero images must start with /images/ (got: ${heroImgSrcs.join(', ')})`);
+  expectNoErrors('root home', errors);
+}
+{
+  const r = await render('/products');
+  expectContains('root products', r.text, 'محصولات ژینو');
+  expectContains('root products', r.text, 'ژله انار');
+  expectNoErrors('root products', r.errors);
+}
+{
+  const r = await render('/products/jelly-strawberry');
+  expectContains('root product detail', r.text, 'پودر ژله توت فرنگی ژینو');
+  expectNoErrors('root product detail', r.errors);
+}
+{
+  const r = await render('/cart');
+  expectContains('root cart', r.text, 'سبد خرید شما خالی است');
+  expectNoErrors('root cart', r.errors);
+}
+{
+  const r = await render('/admin/login');
+  expectContains('root admin login', r.text, 'ورود به پنل مدیریت');
+  expectNoErrors('root admin login', r.errors);
 }
 
 // ── 2. Products listing ──────────────────────────────────────
