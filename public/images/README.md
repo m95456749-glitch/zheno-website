@@ -28,8 +28,10 @@ EXIF provenance untouched:
 
 Rotation: one photo at a time, every 3000 ms, subtle opacity crossfade,
 no arrows, subtle dots only. Every slide is `object-contain` inside the
-small fixed frame — the dessert photographs are never cropped,
-stretched or distorted (only the blank outer bands above were trimmed).
+compact square frame — the frame's 1:1 aspect matches the photos' ~1:1
+footprint, so no dead bands surround the dessert and the photographs are
+never cropped, stretched or distorted (only the blank outer bands above
+were trimmed).
 
 ### Never used in the Hero slideshow
 

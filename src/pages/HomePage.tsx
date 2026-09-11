@@ -205,15 +205,19 @@ export default function HomePage() {
             </div>
           </div>
 
-          {/* IMAGE 2 — finished-dessert slideshow (small fixed frame) */}
+          {/* IMAGE 2 — finished-dessert slideshow (compact fixed frame).
+              The frame is square because the 9 real photos are ~1:1
+              (851×862 … 835×820): matching the frame aspect to the photo
+              footprint lets object-contain fill it edge-to-edge, so no
+              dead bands remain around the dessert at any breakpoint. */}
           <figure className="mt-5 lg:mt-0" style={{ '--rise-delay': '0.26s' } as CSSProperties}>
             {slideCount > 0 ? (
-              <div className="frame-lux mx-auto w-full max-w-[19rem] sm:max-w-[22rem] lg:max-w-[30rem]">
-                <div className="relative overflow-hidden rounded-2xl shadow-[0_40px_80px_-36px_rgba(0,0,0,0.85)] lg:arch">
+              <div className="frame-lux mx-auto w-full max-w-[15.5rem] sm:max-w-[18rem] lg:max-w-[26rem]">
+                <div className="relative overflow-hidden rounded-2xl shadow-[0_24px_56px_-28px_rgba(0,0,0,0.55)]">
                   <div
                     role="group"
                     aria-label="دسرهای آماده‌شده از پودر ژله و کاستر ژینو"
-                    className="relative aspect-[4/3] w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)] lg:aspect-[4/3.2]"
+                    className="relative aspect-square w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)]"
                   >
                     {heroSlides.map((slide, i) => (
                       <img
@@ -233,20 +237,27 @@ export default function HomePage() {
                       />
                     ))}
                     {slideCount > 1 && (
-                      <div
-                        aria-hidden="true"
-                        className="absolute inset-x-0 bottom-2.5 z-10 flex items-center justify-center gap-2 sm:bottom-3.5"
-                      >
-                        {heroSlides.map((slide, i) => (
-                          <span
-                            key={slide.src}
-                            className={cn(
-                              'h-1 w-1 rounded-full transition-colors duration-500 motion-reduce:transition-none sm:h-1.5 sm:w-1.5',
-                              i === slideIndex ? 'bg-cream-50/75' : 'bg-cream-50/30',
-                            )}
-                          />
-                        ))}
-                      </div>
+                      <>
+                        {/* faint legibility seam under the dots only */}
+                        <div
+                          aria-hidden="true"
+                          className="pointer-events-none absolute inset-x-0 bottom-0 h-9 bg-gradient-to-t from-black/30 to-transparent sm:h-10"
+                        />
+                        <div
+                          aria-hidden="true"
+                          className="absolute inset-x-0 bottom-2.5 z-10 flex items-center justify-center gap-2 sm:bottom-3.5"
+                        >
+                          {heroSlides.map((slide, i) => (
+                            <span
+                              key={slide.src}
+                              className={cn(
+                                'h-1 w-1 rounded-full transition-colors duration-500 motion-reduce:transition-none sm:h-1.5 sm:w-1.5',
+                                i === slideIndex ? 'bg-cream-50/75' : 'bg-cream-50/30',
+                              )}
+                            />
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
                 </div>
