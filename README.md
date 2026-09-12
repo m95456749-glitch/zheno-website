@@ -27,17 +27,26 @@ VITE_ADMIN_AUTH_MODE=supabase
 
 `VITE_SUPABASE_ANON_KEY` کلید عمومی مرورگر است؛ با RLS محدود می‌شود. **Service-role key را هرگز در `.env` قابل انتشار، Vite، frontend یا Git قرار ندهید.**
 
-۲. migrationها را با Supabase CLI اجرا کنید:
+۲. migrationها را دقیقاً به ترتیب filename اجرا کنید:
+
+**روش پیشنهادی با Supabase CLI:**
 
 ```bash
 supabase link --project-ref YOUR_PROJECT_REF
 supabase db push
 ```
 
-- `supabase/migrations/20260912000000_initial_schema.sql` جداول، triggerها، RPCها و RLS را می‌سازد.
-- `supabase/migrations/20260912000001_seed_catalog.sql` ۲۲ محصول رسمی، ۲۲ تصویر/مسیر واقعی، variantها، موجودی اولیه، دستورها و محتوای فعلی سایت را seed می‌کند.
+**روش جایگزین از Dashboard:** در Supabase به **SQL Editor → New query** بروید، تمام محتوای
+`supabase/migrations/20260912000000_initial_schema.sql` را اجرا کنید، سپس تمام محتوای
+`supabase/migrations/20260912000001_seed_catalog.sql` را در query جداگانه اجرا کنید.
+ترتیب دو فایل را عوض نکنید. بعد از آن، تمام queryهای read-only فایل
+`supabase/verify.sql` را اجرا کنید و باید countهای مورد انتظار را ببینید.
 
-۳. برای ورود مدیریت، یک کاربر را در Supabase Auth بسازید و در `app_metadata` آن نقش زیر را از Dashboard یا یک ابزار trusted server-side تنظیم کنید:
+- `supabase/migrations/20260912000000_initial_schema.sql` جداول، relationshipها، indexها، triggerها، RPCها و RLS را می‌سازد.
+- `supabase/migrations/20260912000001_seed_catalog.sql` ۲۲ محصول رسمی، ۲۲ تصویر/مسیر واقعی، variantها، موجودی اولیه، دستورها و محتوای فعلی سایت را seed می‌کند.
+- `supabase/verify.sql` فقط queryهای read-only برای بررسی tables, foreign keys, indexes, policies, functions, enums و seed counts دارد.
+
+۳. برای ورود مدیریت، در **Authentication → Users → Add user** یک کاربر Auth بسازید؛ سپس در جزئیات همان کاربر، مقدار **Raw App Metadata** را از Dashboard به شکل زیر تنظیم کنید:
 
 ```json
 {"role":"admin"}
