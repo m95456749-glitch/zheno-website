@@ -11,6 +11,10 @@
 @theme {
   --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, sans-serif;
   --font-display: 'Marcellus', 'Vazirmatn', Georgia, serif;
+  /* Hero headline voice — Vazirmatn at its Black (900) cut: a modern
+     Persian display weight, bold + premium, set against the body's
+     light/regular weights. Weight 900 is requested in index.html. */
+  --font-headline: 'Vazirmatn', system-ui, -apple-system, sans-serif;
 
   /* deepest burgundy-black — footer, toasts, deep scrims */
   --color-noir: #1d070c;
