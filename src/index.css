@@ -678,6 +678,26 @@ body {
 .burgundy-ambient {
   position: relative;
   isolation: isolate;
+  /* The decorative layer below bleeds 10% past the section on each side
+     (and its drift animation scales/moves it a little further). On the
+     full-bleed sections that bleed is off-screen, but it still counts as
+     scrollable overflow for the document: scrollWidth became 110% of the
+     viewport. Desktop ignores that, but mobile browsers widen the layout
+     viewport to fit it (on a 390 px phone the page laid out at 429 px),
+     which shifted the whole page sideways and left an empty band at the
+     screen edge. Clipping only the horizontal axis keeps the layers
+     inside the page while leaving the vertical bleed visible
+     (`clip` creates no scroll container and, unlike `hidden`, does not
+     turn the other axis into a scrollable one). */
+  overflow-x: clip;
+}
+
+/* Same guard for engines without `overflow-x: clip` (Safari < 16): keep
+   the decorative layer inside the section horizontally instead. */
+@supports not (overflow-x: clip) {
+  .burgundy-ambient::before {
+    inset: -6% 0;
+  }
 }
 
 /* Uses ::before so it never collides with .grain::after film texture.
