@@ -65,7 +65,7 @@ export default function Header() {
         <Link to="/" className="group flex items-center gap-3" aria-label="ژینو — صفحه اصلی">
           <span
             className={cn(
-              'flex h-10 w-10 items-center justify-center rounded-xl text-lg font-extrabold ring-1 transition duration-300',
+              'brand-intro-mark flex h-10 w-10 items-center justify-center rounded-xl text-lg font-extrabold ring-1 transition duration-300',
               overlay
                 ? 'bg-wine-900/60 text-gold-300 ring-cream-50/25 backdrop-blur-md group-hover:ring-cream-50/45'
                 : 'bg-wine-900 text-gold-300 ring-wine-900/15 group-hover:ring-wine-800/40',
@@ -73,7 +73,7 @@ export default function Header() {
           >
             ژ
           </span>
-          <span className="leading-none">
+          <span className="brand-intro leading-none">
             <span className={cn('block text-lg font-bold transition-colors', overlay ? 'text-cream-50' : 'text-wine-950')}>
               ژینو
             </span>

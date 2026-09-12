@@ -34,6 +34,7 @@ export default function ProductDetailPage() {
   );
   const [qty, setQty] = useState(1);
   const [error, setError] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState(false);
 
   // Reset local selection when navigating between products.
   useEffect(() => {
@@ -68,13 +69,15 @@ export default function ProductDetailPage() {
       setError(result.error ?? 'خطا در افزودن به سبد');
     } else {
       setError(null);
+      setJustAdded(true);
+      window.setTimeout(() => setJustAdded(false), 560);
     }
   };
 
   return (
     <div className="pb-6 sm:pb-8">
       {/* wine seam carrying the page header language */}
-      <div className="page-plate dark-surface relative overflow-hidden">
+      <div className="page-plate dark-surface burgundy-ambient relative overflow-hidden">
         <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-l from-transparent via-cream-50/30 to-transparent" aria-hidden="true" />
         <div className="relative mx-auto max-w-4xl px-4 pt-5 sm:px-6">
           <div className="flex justify-start">
@@ -216,7 +219,10 @@ export default function ProductDetailPage() {
               type="button"
               onClick={handleAdd}
               disabled={!selected.available}
-              className="btn-lux btn-wine sheen rounded-xl py-3.5 text-[0.98rem] disabled:cursor-not-allowed disabled:opacity-45"
+              className={cn(
+                'btn-lux btn-wine btn-add sheen rounded-xl py-3.5 text-[0.98rem] disabled:cursor-not-allowed disabled:opacity-45',
+                justAdded && 'is-added',
+              )}
             >
               {selected.available ? 'افزودن به سبد خرید' : 'ناموجود'}
             </button>

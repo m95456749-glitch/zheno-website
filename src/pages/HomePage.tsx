@@ -231,8 +231,8 @@ export default function HomePage() {
                         onError={() => markSlideBroken(slide.src)}
                         aria-hidden={i !== slideIndex}
                         className={cn(
-                          'absolute inset-0 h-full w-full object-contain transition-opacity duration-700 ease-in-out motion-reduce:transition-none',
-                          i === slideIndex ? 'opacity-100' : 'opacity-0',
+                          'hero-slide absolute inset-0 h-full w-full object-contain',
+                          i === slideIndex && 'is-active',
                         )}
                       />
                     ))}
@@ -313,7 +313,7 @@ export default function HomePage() {
 
               <div
                 ref={group.reveal}
-                className="mt-4 grid grid-cols-2 gap-3.5 sm:gap-5 md:grid-cols-3 lg:grid-cols-4"
+                className="reveal-stagger mt-4 grid grid-cols-2 gap-3.5 sm:gap-5 md:grid-cols-3 lg:grid-cols-4"
               >
                 {group.products.map((product) => (
                   <ProductCard key={product.id} product={product} />
@@ -327,7 +327,7 @@ export default function HomePage() {
       {/* ══ FLAVOR INDEX — compact discovery chips ══════════ */}
       <section
         id="flavors"
-        className="mt-14 scroll-mt-24 bg-wine-800 py-8 text-cream-50 sm:py-10"
+        className="burgundy-ambient mt-14 scroll-mt-24 bg-wine-800 py-8 text-cream-50 sm:py-10"
         aria-label="طعم‌های ژینو"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
@@ -367,7 +367,7 @@ export default function HomePage() {
       </section>
 
       {/* ══ RECIPES — the two official methods ═══════════════ */}
-      <section className="bg-wine-800 pb-14 pt-10 text-cream-50 sm:pb-16 sm:pt-12" aria-label="دستورهای پیشنهادی">
+      <section className="burgundy-ambient bg-wine-800 pb-14 pt-10 text-cream-50 sm:pb-16 sm:pt-12" aria-label="دستورهای پیشنهادی">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <div className="flex items-end justify-between gap-6">
             <div>
@@ -422,7 +422,7 @@ export default function HomePage() {
 
       {/* ══ CLOSING — a thin wine seam into the story ═══════ */}
       <section
-        className="page-plate dark-surface grain relative mt-14 overflow-hidden px-4 py-10 text-center text-cream-50 sm:py-12"
+        className="page-plate dark-surface grain burgundy-ambient relative mt-14 overflow-hidden px-4 py-10 text-center text-cream-50 sm:py-12"
         aria-label="درباره ژینو"
       >
         <p className="kicker kicker-dark font-display">The Zhino Story</p>

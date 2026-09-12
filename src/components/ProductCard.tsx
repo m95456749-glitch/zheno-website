@@ -16,6 +16,7 @@ import { cn } from '../utils/cn';
 export default function ProductCard({ product }: { product: Product }) {
   const { addItemWithToast } = useCartContext();
   const [error, setError] = useState<string | null>(null);
+  const [justAdded, setJustAdded] = useState(false);
 
   const flavor = getFlavor(product.flavorId);
   const defaultVariant = product.variants[0];
@@ -29,6 +30,9 @@ export default function ProductCard({ product }: { product: Product }) {
     if (!result.success) {
       setError(result.error ?? 'خطا در افزودن به سبد');
       window.setTimeout(() => setError(null), 2500);
+    } else {
+      setJustAdded(true);
+      window.setTimeout(() => setJustAdded(false), 560);
     }
   };
 
@@ -88,7 +92,10 @@ export default function ProductCard({ product }: { product: Product }) {
           onClick={handleAdd}
           disabled={!available}
           aria-label={`افزودن ${product.shortName} به سبد خرید`}
-          className="mt-3 flex h-10 items-center justify-center gap-1.5 rounded-lg bg-wine-900 text-[0.72rem] font-bold text-cream-50 shadow-sm shadow-wine-900/25 transition duration-300 hover:bg-wine-800 hover:shadow-md active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:rounded-xl sm:text-[0.78rem]"
+          className={cn(
+            'btn-add mt-3 flex h-10 items-center justify-center gap-1.5 rounded-lg bg-wine-900 text-[0.72rem] font-bold text-cream-50 shadow-sm shadow-wine-900/25 hover:bg-wine-800 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-40 sm:h-11 sm:rounded-xl sm:text-[0.78rem]',
+            justAdded && 'is-added',
+          )}
         >
           <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
             <path d="M10 4v12M4 10h12" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" />

@@ -51,7 +51,7 @@ export default function ProductVisual({
           loading="lazy"
           decoding="async"
           onError={() => setImgFailed(true)}
-          className="absolute inset-0 h-full w-full object-cover transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+          className="product-visual-img absolute inset-0 h-full w-full object-cover"
         />
       </div>
     );
@@ -74,7 +74,7 @@ export default function ProductVisual({
       {/* the plate — a jewel disc of the flavor color */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div
-          className="relative aspect-square w-[64%] max-w-[22rem] rounded-full transition-transform duration-500 ease-out group-hover:scale-[1.04]"
+          className="product-visual-img relative aspect-square w-[64%] max-w-[22rem] rounded-full"
           style={{
             background: `radial-gradient(70% 62% at 32% 24%, rgba(255,255,255,0.42) 0%, rgba(255,255,255,0) 46%), linear-gradient(150deg, color-mix(in srgb, ${color} 88%, white 6%) 0%, ${color} 55%, color-mix(in srgb, ${color} 55%, black) 100%)`,
             boxShadow:
