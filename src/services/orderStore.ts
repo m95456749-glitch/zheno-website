@@ -1,47 +1,30 @@
 // ============================================================
-// ZHINO — order records (checkout writes, admin manages)
-//
-// Frontend-only mode: the checkout has no backend to register the
-// order with, so it records a snapshot here (same browser,
-// localStorage) and the admin panel's «سفارش‌ها» page manages it.
-// The record is denormalized (product names/prices captured at
-// purchase time) so a later catalog change never rewrites
-// history.
-//
-// One store, two consumers — there is no second order system.
-//
-// Future backend: when VITE_API_BASE_URL is configured the order
-// is created by the payment API (src/services/api.ts) and this
-// local record is simply not written; the admin's orders page
-// switches to the API-backed list.
+// ZHINO — order service
 // ============================================================
+// Supabase is the source of truth when configured. The local snapshot is
+// retained only for the existing no-credentials checkout/demo mode, so the
+// storefront remains usable before deployment secrets are supplied.
 
-import type { Address, Customer, ShippingMethod } from '../types';
+import { useEffect, useSyncExternalStore } from 'react';
+import type { Address, Customer, ShippingMethod, OrderStatus as SharedOrderStatus } from '../types';
 import { createLocalStore, useLocalStore } from './localStore';
+import { isSupabaseConfigured } from './supabase/client';
+import { fetchRemoteOrders, updateRemoteOrderStatus } from './supabase/repository';
 
-export type OrderStatus =
-  | 'new'
-  | 'confirmed'
-  | 'processing'
-  | 'shipped'
-  | 'delivered'
-  | 'cancelled';
+export type OrderStatus = SharedOrderStatus;
 
 export interface OrderLineRecord {
   productId: string;
   variantId: string;
   quantity: number;
-  /** snapshot of the display name at purchase time */
   productName: string;
-  /** snapshot of the variant weight label, e.g. «۲۵۰ گرم» */
   weight: string;
-  /** snapshot of the unit price (Tomans) at purchase time */
   unitPrice: number;
 }
 
 export interface StoredOrder {
   id: string;
-  createdAt: string; // ISO
+  createdAt: string;
   status: OrderStatus;
   items: OrderLineRecord[];
   customer: Customer;
@@ -55,60 +38,103 @@ export interface StoredOrder {
 export const ORDER_STATUSES: ReadonlyArray<{ id: OrderStatus; label: string }> = [
   { id: 'new', label: 'جدید' },
   { id: 'confirmed', label: 'تأیید شده' },
-  { id: 'processing', label: 'در حال آماده‌سازی' },
+  { id: 'preparing', label: 'در حال آماده‌سازی' },
   { id: 'shipped', label: 'ارسال شده' },
-  { id: 'delivered', label: 'تکمیل شده' },
+  { id: 'completed', label: 'تکمیل شده' },
   { id: 'cancelled', label: 'لغو شده' },
 ];
 
 export function orderStatusLabel(id: OrderStatus): string {
-  return ORDER_STATUSES.find((s) => s.id === id)?.label ?? id;
+  return ORDER_STATUSES.find((status) => status.id === id)?.label ?? id;
 }
 
 const MAX_STORED_ORDERS = 200;
 
+function normaliseStatus(value: unknown): OrderStatus {
+  if (value === 'processing') return 'preparing';
+  if (value === 'delivered') return 'completed';
+  if (value === 'pending') return 'new';
+  return ORDER_STATUSES.some((status) => status.id === value) ? (value as OrderStatus) : 'new';
+}
+
 function isStoredOrder(value: unknown): value is StoredOrder {
   if (typeof value !== 'object' || value === null) return false;
-  const o = value as StoredOrder;
+  const order = value as StoredOrder;
   return (
-    typeof o.id === 'string' &&
-    typeof o.createdAt === 'string' &&
-    (ORDER_STATUSES.some((s) => s.id === o.status) || typeof o.status === 'string') &&
-    Array.isArray(o.items) &&
-    typeof o.subtotal === 'number' &&
-    typeof o.shippingCost === 'number' &&
-    typeof o.total === 'number' &&
-    typeof o.customer === 'object' &&
-    o.customer !== null &&
-    typeof o.address === 'object' &&
-    o.address !== null
+    typeof order.id === 'string' &&
+    typeof order.createdAt === 'string' &&
+    typeof order.status === 'string' &&
+    Array.isArray(order.items) &&
+    typeof order.subtotal === 'number' &&
+    typeof order.shippingCost === 'number' &&
+    typeof order.total === 'number' &&
+    typeof order.customer === 'object' && order.customer !== null &&
+    typeof order.address === 'object' && order.address !== null
   );
 }
 
 function sanitize(raw: unknown): StoredOrder[] | null {
   if (!Array.isArray(raw)) return null;
-  return (raw as unknown[]).filter(isStoredOrder) as StoredOrder[];
+  return (raw as unknown[]).filter(isStoredOrder).map((rawOrder) => ({
+    ...rawOrder,
+    status: normaliseStatus(rawOrder.status),
+  }));
 }
 
 const store = createLocalStore<StoredOrder[]>('zhino_admin_orders_v1', [], sanitize);
+let remoteOrders: StoredOrder[] | null = null;
+let remoteAttempted = false;
+const remoteListeners = new Set<() => void>();
 
-/** All recorded orders, newest first. */
-export function getStoredOrders(): StoredOrder[] {
-  return store.get();
+function notifyRemoteOrders() {
+  remoteListeners.forEach((listener) => listener());
 }
 
-/** Called by the checkout (frontend-only mode) after order confirmation. */
+export async function hydrateOrdersFromSupabase(force = false): Promise<void> {
+  if (!isSupabaseConfigured() || (remoteAttempted && !force)) return;
+  remoteAttempted = true;
+  try {
+    remoteOrders = await fetchRemoteOrders();
+  } catch (error) {
+    remoteOrders = null;
+    if (import.meta.env.DEV) console.warn('[zhino] Supabase orders unavailable; using offline mode.', error);
+  }
+  notifyRemoteOrders();
+}
+
+export function getStoredOrders(): StoredOrder[] {
+  return remoteOrders ?? (isSupabaseConfigured() ? [] : store.get());
+}
+
+/** Offline-only fallback used by checkout when no Supabase project is configured. */
 export function recordLocalOrder(order: StoredOrder): void {
+  if (isSupabaseConfigured()) return;
   const current = store.get();
   store.set([order, ...current].slice(0, MAX_STORED_ORDERS));
 }
 
-export function updateOrderStatus(id: string, status: OrderStatus): void {
+export async function updateOrderStatus(id: string, status: OrderStatus): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await updateRemoteOrderStatus(id, status);
+    await hydrateOrdersFromSupabase(true);
+    return;
+  }
   const current = store.get();
-  store.set(current.map((o) => (o.id === id ? { ...o, status } : o)));
+  store.set(current.map((order) => (order.id === id ? { ...order, status } : order)));
 }
 
-/** React binding (admin orders page). */
 export function useStoredOrders(): StoredOrder[] {
-  return useLocalStore(store);
+  const localOrders = useLocalStore(store);
+  const remote = useSyncExternalStore(
+    (listener) => {
+      remoteListeners.add(listener);
+      return () => remoteListeners.delete(listener);
+    },
+    () => remoteOrders,
+    () => null,
+  );
+  useEffect(() => {
+    void hydrateOrdersFromSupabase();
+  }, []);
+  return remote ?? (isSupabaseConfigured() ? [] : localOrders);
 }

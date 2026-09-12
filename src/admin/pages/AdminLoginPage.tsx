@@ -19,7 +19,7 @@ interface FormErrors {
 }
 
 export default function AdminLoginPage() {
-  const { session, login } = useAdminAuth();
+  const { session, login, isDemo } = useAdminAuth();
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [secret, setSecret] = useState('');
@@ -87,7 +87,7 @@ export default function AdminLoginPage() {
                 {errors.form}
               </p>
             )}
-            <Field label="نام کاربری" error={errors.identifier}>
+            <Field label={isDemo ? 'نام کاربری' : 'ایمیل حساب Supabase'} error={errors.identifier}>
               <input
                 className={cn('adm-input', errors.identifier && 'err')}
                 value={identifier}
@@ -116,15 +116,23 @@ export default function AdminLoginPage() {
             </button>
           </form>
 
-          {/* honest disclosure — no fake security */}
-          <div className="mt-4 rounded-xl bg-cream-100 px-4 py-3.5 text-[0.7rem] leading-6 text-mocha ring-1 ring-espresso/8">
-            <p className="font-bold text-wine-900">توجه — احراز هویت واقعی هنوز متصل نشده است.</p>
-            <p>
-              در این نسخه نمایشی هیچ گذرواژه‌ای بررسی یا ذخیره نمی‌شود و ورود فقط برای
-              پیش‌نمایش پنل امکان‌پذیر است. برای امنیت واقعی، سرویس احراز هویت بک‌اند در
-              فاز بعد متصل می‌شود (پیکربندی: <span dir="ltr" className="font-semibold">VITE_ADMIN_AUTH_MODE</span>).
-            </p>
-          </div>
+          {/* The preview disclosure is shown only when the explicitly selected
+              credential-free provider is active. Production Supabase Auth
+              does not show a fake-security message. */}
+          {isDemo ? (
+            <div className="mt-4 rounded-xl bg-cream-100 px-4 py-3.5 text-[0.7rem] leading-6 text-mocha ring-1 ring-espresso/8">
+              <p className="font-bold text-wine-900">توجه — احراز هویت واقعی در حالت نمایشی فعال نیست.</p>
+              <p>
+                در این نسخه هیچ گذرواژه‌ای بررسی یا ذخیره نمی‌شود و ورود فقط برای پیش‌نمایش
+                پنل امکان‌پذیر است. برای محیط واقعی، متغیرهای Supabase و
+                <span dir="ltr" className="font-semibold"> VITE_ADMIN_AUTH_MODE=supabase</span> را تنظیم کنید.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl bg-emerald-50 px-4 py-3.5 text-[0.7rem] leading-6 text-emerald-900 ring-1 ring-emerald-200">
+              ورود با Supabase Auth انجام می‌شود؛ نقش admin و دسترسی به داده‌ها در PostgreSQL با RLS بررسی می‌شود.
+            </div>
+          )}
 
           <p className="mt-6 text-center text-[0.7rem] text-mocha-light">
             © ژینو — پنل مدیریت

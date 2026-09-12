@@ -8,7 +8,7 @@ import type { CartItem } from '../types';
 // aware); the free-shipping threshold comes from site settings
 // (default = the original constant — unchanged behaviour).
 import { getProductById, getVariantById } from '../services/catalog';
-import { getSettings } from '../services/settings';
+import { useSiteSettings } from '../services/settings';
 import { soundService } from '../services/soundService';
 
 const CART_STORAGE_KEY = 'zhino_cart';
@@ -83,7 +83,7 @@ function saveCart(items: CartItem[]) {
 export function useCart() {
   const [items, setItems] = useState<CartItem[]>(() => loadCart());
   const prevSubtotalRef = useRef(0);
-  const freeShippingThreshold = getSettings().freeShippingThreshold;
+  const { freeShippingThreshold } = useSiteSettings();
 
   useEffect(() => {
     saveCart(items);

@@ -13,8 +13,8 @@ import { Link } from 'react-router-dom';
 import { FLAVORS, getFlavor } from '../data/products';
 // product list + recipe list go through the shared services
 // (admin overlay aware — identical output until an admin changes something)
-import { getVisibleProducts } from '../services/catalog';
-import { getActiveRecipes } from '../services/recipeStore';
+import { useCatalog } from '../services/catalog';
+import { useActiveRecipes } from '../services/recipeStore';
 import { formatNumber } from '../utils/format';
 import { soundService } from '../services/soundService';
 import ProductCard from '../components/ProductCard';
@@ -101,10 +101,10 @@ const HERO_SLIDES = [
 const HERO_SLIDE_MS = 3000;
 
 export default function HomePage() {
-  const products = getVisibleProducts();
+  const products = useCatalog();
   const jellyProducts = products.filter((p) => p.category === 'jelly');
   const custardProducts = products.filter((p) => p.category === 'custard');
-  const recipes = getActiveRecipes();
+  const recipes = useActiveRecipes();
   const heroTrio = ['strawberry-j', 'banana', 'mahlab-vanilla'] as const;
 
   const jellyFlavors = Object.values(FLAVORS).filter((f) => f.category === 'jelly');

@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 // list + counts go through the shared catalog service (admin
 // overlay aware — identical output until an admin changes something)
-import { getVisibleProducts } from '../services/catalog';
+import { useCatalog } from '../services/catalog';
 import type { ProductCategory } from '../types';
 import { formatNumber } from '../utils/format';
 import { cn } from '../utils/cn';
@@ -29,7 +29,7 @@ export default function ProductsPage() {
 
   const gridReveal = useReveal<HTMLDivElement>();
 
-  const products = useMemo(() => getVisibleProducts(), []);
+  const products = useCatalog();
 
   const counts = useMemo(
     () => ({
