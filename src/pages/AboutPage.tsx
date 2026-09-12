@@ -78,10 +78,9 @@ export default function AboutPage() {
           {VALUES.map((value) => (
             <div key={value.title} className="relative border-t border-espresso/10 pt-6 text-center md:text-start">
               <span className="absolute -top-px right-0 h-px w-12 bg-wine-700" aria-hidden="true" />
-              {/* muted text sits directly on the rose page canvas → deep wine for legibility */}
-              <p className="font-display text-[0.62rem] tracking-[0.4em] text-wine-800">{value.no}</p>
+              <p className="font-display text-[0.62rem] tracking-[0.4em] text-wine-700">{value.no}</p>
               <h2 className="mt-3 text-lg font-bold text-wine-950">{value.title}</h2>
-              <p className="mt-2.5 text-sm leading-8 text-wine-900">{value.text}</p>
+              <p className="mt-2.5 text-sm leading-8 text-mocha">{value.text}</p>
             </div>
           ))}
         </div>

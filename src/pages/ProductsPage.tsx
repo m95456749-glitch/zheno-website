@@ -105,7 +105,7 @@ export default function ProductsPage() {
         </div>
 
         {filtered.length === 0 && (
-          <p className="py-16 text-center text-sm text-wine-900">محصولی در این دسته یافت نشد.</p>
+          <p className="py-16 text-center text-sm text-mocha">محصولی در این دسته یافت نشد.</p>
         )}
       </div>
     </div>

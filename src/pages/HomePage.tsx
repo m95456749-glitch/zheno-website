@@ -295,11 +295,10 @@ export default function HomePage() {
       </section>
 
       {/* ══ PRODUCTS — the main content: all 22 ══════════════ */}
-      <section className="bg-blush-page" aria-label="محصولات ژینو">
+      <section className="bg-cream-page" aria-label="محصولات ژینو">
         <div className="mx-auto max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pb-16 sm:pt-16">
           <header className="text-center">
-            {/* kicker sits on the rose canvas → deep wine for legibility (gold kicker is kept on white panels) */}
-            <p className="kicker font-display text-wine-900!">The Collection</p>
+            <p className="kicker font-display">The Collection</p>
             <h2 className="mt-3 text-[1.65rem] font-light text-wine-950 sm:text-[2.1rem]">محصولات ژینو</h2>
             <span className="rule-lux mt-3.5" aria-hidden="true" />
           </header>
