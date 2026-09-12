@@ -41,7 +41,7 @@ export default class ErrorBoundary extends Component<Props, State> {
     }
 
     return (
-      <div className="flex min-h-screen items-center justify-center bg-cream-50 p-6">
+      <div className="flex min-h-screen items-center justify-center bg-blush-page p-6">
         <div className="panel-lux w-full max-w-md rounded-2xl p-8 text-center">
           <div className="mx-auto mb-5 flex h-16 w-16 items-center justify-center rounded-2xl bg-wine-900 text-2xl font-extrabold text-gold-300 ring-1 ring-wine-900/15">
             ژ
