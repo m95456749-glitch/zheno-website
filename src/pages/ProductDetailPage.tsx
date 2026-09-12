@@ -48,7 +48,7 @@ export default function ProductDetailPage() {
       <div className="mx-auto max-w-xl px-4 pt-28 text-center sm:px-6">
         <p className="font-display text-7xl text-wine-900/15">۴۰۴</p>
         <h1 className="mt-4 text-xl font-bold text-wine-950">محصول یافت نشد</h1>
-        <p className="mt-2 text-sm leading-7 text-wine-900">این محصول وجود ندارد یا از فروشگاه حذف شده است.</p>
+        <p className="mt-2 text-sm leading-7 text-mocha">این محصول وجود ندارد یا از فروشگاه حذف شده است.</p>
         <Link to="/products" className="btn-lux btn-wine mt-8 inline-flex">
           بازگشت به محصولات
         </Link>
@@ -238,8 +238,7 @@ export default function ProductDetailPage() {
           <section className="mt-12" aria-label="محصولات مرتبط">
             <div className="mb-6 flex items-end justify-between gap-6">
               <div>
-                {/* kicker sits on the rose page canvas → deep wine for legibility */}
-                <p className="kicker font-display text-wine-900!">You may also like</p>
+                <p className="kicker font-display">You may also like</p>
                 <h2 className="mt-3 text-2xl font-light text-wine-950 sm:text-[1.8rem]">طعم‌های مرتبط</h2>
               </div>
               <Link

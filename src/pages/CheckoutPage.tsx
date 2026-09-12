@@ -277,8 +277,7 @@ export default function CheckoutPage() {
               >
                 {i < stepIndex ? '✓' : formatNumber(i + 1)}
               </span>
-              {/* inactive step labels sit on the rose page canvas → near-black warm text for legibility */}
-              <span className={cn('text-[0.68rem] font-bold', i === stepIndex ? 'text-wine-900' : 'text-espresso/90')}>
+              <span className={cn('text-[0.68rem] font-bold', i === stepIndex ? 'text-wine-900' : 'text-mocha-light')}>
                 {s.label}
               </span>
             </div>

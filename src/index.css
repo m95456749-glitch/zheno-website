@@ -31,19 +31,8 @@
 
   /* light ivory — the main site canvas (matches --color-cream-50 exactly,
      so light surfaces across the site are one consistent ivory; no
-     beige/brown background shades).
-     NOTE: the storefront page/section canvas no longer uses this token —
-     the plain-white page areas now use --color-blush-page (below). This
-     token remains the admin panel + designed light-surface ivory. */
+     beige/brown background shades) */
   --color-cream-page: #faf7f2;
-
-  /* page-canvas rose (#C78C87) — LIMITED COLOUR UPDATE: replaces ONLY the
-     former plain-white page/section background areas of the storefront
-     (body canvas, Layout wrapper, home products band, hero→content curve
-     arc, error-screen backdrop). Deliberately a separate token so the
-     admin panel, product cards, panels, chips and every other designed
-     surface keep their exact current colours. */
-  --color-blush-page: #c78c87;
 
   /* ── muted matte gold — used very sparingly ─────────────── */
   --color-gold-300: #e0d0ab;
