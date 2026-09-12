@@ -2,6 +2,8 @@
 // ZHINO — scroll reveal (IntersectionObserver, no libraries)
 // • Elements already in view at mount reveal immediately.
 // • Elements below the fold glide in when scrolled to.
+// • Optional .reveal-stagger on the target cascades children in
+//   with a short delay (CSS-driven; see index.css).
 // • Failsafe: anything still armed after 4s reveals quietly, so
 //   no environment (print, full-page capture, odd browsers) can
 //   ever end up with invisible content.
@@ -21,7 +23,7 @@ export function useReveal<T extends HTMLElement>() {
 
     // Already visible at mount? Show instantly, don't hide then un-hide.
     const rect = el.getBoundingClientRect();
-    if (rect.top < window.innerHeight && rect.bottom > 0) {
+    if (rect.top < window.innerHeight * 0.92 && rect.bottom > 0) {
       reveal();
       return;
     }
@@ -36,7 +38,7 @@ export function useReveal<T extends HTMLElement>() {
           }
         }
       },
-      { rootMargin: '0px 0px -8% 0px', threshold: 0.05 },
+      { rootMargin: '0px 0px -6% 0px', threshold: 0.06 },
     );
     io.observe(el);
 

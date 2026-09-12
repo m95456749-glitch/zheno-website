@@ -32,7 +32,7 @@ export default function PagePlate({
   return (
     <header
       className={cn(
-        'page-plate grain dark-surface relative isolate overflow-hidden text-cream-50',
+        'page-plate grain dark-surface burgundy-ambient relative isolate overflow-hidden text-cream-50',
         className,
       )}
     >

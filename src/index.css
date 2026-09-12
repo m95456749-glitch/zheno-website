@@ -194,12 +194,13 @@ body {
   font-size: 0.92rem;
   line-height: 1;
   transition:
-    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.3s ease,
-    background-color 0.3s ease,
-    background-image 0.3s ease,
-    color 0.3s ease,
-    border-color 0.3s ease;
+    transform 0.25s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.25s ease,
+    background-color 0.25s ease,
+    background-image 0.25s ease,
+    color 0.25s ease,
+    border-color 0.25s ease;
+  will-change: transform;
 }
 
 .btn-lux:active {
@@ -458,9 +459,9 @@ body {
     0 1px 2px rgba(41, 35, 33, 0.05),
     0 18px 36px -26px rgba(41, 35, 33, 0.28);
   transition:
-    transform 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-    box-shadow 0.35s ease,
-    border-color 0.35s ease;
+    transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 0.3s ease,
+    border-color 0.3s ease;
 }
 
 /* on small screens the depth is a touch more restrained — cards stay grounded */
@@ -472,13 +473,14 @@ body {
   }
 }
 
+/* hover lift only on true pointer devices — no stuck hover on touch */
 @media (hover: hover) {
   .card-product:hover {
-    transform: translateY(-4px);
-    border-color: rgba(113, 49, 59, 0.3);
+    transform: translateY(-3px);
+    border-color: rgba(113, 49, 59, 0.28);
     box-shadow:
       0 2px 3px rgba(41, 35, 33, 0.05),
-      0 30px 52px -30px rgba(41, 35, 33, 0.32);
+      0 28px 48px -28px rgba(41, 35, 33, 0.3);
   }
 }
 
@@ -535,6 +537,26 @@ body {
   animation-delay: var(--rise-delay, 0s);
 }
 
+/* Header brand — short, quiet entrance on first paint */
+@keyframes brand-in {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.brand-intro {
+  animation: brand-in 0.65s 0.08s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.brand-intro-mark {
+  animation: brand-in 0.7s 0.02s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes arch-unveil {
   from {
     clip-path: inset(14% 8% 14% 8% round 11rem);
@@ -578,21 +600,238 @@ body {
 }
 
 .animate-toast-in {
-  animation: toast-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: toast-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* IO-driven section reveals (armed by JS only) */
+/* Toast checkmark — draws once, quick and unobtrusive */
+@keyframes toast-check-draw {
+  from {
+    stroke-dashoffset: 28;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes toast-check-pop {
+  0% {
+    transform: scale(0.72);
+    opacity: 0.55;
+  }
+  60% {
+    transform: scale(1.06);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.toast-check-wrap {
+  animation: toast-check-pop 0.4s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.toast-check-path {
+  stroke-dasharray: 28;
+  stroke-dashoffset: 28;
+  animation: toast-check-draw 0.42s 0.12s cubic-bezier(0.65, 0, 0.35, 1) forwards;
+}
+
+/* ------------------------------------------------------------
+   Hero slideshow — cinematic crossfade + quiet ken-burns zoom
+   ------------------------------------------------------------ */
+
+.hero-slide {
+  opacity: 0;
+  transform: scale(1.035);
+  transition:
+    opacity 1.15s cubic-bezier(0.4, 0, 0.2, 1),
+    transform 1.15s cubic-bezier(0.4, 0, 0.2, 1);
+  will-change: opacity, transform;
+}
+
+.hero-slide.is-active {
+  opacity: 1;
+  transform: scale(1);
+  animation: hero-kenburns 3.05s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  z-index: 1;
+}
+
+@keyframes hero-kenburns {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.045);
+  }
+}
+
+/* ------------------------------------------------------------
+   Burgundy ambient — extremely subtle light drift on dark plates
+   ------------------------------------------------------------ */
+
+.burgundy-ambient {
+  position: relative;
+  isolation: isolate;
+}
+
+/* Uses ::before so it never collides with .grain::after film texture.
+   isolation + z-index:-1 keeps the drift above the section fill but
+   behind all in-flow content — no child stacking overrides needed. */
+.burgundy-ambient::before {
+  content: '';
+  position: absolute;
+  inset: -6% -10%;
+  pointer-events: none;
+  z-index: -1;
+  background:
+    radial-gradient(42% 55% at 18% 28%, rgba(184, 154, 98, 0.08) 0%, rgba(184, 154, 98, 0) 62%),
+    radial-gradient(48% 60% at 82% 72%, rgba(139, 48, 64, 0.2) 0%, rgba(139, 48, 64, 0) 65%),
+    radial-gradient(36% 42% at 62% 18%, rgba(250, 247, 242, 0.045) 0%, rgba(250, 247, 242, 0) 70%);
+  animation: burgundy-drift 18s ease-in-out infinite;
+  will-change: transform, opacity;
+  opacity: 0.85;
+}
+
+@keyframes burgundy-drift {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0) scale(1);
+    opacity: 0.7;
+  }
+  40% {
+    transform: translate3d(2%, -1.4%, 0) scale(1.025);
+    opacity: 1;
+  }
+  70% {
+    transform: translate3d(-1.4%, 1.2%, 0) scale(1.012);
+    opacity: 0.8;
+  }
+}
+
+/* page-plate already paints its own gradients; quieter drift */
+.page-plate.burgundy-ambient::before {
+  opacity: 0.5;
+}
+
+/* ------------------------------------------------------------
+   Add-to-cart button micro-feedback
+   ------------------------------------------------------------ */
+
+.btn-add {
+  position: relative;
+  overflow: hidden;
+  transition:
+    transform 0.28s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.28s ease,
+    box-shadow 0.28s ease,
+    opacity 0.28s ease;
+}
+
+.btn-add:not(:disabled):active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) {
+  .btn-add:not(:disabled):hover {
+    transform: translateY(-1px);
+  }
+}
+
+.btn-add.is-added {
+  animation: btn-add-pulse 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@keyframes btn-add-pulse {
+  0% {
+    transform: scale(1);
+  }
+  35% {
+    transform: scale(0.96);
+  }
+  70% {
+    transform: scale(1.02);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ------------------------------------------------------------
+   Button press polish (shared lux family)
+   ------------------------------------------------------------ */
+
+@media (hover: hover) {
+  .btn-lux:hover {
+    /* lift already defined per variant; reinforce shadow smoothness */
+  }
+}
+
+.btn-lux:focus-visible {
+  outline-offset: 3px;
+}
+
+/* ------------------------------------------------------------
+   IO-driven section reveals (armed by JS only)
+   ------------------------------------------------------------ */
+
 .reveal-armed {
   opacity: 0;
-  transform: translateY(26px);
+  transform: translateY(22px);
   transition:
-    opacity 0.9s cubic-bezier(0.22, 1, 0.36, 1),
-    transform 0.9s cubic-bezier(0.22, 1, 0.36, 1);
+    opacity 0.75s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.75s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .reveal-in {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Staggered children — parent stays layout-stable; cards cascade in */
+.reveal-armed.reveal-stagger {
+  opacity: 1;
+  transform: none;
+}
+
+.reveal-armed.reveal-stagger > * {
+  opacity: 0;
+  transform: translateY(16px);
+  transition:
+    opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1),
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  transition-delay: 0ms;
+}
+
+.reveal-in.reveal-stagger > * {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.reveal-stagger > *:nth-child(1) { transition-delay: 0ms; }
+.reveal-stagger > *:nth-child(2) { transition-delay: 45ms; }
+.reveal-stagger > *:nth-child(3) { transition-delay: 90ms; }
+.reveal-stagger > *:nth-child(4) { transition-delay: 135ms; }
+.reveal-stagger > *:nth-child(5) { transition-delay: 180ms; }
+.reveal-stagger > *:nth-child(6) { transition-delay: 225ms; }
+.reveal-stagger > *:nth-child(7) { transition-delay: 270ms; }
+.reveal-stagger > *:nth-child(8) { transition-delay: 315ms; }
+.reveal-stagger > *:nth-child(9) { transition-delay: 360ms; }
+.reveal-stagger > *:nth-child(10) { transition-delay: 390ms; }
+.reveal-stagger > *:nth-child(11) { transition-delay: 420ms; }
+.reveal-stagger > *:nth-child(12) { transition-delay: 450ms; }
+.reveal-stagger > *:nth-child(n+13) { transition-delay: 480ms; }
+
+/* Product image scale is slightly tighter and faster for elegance */
+.card-product .product-visual-img {
+  transition: transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+@media (hover: hover) {
+  .card-product:hover .product-visual-img {
+    transform: scale(1.035);
+  }
 }
 
 /* ------------------------------------------------------------
@@ -611,17 +850,55 @@ body {
 
   .rise,
   .arch-unveil,
-  .reveal-armed {
+  .brand-intro,
+  .brand-intro-mark,
+  .reveal-armed,
+  .reveal-armed.reveal-stagger > *,
+  .hero-slide {
     opacity: 1 !important;
     transform: none !important;
     clip-path: none !important;
+    animation: none !important;
   }
 
-  .card-lux:hover {
+  .hero-slide.is-active {
+    animation: none !important;
+  }
+
+  .burgundy-ambient::before {
+    animation: none !important;
+    opacity: 0.5 !important;
+    transform: none !important;
+  }
+
+  .card-lux:hover,
+  .btn-lux:hover,
+  .btn-gold:hover,
+  .btn-wine:hover,
+  .btn-line-light:hover,
+  .btn-line-dark:hover,
+  .btn-add:hover {
     transform: none;
   }
 
   .card-product:hover {
     transform: none;
+  }
+
+  .card-product:hover .product-visual-img {
+    transform: none;
+  }
+
+  .btn-add.is-added {
+    animation: none !important;
+  }
+
+  .toast-check-wrap,
+  .toast-check-path {
+    animation: none !important;
+  }
+
+  .toast-check-path {
+    stroke-dashoffset: 0 !important;
   }
 }
