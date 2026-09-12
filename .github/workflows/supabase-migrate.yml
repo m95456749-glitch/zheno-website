@@ -1,0 +1,167 @@
+name: Supabase migrate (manual)
+
+# Manual-only workflow. It applies the exact SQL files in supabase/migrations/
+# to the real Supabase project and then runs supabase/verify.sql.
+#
+# Nothing here touches the frontend, design, cart, checkout or animations.
+# No secret value is ever printed: the DB password is masked and psql reads
+# the connection string from the environment (PGPASSWORD is never echoed).
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_ref:
+        description: "Supabase project ref"
+        required: true
+        default: kijhqsyftzufydonggeb
+      mode:
+        description: "dry-run = show pending migrations only | apply = really push"
+        required: true
+        default: dry-run
+        type: choice
+        options:
+          - dry-run
+          - apply
+
+concurrency:
+  group: supabase-migrate
+  cancel-in-progress: false
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard — required secrets are present
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          missing=0
+          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "::error::Missing repository secret SUPABASE_ACCESS_TOKEN"; missing=1; }
+          [ -n "${SUPABASE_DB_PASSWORD:-}" ]  || { echo "::error::Missing repository secret SUPABASE_DB_PASSWORD"; missing=1; }
+          [ "$missing" -eq 0 ] || exit 1
+          echo "Both secrets are present."
+
+      - name: Show the exact migration files that will be applied
+        run: |
+          set -euo pipefail
+          ls -l supabase/migrations
+          echo "--- sha256 (must stay identical to PR #31) ---"
+          sha256sum supabase/migrations/*.sql supabase/verify.sql
+
+      - name: Install Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Ensure supabase/config.toml exists (CLI requirement, no SQL touched)
+        run: |
+          set -euo pipefail
+          if [ ! -f supabase/config.toml ]; then
+            supabase init --force --with-vscode-settings=false --with-intellij-settings=false
+            echo "Created a default supabase/config.toml for the CLI."
+          fi
+          sha256sum supabase/migrations/*.sql
+
+      - name: Link to the Supabase project
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          supabase link --project-ref "${{ inputs.project_ref }}"
+
+      - name: Dry run — list pending migrations
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          supabase db push --dry-run
+
+      - name: Apply migrations (only when mode = apply)
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          supabase db push --include-all --yes
+
+      - name: Resolve pooler connection (IPv4-safe) for verification
+        if: ${{ inputs.mode == 'apply' }}
+        id: pooler
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          REF: ${{ inputs.project_ref }}
+        run: |
+          set -euo pipefail
+          api() { curl -sf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$@"; }
+          host=""
+          port="6543"
+          if cfg=$(api "https://api.supabase.com/v1/projects/$REF/config/database/pooler" 2>/dev/null); then
+            host=$(echo "$cfg" | jq -r 'if type=="array" then .[0] else . end | (.db_host // empty)')
+            p=$(echo "$cfg" | jq -r 'if type=="array" then .[0] else . end | (.db_port // empty)')
+            [ -n "$p" ] && [ "$p" != "null" ] && port="$p"
+          fi
+          if [ -z "$host" ] || [ "$host" = "null" ]; then
+            region=$(api "https://api.supabase.com/v1/projects/$REF" | jq -r '.region')
+            host="aws-0-$region.pooler.supabase.com"
+          fi
+          echo "Pooler host: $host:$port"
+          echo "host=$host" >> "$GITHUB_OUTPUT"
+          echo "port=$port" >> "$GITHUB_OUTPUT"
+
+      - name: Verify — run supabase/verify.sql
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGHOST: ${{ steps.pooler.outputs.host }}
+          PGPORT: ${{ steps.pooler.outputs.port }}
+          PGUSER: postgres.${{ inputs.project_ref }}
+          PGDATABASE: postgres
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$PGPASSWORD"
+          psql -v ON_ERROR_STOP=1 -f supabase/verify.sql
+
+      - name: Verify — assert expected seed counts
+        if: ${{ inputs.mode == 'apply' }}
+        env:
+          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PGHOST: ${{ steps.pooler.outputs.host }}
+          PGPORT: ${{ steps.pooler.outputs.port }}
+          PGUSER: postgres.${{ inputs.project_ref }}
+          PGDATABASE: postgres
+          PGSSLMODE: require
+        run: |
+          set -euo pipefail
+          echo "::add-mask::$PGPASSWORD"
+          actual=$(psql -v ON_ERROR_STOP=1 -At -F, -c "
+            select
+              (select count(*) from public.flavors),
+              (select count(*) from public.products),
+              (select count(*) from public.product_variants),
+              (select count(*) from public.inventory),
+              (select count(*) from public.recipes),
+              (select count(*) from public.site_content),
+              (select count(*) from public.site_settings),
+              (select count(*) from public.products where image_url like 'images/products/%');
+          ")
+          expected="22,22,22,22,2,5,1,22"
+          echo "expected: $expected"
+          echo "actual:   $actual"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Seed counts do not match the expected values."
+            exit 1
+          fi
+          echo "✅ Migrations applied and verified."
