@@ -188,7 +188,9 @@ function expectNoErrors(label, errors) {
   expectContains('home', text, 'ژله کیوی');
   expectContains('home', text, 'ژله لیمو');
   // Hero content + CTA
-  expectContains('home', text, 'طعمِ اصیل');
+  expectContains('home', text, 'طعم‌های جذاب');
+  expectContains('home', text, 'در یک مجموعه');
+  expectContains('home', text, 'واردکننده و پخش‌کننده پودر ژله و کاستر');
   // Hero slideshow: ONLY the owner-uploaded real finished-dessert photos.
   // Progressive loading mounts the visible slide + the next one on first
   // paint (not all 9), while the rotation still covers all 9 (dots).
@@ -237,7 +239,8 @@ function expectNoErrors(label, errors) {
   if (text.trim().length > 200) ok('root home renders substantial content (not blank)');
   else fail(`root home looks blank (only ${text.trim().length} chars)`);
   expectContains('root home', text, 'ژینو');
-  expectContains('root home', text, 'طعمِ اصیل');
+  expectContains('root home', text, 'طعم‌های جذاب');
+  expectContains('root home', text, 'در یک مجموعه');
   expectContains('root home', text, 'مشاهده محصولات');
   // After one 3 s rotation the slideshow mounts one more slide ahead,
   // so the upcoming photo always has a full interval to preload.
