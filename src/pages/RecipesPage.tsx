@@ -5,8 +5,8 @@
 
 // list + lead go through the shared services (admin overlay
 // aware — identical output until an admin changes something)
-import { getActiveRecipes } from '../services/recipeStore';
-import { getSiteContent } from '../services/siteContent';
+import { useActiveRecipes } from '../services/recipeStore';
+import { useSiteContent } from '../services/siteContent';
 import type { Recipe } from '../data/recipes';
 import PagePlate from '../components/PagePlate';
 
@@ -72,8 +72,8 @@ function RecipeCard({ recipe, index }: { recipe: Recipe; index: number }) {
 }
 
 export default function RecipesPage() {
-  const recipes = getActiveRecipes();
-  const content = getSiteContent();
+  const recipes = useActiveRecipes();
+  const content = useSiteContent();
 
   return (
     <div>

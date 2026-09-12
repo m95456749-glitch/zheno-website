@@ -4,12 +4,12 @@
 
 // threshold comes from site settings (default = the original
 // constant, so the bar renders identically until an admin changes it)
-import { getSettings } from '../services/settings';
+import { useSiteSettings } from '../services/settings';
 import { formatPrice } from '../utils/format';
 import { cn } from '../utils/cn';
 
 export default function FreeShippingProgress({ subtotal }: { subtotal: number }) {
-  const threshold = getSettings().freeShippingThreshold;
+  const { freeShippingThreshold: threshold } = useSiteSettings();
   const reached = subtotal >= threshold;
   const remaining = Math.max(0, threshold - subtotal);
   const pct = Math.min(100, Math.round((subtotal / threshold) * 100));

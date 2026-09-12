@@ -10,7 +10,7 @@ import { getFlavor } from '../data/products';
 // lookups + list come from the shared catalog service (admin
 // overlay aware); thresholds come from site settings (defaults =
 // the original constants, so the page renders identically).
-import { getCatalogMeta, getProductById, getVisibleProducts } from '../services/catalog';
+import { getCatalogMeta, getProductById, getVisibleProducts, useCatalog } from '../services/catalog';
 import { getSettings } from '../services/settings';
 import { formatNumber, formatPrice } from '../utils/format';
 import { useCartContext } from '../context/CartContext';
@@ -23,8 +23,9 @@ import BackButton from '../components/BackButton';
 export default function ProductDetailPage() {
   const { id } = useParams<{ id: string }>();
   const { addItemWithToast } = useCartContext();
+  const catalog = useCatalog();
 
-  const product = id ? getProductById(id) : undefined;
+  const product = id ? catalog.find((item) => item.id === id) ?? getProductById(id) : undefined;
   // a product deactivated in the admin panel is not sellable —
   // it renders exactly like a removed product (same 404 state).
   const productActive = product ? getCatalogMeta(product.id).active !== false : false;

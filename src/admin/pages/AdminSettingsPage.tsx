@@ -68,8 +68,9 @@ export default function AdminSettingsPage() {
     }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
-    saveSettings(form);
-    setSaved(true);
+    void saveSettings(form)
+      .then(() => setSaved(true))
+      .catch(() => window.alert('ذخیره تنظیمات در پایگاه داده ممکن نشد.'));
     window.setTimeout(() => setSaved(false), 2000);
   };
 
