@@ -32,8 +32,30 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Frontend env wiring for the Supabase connection. Vite inlines these at
+      # build time, so they have to be present here — NOT committed to the
+      # repo. Configure them in the repository settings:
+      #   Settings ← Secrets and variables ← Actions
+      #     · Variables  VITE_SUPABASE_URL        = https://<ref>.supabase.co
+      #     · Secrets    VITE_SUPABASE_ANON_KEY   = anon / publishable key ONLY
+      #     · Variables  VITE_ADMIN_AUTH_MODE      = demo | api
+      # A service-role / secret key must never enter any VITE_* variable; the
+      # guard steps below fail the build if one shows up. Unset values keep the
+      # current frontend-only behavior.
       - name: Typecheck and build
         run: npm run build
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_ANON_KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+          VITE_ADMIN_AUTH_MODE: ${{ vars.VITE_ADMIN_AUTH_MODE || 'demo' }}
+
+      - name: Verify no privileged credential reached the artifact
+        run: npm run check:bundle
+        env:
+          # Same URL as the build step, so the guard can also confirm the
+          # configured project URL really was inlined into the bundle.
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5

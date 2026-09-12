@@ -73,6 +73,72 @@ src/
 - برای اتصال به بکند، API calls را در `src/services/` اضافه کنید
 - متغیرهای محیطی را از `.env.example` کپی کنید
 
+## اتصال Supabase
+
+**وضعیت فعلی:** در این شاخه هنوز هیچ کد Supabase اجرا نمی‌شود — نه وابستگی
+`@supabase/supabase-js`، نه `src/services/supabase/`، نه `supabase/migrations/`.
+فروشگاه و پنل دقیقاً مثل قبل از `src/data/` (دادهٔ پایه) به‌علاوهٔ overlay در
+localStorage می‌خوانند و تا وقتی متغیر محیطی تنظیم نشده باشد **هیچ درخواست
+شبکه‌ای** ارسال نمی‌کنند.
+
+لایهٔ اتصال (کلاینت مرورگر، repository، RLS، migrationها و seed، ورود پنل با
+Supabase Auth) در **PR #31** («Prepare ZHINO for Supabase backend and
+PostgreSQL») آماده و **ادغام‌نشده** است. تا زمانی که آن PR ادغام نشود، حتی با
+دیتابیس پرشده هم سایت تغییری نمی‌بیند: هیچ کدی در `main` وجود متغیرهای
+`VITE_SUPABASE_*` را نمی‌خواند.
+
+**چک‌لیست فعال‌سازی روی پروژهٔ خالی (به همین ترتیب):**
+
+1. **schema** — در Dashboard ← SQL Editor یک query جدید، تمام محتوای
+   `supabase/migrations/20260912000000_initial_schema.sql` را اجرا کنید
+   (یا `supabase link --project-ref <ref> && supabase db push`).
+   باید ۹ جدول `public` بسازد: `flavors`, `products`, `product_variants`,
+   `inventory`, `recipes`, `site_content`, `site_settings`, `orders`,
+   `order_items` + RLS با ۱۷ سیاست + چهار تابع `is_admin`,
+   `set_inventory_stock`, `adjust_inventory`, `create_order` + سه enum
+   (`product_category`, `order_status`, `shipping_method`).
+2. **seed** — در یک query جداگانه و **بعد از** مرحلهٔ ۱، تمام محتوای
+   `supabase/migrations/20260912000001_seed_catalog.sql`. ترتیب دو فایل را
+   عوض نکنید.
+3. **راستی‌آزمی داده** — تمام queryهای read-only `supabase/verify.sql`.
+   countهای مورد انتظار به همان ترتیب ستون‌های پرسش ۷: `flavors=22`,
+   `products=22`, `variants=22`, `inventory=22`, `recipes=2`,
+   `content_rows=5`, `settings_rows=1`, و ۲۲ مسیر تصویر با پیشوند
+   `images/products/%`. هر عددِ دیگری یعنی seed ناقص اجرا شده.
+4. **کاربر پنل** — Authentication ← Users ← Add user (ایمیل + گذرواژه)، سپس
+   روی همان کاربر `{"role":"admin"}` را در **Raw App Metadata** بگذارید؛
+   سیاست‌های RLS نوشتن را بر همین اساس مجاز می‌کنند. گذرواژه هیچ‌گاه در این
+   مخزن یا در لاگ CI قرار نمی‌گیرد.
+5. **متغیرهای محیطی build** — طبق جدول پایین در تنظیمات مخزن؛ مقدارها هرگز
+   commit نمی‌شوند. تا قبل از مرحلهٔ ۶ مقدار `VITE_ADMIN_AUTH_MODE` روی
+   `demo` بماند تا ورود پنل مثل امروز کار کند.
+6. **ادغام لایهٔ اتصال (PR #31)** پس از بازبینی انسانی، و بعد از آن یک
+   راستی‌آزمی نهاده روی سایت استقرار‌یافته (خروجی `npm run check:bundle` در
+   run لاگ GitHub Actions باید `reached the bundle` را نشان دهد).
+
+| متغیر | محل تنظیم | مقدار |
+|-------|-----------|-------|
+| `VITE_SUPABASE_URL` | Settings ← Secrets and variables ← Actions ← **Variables** | `https://<project-ref>.supabase.co` |
+| `VITE_SUPABASE_ANON_KEY` | همان‌جا ← **Secrets** | کلید anon / publishable مرورگر |
+| `VITE_ADMIN_AUTH_MODE` | **Variables** (اختیاری) | `demo` (پیش‌فرض) تا زمان فعال‌شدن اتصال |
+
+**قاعدهٔ امنیتی:** Vite هر مقدار `VITE_*` را داخل باندل عمومی قرار می‌دهد؛ پس
+کلید `service_role`/`secret` هرگز نباید در این متغیرها، در `src/`، یا در خروجی
+`dist/` ظاهر شود. دسترسی سروری فقط در Edge Functions / بکند می‌ماند و از
+فرانت‌اند خوانده نمی‌شود. این قاعده با دو گارد مکانیکی شده است:
+
+```bash
+npm run check:env     # قبل از build: env + سورس فرانت‌اند (خودکار با npm run build)
+npm run check:bundle  # بعد از build: ممیزی dist/ + تأیید رسیدن URL به باندل
+```
+
+هر دو در CI (`deploy.yml`) اجرا می‌شوند. `check:bundle` علاوه بر ممیزی
+خروجی، پیکربندی را هم تأیید می‌کند: اگر شاخه‌ای کد اتصال داشته باشد و
+`VITE_SUPABASE_URL` تنظیم شده ولی مقدارش به باندل نرسیده باشد، build رد
+می‌شود (نشانهٔ تنظیم‌نشدن var/secret در محیط deployment)؛ تا وقتی کد اتصال وجود
+نداشته باشد، همین حالت به‌صورت WARN گزارش و build رد نمی‌شود. مقدار کلیدها
+هیچ‌گاه در لاگ چاپ نمی‌شود (فقط طول آن‌ها).
+
 ## تکنولوژی
 
 - **React 19** + TypeScript
