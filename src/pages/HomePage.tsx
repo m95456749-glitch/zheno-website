@@ -197,20 +197,17 @@ export default function HomePage() {
               <span className="kicker kicker-dark font-display">Zhino</span>
             </p>
 
-            {/* Hero headline — Vazirmatn Black (900): the storefront's
-                display voice. Two fixed lines, RTL, bold + premium. */}
             <h1
-              className="rise mt-4 font-headline text-[1.8rem] font-black leading-[1.42] text-balance sm:text-4xl sm:leading-[1.36] lg:mt-5 lg:text-[3.2rem] lg:leading-[1.3]"
+              className="rise mt-4 font-vazirmatn text-[1.85rem] font-bold leading-[1.45] tracking-tight text-balance sm:text-4xl sm:leading-[1.35] lg:mt-5 lg:text-[3.2rem] lg:leading-[1.3]"
               style={{ '--rise-delay': '0.16s' } as CSSProperties}
             >
-              <span className="block">طعم‌های جذاب،</span>
+              <span className="block">طعم‌ های جذاب،</span>
               <span className="block">در یک مجموعه</span>
             </h1>
 
-            {/* Hero subtitle — deliberately smaller + simpler than the headline */}
             <p
-              className="rise mt-3 text-[0.92rem] font-normal leading-7 text-cream-100/80 sm:mt-4 sm:text-[1.02rem]"
-              style={{ '--rise-delay': '0.28s' } as CSSProperties}
+              className="rise mt-3 text-[0.78rem] font-normal leading-7 text-cream-200/80 sm:text-sm sm:leading-7 lg:mt-4"
+              style={{ '--rise-delay': '0.26s' } as CSSProperties}
             >
               واردکننده و پخش‌کننده پودر ژله و کاستر
             </p>
