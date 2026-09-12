@@ -40,6 +40,18 @@ export default defineConfig({
   // /zheno-website/ repository sub-path at runtime, so one build
   // works on both mounts — see src/utils/siteBase.ts.)
   base: "/",
+  build: {
+    // White-screen guard: Vite 7's default target
+    // (baseline-widely-available) leaves ES2022 syntax in the inline
+    // bundle (class static blocks, #private fields). Browsers older
+    // than ~Chrome 94 / Safari 16.2 / Firefox 93 reject the whole
+    // module script with a SyntaxError, so the app never boots and the
+    // visitor sees a blank white page. es2019 lowers that syntax so the
+    // app boots on ~2019-era browsers; the index.html boot watchdog
+    // covers any remaining boot failure with a reload card instead of
+    // a blank page.
+    target: "es2019",
+  },
   plugins: [
     react(),
     tailwindcss(),

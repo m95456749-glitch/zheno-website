@@ -18,6 +18,53 @@
   </head>
   <body class="bg-cream-50 text-espresso font-vazirmatn antialiased overflow-x-hidden selection:bg-wine-800 selection:text-cream-50">
     <div id="root"></div>
+    <!-- Boot watchdog (plain ES5, no dependencies): if the app bundle
+         never mounts #root — e.g. this browser cannot parse it, or a
+         stale/corrupted copy of this page is cached — show a recovery
+         card with a reload button instead of a blank white page. When
+         the app boots normally this does nothing (root already has
+         children before the timer fires). -->
+    <script>
+      (function () {
+        setTimeout(function () {
+          var root = document.getElementById("root");
+          if (!root || root.hasChildNodes()) return;
+          var wrap = document.createElement("div");
+          wrap.setAttribute(
+            "style",
+            "min-height:100vh;display:flex;align-items:center;justify-content:center;" +
+              "background:#1d070c;color:#faf7f2;text-align:center;padding:24px;box-sizing:border-box;" +
+              "font-family:Vazirmatn,system-ui,-apple-system,'Segoe UI',sans-serif"
+          );
+          var card = document.createElement("div");
+          card.setAttribute("style", "max-width:34rem;line-height:2");
+          var h = document.createElement("h1");
+          h.setAttribute("style", "font-size:1.4rem;font-weight:600;margin:0 0 .5rem");
+          h.textContent = "صفحه بارگیری نشد";
+          var p = document.createElement("p");
+          p.setAttribute("style", "margin:0 0 1rem;color:#e9ded6");
+          p.textContent =
+            "به‌نظر می‌رسد اپلیکیشن راه‌اندازی نشد (مرورگر قدیمی یا نسخهٔ قدیمی/نقص‌دار ذخیره‌شدهٔ این صفحه). لطفاً صفحه را یک‌بار بازنشانی کنید.";
+          var b = document.createElement("button");
+          b.setAttribute(
+            "style",
+            "background:#faf7f2;color:#2a0b12;border:0;border-radius:999px;padding:.7rem 2rem;" +
+              "font:inherit;font-weight:600;cursor:pointer"
+          );
+          b.textContent = "بازنشانی صفحه";
+          b.onclick = function () { location.reload(); };
+          var e = document.createElement("p");
+          e.setAttribute("style", "margin:1rem 0 0;font-size:.75rem;color:#c9b8ae;direction:ltr");
+          e.textContent = "The app failed to boot — reload (Ctrl/Cmd+Shift+R clears a stale cached copy).";
+          card.appendChild(h);
+          card.appendChild(p);
+          card.appendChild(b);
+          card.appendChild(e);
+          wrap.appendChild(card);
+          document.body.appendChild(wrap);
+        }, 5000);
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
