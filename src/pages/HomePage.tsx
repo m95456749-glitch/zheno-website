@@ -198,11 +198,20 @@ export default function HomePage() {
             </p>
 
             <h1
-              className="rise mt-4 text-[1.8rem] font-light leading-[1.4] text-balance sm:text-4xl sm:leading-[1.35] lg:mt-5 lg:text-[3.2rem] lg:leading-[1.3]"
+              className="rise mt-4 font-estedad text-[1.8rem] font-extrabold leading-[1.45] text-balance sm:text-4xl sm:leading-[1.4] lg:mt-5 lg:text-[3.2rem] lg:leading-[1.3]"
               style={{ '--rise-delay': '0.16s' } as CSSProperties}
             >
-              طعمِ اصیل، انتخابِ <span className="font-semibold text-cream-50">متفاوت</span>
+              طعم‌های جذاب،
+              <br />
+              در یک مجموعه
             </h1>
+
+            <p
+              className="rise mt-4 text-[0.85rem] font-normal leading-7 text-cream-200/90 sm:text-base sm:leading-8 lg:mt-5"
+              style={{ '--rise-delay': '0.28s' } as CSSProperties}
+            >
+              واردکننده و پخش‌کننده پودر ژله و کاستر
+            </p>
 
             <div
               className="rise mt-6 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 lg:mt-8 lg:justify-start"

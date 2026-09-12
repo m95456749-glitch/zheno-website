@@ -10,6 +10,7 @@
 
 @theme {
   --font-vazirmatn: 'Vazirmatn', system-ui, -apple-system, sans-serif;
+  --font-estedad: 'Estedad', 'Vazirmatn', system-ui, sans-serif;
   --font-display: 'Marcellus', 'Vazirmatn', Georgia, serif;
 
   /* deepest burgundy-black — footer, toasts, deep scrims */
