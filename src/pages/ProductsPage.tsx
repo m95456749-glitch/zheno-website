@@ -97,7 +97,7 @@ export default function ProductsPage() {
 
         <div
           ref={gridReveal}
-          className="reveal-stagger mt-10 grid grid-cols-2 gap-4 pb-16 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4"
+          className="cv-auto reveal-stagger mt-10 grid grid-cols-2 gap-4 pb-16 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4"
         >
           {filtered.map((product) => (
             <ProductCard key={product.id} product={product} />

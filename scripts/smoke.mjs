@@ -70,7 +70,7 @@ const SHELL =
  * `seed` runs after DOM creation but before the app script executes,
  * e.g. to seed localStorage.
  */
-async function render(path, { seed, clickAddToCart = false } = {}) {
+async function render(path, { seed, clickAddToCart = false, settleMs = 0 } = {}) {
   const errors = [];
   const virtualConsole = new VirtualConsole();
   virtualConsole.on('jsdomError', (e) => {
@@ -122,16 +122,29 @@ async function render(path, { seed, clickAddToCart = false } = {}) {
     }
   }
 
+  // Optional settle window (lets the 3 s hero rotation advance) before inventory.
+  if (settleMs > 0) await sleep(settleMs);
+
   const text = rootEl?.textContent ?? '';
   const toastText = document.querySelector('[role="status"]')?.textContent ?? '';
   // Hero slideshow inventory (imgs inside the hero section only — product
   // cards further down the page also render images and must not be mixed in)
-  const heroImgSrcs = Array.from(
-    document.querySelectorAll('section[aria-label="معرفی ژینو"] img'),
-  ).map((img) => img.getAttribute('src') ?? '');
+  const heroSection = document.querySelector('section[aria-label="معرفی ژینو"]');
+  const heroImgs = heroSection ? Array.from(heroSection.querySelectorAll('img')) : [];
+  const heroImgSrcs = heroImgs.map((img) => img.getAttribute('src') ?? '');
+  const heroFirstPriority = heroImgs[0]?.getAttribute('fetchpriority') ?? '';
+  const heroWebpSrcs = heroSection
+    ? Array.from(heroSection.querySelectorAll('source[type="image/webp"]')).map(
+        (el) => el.getAttribute('srcset') ?? '',
+      )
+    : [];
+  // rotation dots: one per slide in the rotation (mounted or not)
+  const heroDots = heroSection
+    ? heroSection.querySelectorAll('div[aria-hidden="true"] span.rounded-full').length
+    : 0;
   // link hrefs (e.g. to verify the hidden footer entry)
   const links = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
-  const result = { text, errors, toastText, heroImgSrcs, links };
+  const result = { text, errors, toastText, heroImgSrcs, heroFirstPriority, heroWebpSrcs, heroDots, links };
   dom.window.close();
   return result;
 }
@@ -153,7 +166,8 @@ function expectNoErrors(label, errors) {
 
 // ── 1. Home ──────────────────────────────────────────────────
 {
-  const { text, errors, heroImgSrcs } = await render('/zheno-website/');
+  const { text, errors, heroImgSrcs, heroFirstPriority, heroWebpSrcs, heroDots } =
+    await render('/zheno-website/');
   if (text.trim().length > 200) ok('home renders substantial content (not blank)');
   else fail(`home looks blank (only ${text.trim().length} chars)`);
   expectContains('home', text, 'ژینو');
@@ -175,14 +189,25 @@ function expectNoErrors(label, errors) {
   expectContains('home', text, 'ژله لیمو');
   // Hero content + CTA
   expectContains('home', text, 'طعمِ اصیل');
-  // Hero slideshow: ONLY the 9 owner-uploaded real finished-dessert photos
+  // Hero slideshow: ONLY the owner-uploaded real finished-dessert photos.
+  // Progressive loading mounts the visible slide + the next one on first
+  // paint (not all 9), while the rotation still covers all 9 (dots).
   const realSlides = heroImgSrcs.filter((s) => s.includes('images/IMG_20260903_002'));
-  if (realSlides.length === 9) ok('hero slideshow uses exactly the 9 real dessert photos');
+  if (realSlides.length === 2) ok('hero first paint mounts visible + next slide only (progressive)');
   else
     fail(
-      `hero slideshow expected 9 real photos, found ${realSlides.length} ` +
+      `hero first paint must mount exactly 2 slides, found ${realSlides.length} ` +
         `(all hero imgs: ${heroImgSrcs.join(', ')})`,
     );
+  if (heroDots === 9) ok('hero rotation still covers all 9 real dessert photos (dots)');
+  else fail(`hero rotation must cover 9 slides, found ${heroDots} dots`);
+  if (heroFirstPriority === 'high') ok('hero LCP slide loads with high priority');
+  else fail(`first hero slide must have fetchpriority="high" (got: "${heroFirstPriority}")`);
+  const webpOk =
+    heroWebpSrcs.length === realSlides.length &&
+    heroWebpSrcs.every((ss) => ss.includes('images/opt/') && ss.includes('480w') && ss.includes('860w'));
+  if (webpOk) ok('hero slides serve responsive WebP with JPEG fallback');
+  else fail(`hero WebP srcsets missing/malformed: ${JSON.stringify(heroWebpSrcs)}`);
   const bannedHeroImgs = heroImgSrcs.filter((s) =>
     ['jelly-powder-hero', 'hero-dish', 'showcase/', 'images/products/'].some((b) => s.includes(b)),
   );
@@ -214,8 +239,15 @@ function expectNoErrors(label, errors) {
   expectContains('root home', text, 'ژینو');
   expectContains('root home', text, 'طعمِ اصیل');
   expectContains('root home', text, 'مشاهده محصولات');
+  // After one 3 s rotation the slideshow mounts one more slide ahead,
+  // so the upcoming photo always has a full interval to preload.
+  const rotated = await render('/', { settleMs: 4000 });
+  const rotatedSlides = rotated.heroImgSrcs.filter((s) => s.includes('images/IMG_20260903_002'));
+  if (rotatedSlides.length === 3) ok('hero rotation progressively mounts the next slide');
+  else fail(`hero rotation must mount 3 slides after ~4 s, found ${rotatedSlides.length}`);
   const rooted = heroImgSrcs.filter((s) => s.startsWith('/images/'));
-  if (rooted.length === 9) ok('root hero images resolve from the domain root (/images/…)');
+  if (rooted.length === heroImgSrcs.length && rooted.length > 0)
+    ok('root hero images resolve from the domain root (/images/…)');
   else fail(`root hero images must start with /images/ (got: ${heroImgSrcs.join(', ')})`);
   expectNoErrors('root home', errors);
 }

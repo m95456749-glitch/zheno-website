@@ -21,9 +21,15 @@ import ProductCard from '../components/ProductCard';
 import ProductVisual from '../components/ProductVisual';
 import { useReveal } from '../hooks/useReveal';
 import { withSiteBase } from '../utils/siteBase';
+import {
+  HERO_SLIDE_SIZES,
+  getHeroBackgroundImage,
+  getResponsiveSource,
+} from '../utils/responsiveImages';
 import { cn } from '../utils/cn';
 
-const HERO_BG_URL = `url("${withSiteBase('images/hero-bg.jpg')}")`;
+const HERO_BG_FALLBACK = `url("${withSiteBase('images/hero-bg.jpg')}")`;
+const HERO_BG_URL = getHeroBackgroundImage();
 
 // Hero slideshow — FINISHED / PREPARED desserts only.
 // These are the owner's 9 real finished-dessert photos (audit-verified),
@@ -115,6 +121,12 @@ export default function HomePage() {
   // remain, the compact tasting trio stands in (as before).
   const [activeSlide, setActiveSlide] = useState(0);
   const [brokenSlides, setBrokenSlides] = useState<ReadonlySet<string>>(new Set());
+  // Progressive mounting (mobile-first): the 9 full photos used to sit
+  // in the DOM from the first paint, so the browser fetched ~2.5 MB up
+  // front. Only the visible slide + the next one mount initially; every
+  // rotation mounts one more ahead, so the upcoming slide always has a
+  // full 3 s head start while first paint only pays for what is shown.
+  const [mountedCount, setMountedCount] = useState(2);
   const heroSlides = HERO_SLIDES.filter((slide) => !brokenSlides.has(slide.src));
   const slideCount = heroSlides.length;
   const slideIndex = slideCount > 0 ? activeSlide % slideCount : 0;
@@ -124,6 +136,11 @@ export default function HomePage() {
     const id = setInterval(() => setActiveSlide((i) => (i + 1) % slideCount), HERO_SLIDE_MS);
     return () => clearInterval(id);
   }, [slideCount]);
+
+  // Keep one slide mounted ahead of the rotation (3 s preload window).
+  useEffect(() => {
+    setMountedCount((count) => Math.max(count, Math.min(slideCount, slideIndex + 2)));
+  }, [slideIndex, slideCount]);
 
   const markSlideBroken = (src: string) =>
     setBrokenSlides((prev) => (prev.has(src) ? prev : new Set(prev).add(src)));
@@ -162,7 +179,7 @@ export default function HomePage() {
         <div className="hero-silk grain absolute inset-0 -z-30" aria-hidden="true" />
         <div
           className="hero-photo absolute -inset-[4%] -z-20"
-          style={{ '--hero-img': HERO_BG_URL } as CSSProperties}
+          style={{ '--hero-img': HERO_BG_URL, '--hero-img-fallback': HERO_BG_FALLBACK } as CSSProperties}
           aria-hidden="true"
         />
         {/* legibility scrims */}
@@ -219,23 +236,36 @@ export default function HomePage() {
                     aria-label="دسرهای آماده‌شده از پودر ژله و کاستر ژینو"
                     className="relative aspect-square w-full bg-[radial-gradient(135%_110%_at_50%_0%,#4a1522_0%,#2a0b12_50%,#1d070c_100%)]"
                   >
-                    {heroSlides.map((slide, i) => (
-                      <img
-                        key={slide.src}
-                        src={slide.src}
-                        alt={slide.alt}
-                        width={slide.width}
-                        height={slide.height}
-                        loading={i === 0 ? 'eager' : 'lazy'}
-                        decoding="async"
-                        onError={() => markSlideBroken(slide.src)}
-                        aria-hidden={i !== slideIndex}
-                        className={cn(
-                          'hero-slide absolute inset-0 h-full w-full object-contain',
-                          i === slideIndex && 'is-active',
-                        )}
-                      />
-                    ))}
+                    {heroSlides.slice(0, mountedCount).map((slide, i) => {
+                      const responsive = getResponsiveSource(slide.src);
+                      const isActive = i === slideIndex;
+                      return (
+                        <picture
+                          key={slide.src}
+                          aria-hidden={i !== slideIndex}
+                          className={cn('hero-slide absolute inset-0', isActive && 'is-active')}
+                        >
+                          {responsive.webpSrcSet && (
+                            <source
+                              type="image/webp"
+                              srcSet={responsive.webpSrcSet}
+                              sizes={HERO_SLIDE_SIZES}
+                            />
+                          )}
+                          <img
+                            src={responsive.fallbackSrc}
+                            alt={slide.alt}
+                            width={slide.width}
+                            height={slide.height}
+                            loading="eager"
+                            fetchPriority={i === 0 ? 'high' : 'low'}
+                            decoding="async"
+                            onError={() => markSlideBroken(slide.src)}
+                            className="h-full w-full object-contain"
+                          />
+                        </picture>
+                      );
+                    })}
                     {slideCount > 1 && (
                       <>
                         {/* faint legibility seam under the dots only */}
@@ -295,7 +325,7 @@ export default function HomePage() {
       </section>
 
       {/* ══ PRODUCTS — the main content: all 22 ══════════════ */}
-      <section className="bg-cream-page" aria-label="محصولات ژینو">
+      <section className="cv-auto bg-cream-page" aria-label="محصولات ژینو">
         <div className="mx-auto max-w-6xl px-4 pb-14 pt-12 sm:px-6 sm:pb-16 sm:pt-16">
           <header className="text-center">
             <p className="kicker font-display">The Collection</p>
@@ -367,7 +397,7 @@ export default function HomePage() {
       </section>
 
       {/* ══ RECIPES — the two official methods ═══════════════ */}
-      <section className="burgundy-ambient bg-wine-800 pb-14 pt-10 text-cream-50 sm:pb-16 sm:pt-12" aria-label="دستورهای پیشنهادی">
+      <section className="cv-auto burgundy-ambient bg-wine-800 pb-14 pt-10 text-cream-50 sm:pb-16 sm:pt-12" aria-label="دستورهای پیشنهادی">
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <div className="flex items-end justify-between gap-6">
             <div>
@@ -422,7 +452,7 @@ export default function HomePage() {
 
       {/* ══ CLOSING — a thin wine seam into the story ═══════ */}
       <section
-        className="page-plate dark-surface grain burgundy-ambient relative mt-14 overflow-hidden px-4 py-10 text-center text-cream-50 sm:py-12"
+        className="cv-auto page-plate dark-surface grain burgundy-ambient relative mt-14 overflow-hidden px-4 py-10 text-center text-cream-50 sm:py-12"
         aria-label="درباره ژینو"
       >
         <p className="kicker kicker-dark font-display">The Zhino Story</p>
