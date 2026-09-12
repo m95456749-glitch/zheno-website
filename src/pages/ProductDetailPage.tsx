@@ -16,6 +16,7 @@ import { formatNumber, formatPrice } from '../utils/format';
 import { useCartContext } from '../context/CartContext';
 import { cn } from '../utils/cn';
 import ProductVisual from '../components/ProductVisual';
+import { PRODUCT_DETAIL_SIZES } from '../utils/responsiveImages';
 import ProductCard from '../components/ProductCard';
 import QuantitySelector from '../components/QuantitySelector';
 import BackButton from '../components/BackButton';
@@ -100,6 +101,8 @@ export default function ProductDetailPage() {
                 emoji={flavor.emoji}
                 name={product.name}
                 imageUrl={product.imageUrl}
+                sizes={PRODUCT_DETAIL_SIZES}
+                eager
                 className="aspect-[4/5] w-full"
                 emojiClassName="text-7xl sm:text-8xl"
               />

@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useState } from 'react';
-import { withSiteBase } from '../utils/siteBase';
+import { getResponsiveSource } from '../utils/responsiveImages';
 
 interface Props {
   color: string;
@@ -19,6 +19,10 @@ interface Props {
   compact?: boolean;
   /** site-root-relative photo path from the catalog, e.g. "images/IMG_....jpg" */
   imageUrl?: string;
+  /** responsive hint for the WebP srcset (ignored without derivatives) */
+  sizes?: string;
+  /** true for the one immediately-visible image (detail hero): eager + high priority */
+  eager?: boolean;
 }
 
 export default function ProductVisual({
@@ -29,15 +33,32 @@ export default function ProductVisual({
   emojiClassName = 'text-6xl',
   compact = false,
   imageUrl,
+  sizes,
+  eager = false,
 }: Props) {
   const [imgFailed, setImgFailed] = useState(false);
 
   // Real production photo: same frame, resolved against the runtime
   // mount point so it works in dev ("/"), on the custom domain ("/"),
   // and on the repository sub-path ("/zheno-website/").
+  // When WebP derivatives exist, a <picture> serves the right width
+  // for the display size; the ORIGINAL JPEG stays the <img src>
+  // fallback, so older browsers render exactly what they render today.
   // If the file ever fails to load, fall through to the plated visual —
   // the page never shows a broken image.
   if (imageUrl && !imgFailed) {
+    const responsive = getResponsiveSource(imageUrl);
+    const img = (
+      <img
+        src={responsive.fallbackSrc}
+        alt={name}
+        loading={eager ? 'eager' : 'lazy'}
+        fetchPriority={eager ? 'high' : 'auto'}
+        decoding="async"
+        onError={() => setImgFailed(true)}
+        className="product-visual-img absolute inset-0 h-full w-full object-cover"
+      />
+    );
     return (
       <div
         role="img"
@@ -45,14 +66,18 @@ export default function ProductVisual({
         className={`relative overflow-hidden ${className}`}
         style={{ backgroundColor: 'var(--color-cream-100)' }}
       >
-        <img
-          src={withSiteBase(imageUrl)}
-          alt={name}
-          loading="lazy"
-          decoding="async"
-          onError={() => setImgFailed(true)}
-          className="product-visual-img absolute inset-0 h-full w-full object-cover"
-        />
+        {responsive.hasWebp ? (
+          <picture className="contents">
+            {responsive.webpSrcSet ? (
+              <source type="image/webp" srcSet={responsive.webpSrcSet} sizes={sizes} />
+            ) : (
+              <source type="image/webp" srcSet={responsive.webpSrc} />
+            )}
+            {img}
+          </picture>
+        ) : (
+          img
+        )}
       </div>
     );
   }

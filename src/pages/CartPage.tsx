@@ -15,6 +15,7 @@ import { soundService } from '../services/soundService';
 import FreeShippingProgress from '../components/FreeShippingProgress';
 import QuantitySelector from '../components/QuantitySelector';
 import ProductVisual from '../components/ProductVisual';
+import { CART_THUMB_SIZES } from '../utils/responsiveImages';
 import PagePlate from '../components/PagePlate';
 
 export default function CartPage() {
@@ -137,6 +138,7 @@ export default function CartPage() {
                     emoji={flavor.emoji}
                     name={product.name}
                     imageUrl={product.imageUrl}
+                    sizes={CART_THUMB_SIZES}
                     className="h-24 w-24 rounded-lg sm:h-28 sm:w-28"
                     emojiClassName="text-4xl sm:text-5xl"
                   />

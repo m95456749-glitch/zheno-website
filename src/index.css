@@ -125,6 +125,10 @@ body {
 }
 
 .hero-photo {
+  /* Two declarations: browsers without image-set() drop the second
+     one and keep the plain JPEG; modern browsers use the WebP-first
+     image-set (set via --hero-img, see HomePage). */
+  background-image: var(--hero-img-fallback, none);
   background-image: var(--hero-img, none);
   background-size: cover;
   background-repeat: no-repeat;
@@ -822,6 +826,21 @@ body {
 .reveal-stagger > *:nth-child(11) { transition-delay: 420ms; }
 .reveal-stagger > *:nth-child(12) { transition-delay: 450ms; }
 .reveal-stagger > *:nth-child(n+13) { transition-delay: 480ms; }
+
+/* ------------------------------------------------------------
+   Below-the-fold rendering budget (mobile)
+   Sections with .cv-auto skip rendering until they near the
+   viewport — less initial CPU/GPU work on low-end phones. The
+   intrinsic-size estimate reserves roughly the right space so
+   the scrollbar stays calm; `auto` lets the browser remember
+   the real size after first render. Purely progressive:
+   browsers without content-visibility render normally.
+   ------------------------------------------------------------ */
+
+.cv-auto {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 640px;
+}
 
 /* Product image scale is slightly tighter and faster for elegance */
 .card-product .product-visual-img {
