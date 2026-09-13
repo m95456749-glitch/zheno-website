@@ -41,8 +41,13 @@ name: Supabase JIT authorize (gated)
 # both use `roles`.
 #
 # ── Security properties ────────────────────────────────────────────────────────
-# * workflow_dispatch ONLY. It can never be triggered by a pull_request, so no PR
-#   can cause a JIT grant.
+# * workflow_dispatch, plus a path-filtered pull_request trigger for this file
+#   only. The pull_request trigger does NOT execute unless the PR title carries
+#   the literal marker [run-jit-auth-test], and the job is additionally gated on
+#   a same-repository PR (fork PRs receive no repository secrets anyway, and the
+#   guard step fails closed when the token secret is missing). So no incidental
+#   PR can cause a JIT grant. This mirrors supabase-jit-enable.yml, which the
+#   repo already merged (PR #45).
 # * DRY RUN BY DEFAULT. `confirm` defaults to "false": the workflow prints the
 #   exact request it would send and exits 0 without issuing any write.
 # * The grant is IP-BOUND. `rhost` is the runner's own public egress IPv4, so the
@@ -60,6 +65,9 @@ name: Supabase JIT authorize (gated)
 #   one-shot verification.
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-authorize.yml"
   workflow_dispatch:
     inputs:
       project_ref:
@@ -112,19 +120,24 @@ concurrency:
 
 jobs:
   authorize:
+    # pull_request runs only for same-repository PRs; a PR from a fork never has
+    # the secrets and is skipped outright.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
       ROLE: ${{ github.event.inputs.role || 'postgres' }}
-      CONFIRM: ${{ github.event.inputs.confirm || 'false' }}
+      CONFIRM: ${{ github.event.inputs.confirm || (contains(github.event.pull_request.title, '[run-jit-auth-test]') && 'true' || 'false') }}
       RHOST_INPUT: ${{ github.event.inputs.rhost || '' }}
-      EXPIRES_HOURS: ${{ github.event.inputs.expires_hours || '0' }}
+      # For PR runs (no inputs): 1-hour bound via the PUT step, and the mapping is
+      # revoked at the end of the job — the grant only ever exists for this test.
+      EXPIRES_HOURS: ${{ github.event.inputs.expires_hours || '1' }}
       DB_HOST: ${{ github.event.inputs.db_host || 'aws-1-eu-west-1.pooler.supabase.com' }}
       DB_PORT: ${{ github.event.inputs.db_port || '5432' }}
       RUN_PSQL: ${{ github.event.inputs.run_psql_test || 'true' }}
       RUN_DRYRUN: ${{ github.event.inputs.run_dry_run || 'true' }}
-      REVOKE: ${{ github.event.inputs.revoke_after_test || 'false' }}
+      REVOKE: ${{ github.event.inputs.revoke_after_test || 'true' }}
       API: https://api.supabase.com
     steps:
       - name: Checkout
