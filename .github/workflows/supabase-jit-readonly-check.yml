@@ -1,11 +1,69 @@
-name: Supabase JIT readonly check (manual)
+name: Supabase JIT read-only diagnostic
 
-# Safe read-only workflow:
-# 1. Verify Temporary Access / JIT is still enabled for project ref
-# 2. Discover current Supabase project user's user_id using scoped Management API perms
-# Does NOT authorize any role, does NOT run migrations, does NOT modify frontend/schema
+# STRICTLY READ-ONLY diagnostic for Supabase Temporary Access (JIT).
+#
+# It issues GET requests ONLY. There is deliberately no POST/PUT/PATCH/DELETE
+# helper in this file. It never touches the database, never runs a migration,
+# never connects with psql, and never prints the access token (the token is
+# masked and only a SHA-256 fingerprint of it is reported). Email addresses in
+# response bodies are redacted before display.
+#
+# What it does: it maps the *effective* permissions of the scoped PAT held in the
+# SUPABASE_ACCESS_TOKEN secret by calling exactly one read-only endpoint per
+# documented fine-grained permission, and compares the observed HTTP status with
+# the requirement declared in Supabase's own OpenAPI specification
+# (supabase/supabase -> apps/docs/spec/api_v1_openapi.json, `x-fga-permissions`).
+#
+# Probe matrix (source of truth: x-fga-permissions in the upstream OpenAPI spec):
+#
+#   GET /v1/profile                              -> NONE. Not gated by any
+#                                                   fine-grained permission (the
+#                                                   spec declares only a 200
+#                                                   response and no
+#                                                   x-fga-permissions), so the
+#                                                   gateway requires a
+#                                                   *user-scoped* OAuth/session
+#                                                   token. No scoped PAT can ever
+#                                                   call it, whatever
+#                                                   permissions are selected.
+#   GET /v1/projects                             -> projects_read
+#   GET /v1/projects/{ref}                       -> project_admin_read
+#   GET /v1/projects/{ref}/jit-access            -> project_admin_read
+#   GET /v1/projects/{ref}/health                -> project_admin_read
+#   GET /v1/projects/{ref}/database/jit          -> database_jit_read
+#   GET /v1/projects/{ref}/database/jit/list     -> database_jit_write
+#   GET /v1/projects/{ref}/config/database/pgbouncer
+#                                                 -> database_read
+#   GET /v1/projects/{ref}/database/migrations   -> database_migrations_read
+#   GET /v1/projects/{ref}/config/database/pooler-> database_pooling_config_read
+#   GET /v1/projects/{ref}/readonly              -> database_readonly_config_read
+#   GET /v1/projects/{ref}/ssl-enforcement       -> database_ssl_config_read
+#   GET /v1/organizations                        -> organizations_read
+#   GET /v1/organizations/{slug}                 -> organization_admin_read  (!)
+#   GET /v1/organizations/{slug}/members         -> members_read
+#   GET /v1/organizations/{slug}/projects        -> organization_projects_read
+#
+# Note the (!): `GET /v1/organizations/{slug}` is gated by organization_admin_read
+# ("Organization Settings: Read"), NOT by organizations_read. organizations_read
+# unlocks exactly one endpoint: `GET /v1/organizations`.
+#
+# Result interpretation:
+#   200            permission held AND the resource is inside the token's scope
+#   200 + []       permission held, but the token's resource list for that
+#                  resource kind is EMPTY — this is how a missing *organization*
+#                  resource scope shows up on GET /v1/organizations
+#   403 Forbidden  permission not held, OR the addressed resource (org/project)
+#                  is not in the token's resource scope
+#   403 "requires a user-scoped access token"
+#                  endpoint is not reachable by any fine-grained PAT
+#   406            permission gate PASSED; the call failed for a semantic reason
+#                  (for GET /database/jit: no JIT mapping exists for this user)
+#   404            resource not visible inside the token's scope
 
 on:
+  # Path-filtered: this only runs when THIS file changes, which is how the
+  # diagnostic validates itself. It issues GET requests only, and fork PRs never
+  # receive repository secrets, so the token cannot leak through this trigger.
   pull_request:
     paths:
       - ".github/workflows/supabase-jit-readonly-check.yml"
@@ -24,16 +82,17 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  readonly-check:
+  readonly-diagnostic:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
       PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
+      API: https://api.supabase.com
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Guard token present and normalized
+      - name: Guard — token present, normalised, masked, fingerprinted
         id: guard
         env:
           RAW_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
@@ -43,298 +102,270 @@ jobs:
             echo "::error::Missing secret SUPABASE_ACCESS_TOKEN"
             exit 1
           fi
-          tok=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n\t' | sed -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//" -e "s/^[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]*//" -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//")
+          tok=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n\t' \
+                | sed -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//" \
+                      -e "s/^[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]*//" \
+                      -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//")
+          # Never let the token reach a log line.
           echo "::add-mask::$tok"
           case "$tok" in
-            sbp_fc*) cls="scoped fine-grained sbp_fc…"; is_scoped=yes ;;
-            sbp_*)   cls="classic sbp_…"; is_scoped=no ;;
-            sbp_oat*) cls="org access token sbp_oat…"; is_scoped=no ;;
-            *)       cls="unrecognised"; is_scoped=no ;;
+            sbp_fc*)  cls="scoped fine-grained PAT (sbp_fc…)"; is_scoped=yes ;;
+            sbp_oat*) cls="organization access token (sbp_oat…)"; is_scoped=no ;;
+            sbp_*)    cls="classic PAT (sbp_…)"; is_scoped=no ;;
+            *)        cls="unrecognised"; is_scoped=no ;;
           esac
           fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
-          echo "token class: $cls len=${#tok} fp=$fp"
-          echo "::notice title=token::class=$cls len=${#tok} fp=$fp"
+          echo "token class=$cls length=${#tok} sha256[1:12]=$fp"
+          echo "::notice title=token fingerprint::class=$cls len=${#tok} fp=$fp"
           {
             echo "SUPABASE_ACCESS_TOKEN=$tok"
             echo "SB_TOKEN_CLASS=$cls"
+            echo "SB_TOKEN_IS_SCOPED=$is_scoped"
             echo "SB_TOKEN_FP=$fp"
+            echo "SB_TOKEN_LEN=${#tok}"
           } >> "$GITHUB_ENV"
-          echo "token_class=$cls" >> "$GITHUB_OUTPUT"
-          echo "token_fp=$fp" >> "$GITHUB_OUTPUT"
-          echo "token_len=${#tok}" >> "$GITHUB_OUTPUT"
 
-      - name: Verify JIT enabled (GET /v1/projects/{ref}/jit-access)
-        id: jit-state
+      - name: Probe effective permissions (GET only)
+        id: probe
         run: |
           set -uo pipefail
           ref="${PROJECT_REF:?}"
-          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
-          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/jit-access" 2>"$tmp/curl.err") || true
-          code="${resp##*$'\n'}"
-          body="${resp%$'\n'*}"
-          case "$code" in ''|*[!0-9]*) code="000" ;; esac
-          state=$(printf '%s' "$body" | jq -r '(.state // (if .enabled == true then "enabled" elif .enabled == false then "disabled" else empty end) // empty)' 2>/dev/null || echo "")
-          applied=$(printf '%s' "$body" | jq -r '.appliedSuccessfully // empty' 2>/dev/null || echo "")
-          echo "GET /v1/projects/${ref}/jit-access -> HTTP $code state=${state:-unknown} applied=${applied:-?}"
-          printf '%s' "$body" | jq -c 'if type=="object" then del(.users) else . end' 2>/dev/null | head -c 1000; echo
-          echo "code=$code" >> "$GITHUB_OUTPUT"
-          echo "state=${state:-unknown}" >> "$GITHUB_OUTPUT"
-          echo "applied=${applied:-}" >> "$GITHUB_OUTPUT"
-          echo "body=$(printf '%s' "$body" | jq -c 'if type=="object" then del(.users) else . end' 2>/dev/null | head -c 500)" >> "$GITHUB_OUTPUT"
-          {
-            echo "### JIT state check"
-            echo ""
-            echo "| field | value |"
-            echo "| --- | --- |"
-            echo "| project ref | \`$ref\` |"
-            echo "| HTTP code | $code |"
-            echo "| state | ${state:-unknown} |"
-            echo "| appliedSuccessfully | ${applied:-?} |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          tmp="$RUNNER_TEMP/jitdiag"; mkdir -p "$tmp"
+          out="$tmp/probes.tsv"
+          : > "$out"
 
-      - name: Discover current user_id (read-only)
-        id: profile
-        run: |
-          set -uo pipefail
-          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
-          ref="${PROJECT_REF:?}"
-          gotrue_id=""; email=""; username=""; method=""; org_slug=""
+          # Strip newlines, redact email addresses, truncate for display.
+          safe() {
+            printf '%s' "$1" | tr -d '\r\n' \
+              | sed -E 's/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+/<redacted-email>/g' \
+              | head -c 300
+          }
 
-          api_try_get() {
-            local path="$1"
-            local out="$2"
-            local resp code body
-            resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com${path}" 2>"$tmp/curl.err") || true
+          # GET-only helper. Full body -> $tmp/body_<label>; display copy -> TSV.
+          get() {
+            local label="$1" path="$2" perm="$3" resp code body disp
+            resp=$(curl -sS -m 60 \
+                     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                     -H "Accept: application/json" \
+                     -w $'\n%{http_code}' \
+                     "${API}${path}" 2>"$tmp/curl.err") || true
             code="${resp##*$'\n'}"
             body="${resp%$'\n'*}"
             case "$code" in ''|*[!0-9]*) code="000" ;; esac
-            printf '%s' "$code" > "$tmp/${out}_code"
-            printf '%s' "$body" > "$tmp/${out}_body"
-            echo "$code"
+            printf '%s' "$body" > "$tmp/body_${label}"
+            disp=$(safe "$body")
+            printf '%s\t%s\t%s\t%s\t%s\n' "$label" "$path" "$perm" "$code" "$disp" >> "$out"
+            echo "GET ${path} -> HTTP ${code}   [documented requirement: ${perm}]"
+            printf '%s\n' "$disp"
+            echo "---"
           }
 
-          echo "=== Attempt 1: GET /v1/profile to obtain gotrue_id ==="
-          code=$(api_try_get "/v1/profile" "profile")
-          body=$(cat "$tmp/profile_body")
-          echo "GET /v1/profile -> HTTP $code"
-          echo "::notice title=profile GET::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
-          printf '%s' "$body" | head -c 1000; echo
-          if [ "$code" = "200" ]; then
-            gotrue_id=$(printf '%s' "$body" | jq -r '.gotrue_id // .id // empty' 2>/dev/null || echo "")
-            email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
-            username=$(printf '%s' "$body" | jq -r '.username // empty' 2>/dev/null || echo "")
-            if [ -n "$gotrue_id" ]; then
-              method="profile"
-              echo "Found via profile: $gotrue_id"
-            fi
+          echo "=== identity / account-wide scope ==="
+          get "profile"      "/v1/profile"       "user-scoped token only (no fine-grained permission exists)"
+          get "projects_all" "/v1/projects"      "projects_read"
+          get "orgs_all"     "/v1/organizations" "organizations_read"
+
+          echo "=== project scope ==="
+          get "project"       "/v1/projects/${ref}"                         "project_admin_read"
+          # `services` is a REQUIRED query param on this endpoint; without it the
+          # API returns 400 (a validation rejection, not an authorization result).
+          get "project_health" "/v1/projects/${ref}/health?services=auth,db,rest,storage,realtime,pooler" "project_admin_read"
+          get "jit_config"    "/v1/projects/${ref}/jit-access"              "project_admin_read"
+          get "jit_self"      "/v1/projects/${ref}/database/jit"            "database_jit_read"
+          get "jit_list"      "/v1/projects/${ref}/database/jit/list"       "database_jit_write"
+          get "db_pgbouncer"  "/v1/projects/${ref}/config/database/pgbouncer" "database_read"
+          get "migrations"    "/v1/projects/${ref}/database/migrations"     "database_migrations_read"
+          get "pooler"        "/v1/projects/${ref}/config/database/pooler"  "database_pooling_config_read"
+          get "readonly_mode" "/v1/projects/${ref}/readonly"                "database_readonly_config_read"
+          get "ssl_enforce"   "/v1/projects/${ref}/ssl-enforcement"         "database_ssl_config_read"
+
+          echo "=== organization scope (slug taken from the project response) ==="
+          # Parse the FULL body (not the truncated display copy).
+          org_slug=$(jq -r '.organization_slug // empty' "$tmp/body_project" 2>/dev/null || echo "")
+          org_id=$(  jq -r '.organization_id   // empty' "$tmp/body_project" 2>/dev/null || echo "")
+          echo "organization_slug=${org_slug:-<unavailable>}"
+          echo "organization_id (deprecated field)=${org_id:-<unavailable>}"
+          if [ -n "$org_slug" ]; then
+            get "org"          "/v1/organizations/${org_slug}"          "organization_admin_read"
+            get "org_members"  "/v1/organizations/${org_slug}/members"  "members_read"
+            get "org_projects" "/v1/organizations/${org_slug}/projects" "organization_projects_read"
           else
-            echo "Profile failed HTTP $code: $body"
-            echo "::warning title=profile GET failed::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+            echo "::warning::organization_slug unavailable — organization probes skipped"
           fi
 
-          if [ -z "$gotrue_id" ]; then
-            echo ""
-            echo "=== Attempt 2: GET /v1/projects/${ref} to get org slug ==="
-            code=$(api_try_get "/v1/projects/${ref}" "project")
-            body=$(cat "$tmp/project_body")
-            echo "GET /v1/projects/${ref} -> HTTP $code"
-            printf '%s' "$body" | jq -c 'del(.databases) | del(.services)' 2>/dev/null | head -c 1000; echo
-            if [ "$code" = "200" ]; then
-              org_slug=$(printf '%s' "$body" | jq -r '.organization_slug // .organization.slug // .org_slug // empty' 2>/dev/null || echo "")
-              echo "org_slug: ${org_slug:-unknown}"
-              echo "org_slug=$org_slug" >> "$GITHUB_OUTPUT" || true
-            fi
-          fi
+          echo "org_slug=${org_slug}" >> "$GITHUB_OUTPUT"
+          echo "org_id=${org_id}"     >> "$GITHUB_OUTPUT"
+          echo "probe_file=$out"      >> "$GITHUB_OUTPUT"
+          echo "tmpdir=$tmp"          >> "$GITHUB_OUTPUT"
 
-          if [ -z "$gotrue_id" ] && [ -n "${org_slug:-}" ]; then
-            echo ""
-            echo "=== Attempt 3: GET /v1/organizations/${org_slug}/members (v1) ==="
-            code=$(api_try_get "/v1/organizations/${org_slug}/members" "org_members_v1")
-            body=$(cat "$tmp/org_members_v1_body")
-            echo "GET /v1/organizations/${org_slug}/members -> HTTP $code"
-            echo "::notice title=org members v1::HTTP $code"
-            printf '%s' "$body" | head -c 1500; echo
-            if [ "$code" = "200" ]; then
-              count=$(printf '%s' "$body" | jq -r 'if type=="array" then length else 0 end' 2>/dev/null || echo "0")
-              echo "members count: $count"
-              if [ "$count" = "1" ]; then
-                gotrue_id=$(printf '%s' "$body" | jq -r '.[0].user_id // .[0].id // empty' 2>/dev/null || echo "")
-                email=$(printf '%s' "$body" | jq -r '.[0].primary_email // .[0].email // empty' 2>/dev/null || echo "")
-                if [ -n "$gotrue_id" ]; then method="org_members_v1_single"; echo "Found via org members v1 single: $gotrue_id"; fi
-              else
-                printf '%s' "$body" | jq -r '.[] | "\(.user_id) \(.primary_email // .email) \(.role)"' 2>/dev/null | head -20
-                # try to find primary owner or first
-                gotrue_id=$(printf '%s' "$body" | jq -r 'if type=="array" then .[0].user_id // empty else empty end' 2>/dev/null || echo "")
-                if [ -n "$gotrue_id" ]; then method="org_members_v1_first"; fi
-              fi
-            fi
-          fi
+          # Compact label=HTTP pairs, so the whole probe result is visible in the
+          # run's annotation list without opening the step summary. Labels and
+          # status codes only — no bodies, no identifiers, no token material.
+          codes=$(awk -F'\t' '{printf "%s=%s ", $1, $4}' "$out")
+          echo "::notice title=probe results (label=HTTP)::${codes}"
 
-          if [ -z "$gotrue_id" ] && [ -n "${org_slug:-}" ]; then
-            echo ""
-            echo "=== Attempt 4: GET /v2/organizations/${org_slug}/members ==="
-            code=$(api_try_get "/v2/organizations/${org_slug}/members" "org_members_v2")
-            body=$(cat "$tmp/org_members_v2_body")
-            echo "GET /v2/organizations/${org_slug}/members -> HTTP $code"
-            printf '%s' "$body" | head -c 1500; echo
-            if [ "$code" = "200" ]; then
-              gotrue_id=$(printf '%s' "$body" | jq -r '.data[0].id // .data[0].user_id // .[0].user_id // empty' 2>/dev/null || echo "")
-              email=$(printf '%s' "$body" | jq -r '.data[0].primary_email // .data[0].email // empty' 2>/dev/null || echo "")
-              if [ -n "$gotrue_id" ]; then method="org_members_v2"; echo "Found via v2: $gotrue_id"; fi
-            fi
-          fi
-
-          if [ -z "$gotrue_id" ]; then
-            echo ""
-            echo "=== Attempt 5: GET /v1/projects/${ref}/database/jit (current user) ==="
-            code=$(api_try_get "/v1/projects/${ref}/database/jit" "jit_current")
-            body=$(cat "$tmp/jit_current_body")
-            echo "GET /v1/projects/${ref}/database/jit -> HTTP $code"
-            printf '%s' "$body" | head -c 1000; echo
-            if [ "$code" = "200" ]; then
-              gotrue_id=$(printf '%s' "$body" | jq -r '.user_id // empty' 2>/dev/null || echo "")
-              if [ -n "$gotrue_id" ]; then method="jit_current"; echo "Found via jit current: $gotrue_id"; fi
-            fi
-          fi
-
-          if [ -z "$gotrue_id" ]; then
-            echo ""
-            echo "=== Attempt 6: GET /v1/projects/${ref}/database/jit/list ==="
-            code=$(api_try_get "/v1/projects/${ref}/database/jit/list" "jit_list")
-            body=$(cat "$tmp/jit_list_body")
-            echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
-            printf '%s' "$body" | head -c 2000; echo
-            if [ "$code" = "200" ]; then
-              cnt=$(printf '%s' "$body" | jq -r '.items | length' 2>/dev/null || echo "0")
-              echo "items count: $cnt"
-              if [ "$cnt" -gt 0 ]; then
-                printf '%s' "$body" | jq -r '.items[] | "\(.user_id) \(.primary_email) \(.user_roles[]?.role)"' 2>/dev/null | head -20
-                gotrue_id=$(printf '%s' "$body" | jq -r '.items[0].user_id // empty' 2>/dev/null || echo "")
-                if [ -n "$gotrue_id" ]; then method="jit_list"; echo "Found via jit list: $gotrue_id"; fi
-              else
-                echo "JIT list empty (0 items) — no user_id extractable"
-              fi
-            fi
-          fi
-
-          if [ -z "$gotrue_id" ]; then
-            echo ""
-            echo "=== Attempt 7: GET /v1/organizations (list orgs) ==="
-            code=$(api_try_get "/v1/organizations" "orgs_list")
-            body=$(cat "$tmp/orgs_list_body")
-            echo "GET /v1/organizations -> HTTP $code"
-            printf '%s' "$body" | head -c 1000; echo
-          fi
-
-          echo ""
-          if [ -z "$gotrue_id" ]; then
-            echo "::error::Could not determine gotrue_id (user_id) via any fallback"
-            echo "Tried profile 403? org members 403? jit current 406? jit list 200 empty? orgs list?"
-            exit 1
-          fi
-
-          echo ""
-          echo "FINAL gotrue_id (user_id for JIT): $gotrue_id via method $method email=${email:-?}"
-          echo "::notice title=user_id::gotrue_id=$gotrue_id method=$method email=$email"
-
-          {
-            echo "user_id=$gotrue_id"
-            echo "user_email=$email"
-            echo "user_name=$username"
-            echo "method=$method"
-          } >> "$GITHUB_OUTPUT"
-
-          {
-            echo "### Discovered user_id (read-only)"
-            echo ""
-            echo "| field | value |"
-            echo "| --- | --- |"
-            echo "| gotrue_id (user_id for JIT) | \`$gotrue_id\` |"
-            echo "| email | ${email:-?} |"
-            echo "| username | ${username:-?} |"
-            echo "| method | $method |"
-            echo "| project ref | \`$ref\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Check current JIT role mapping for user (read-only)
-        id: jit-check
+      - name: Analyse — infer effective permissions and resource scope
+        id: analyse
         env:
-          USER_ID: ${{ steps.profile.outputs.user_id }}
+          PROBE_FILE: ${{ steps.probe.outputs.probe_file }}
+          TMPDIR_DIAG: ${{ steps.probe.outputs.tmpdir }}
+          ORG_SLUG: ${{ steps.probe.outputs.org_slug }}
+          ORG_ID: ${{ steps.probe.outputs.org_id }}
         run: |
           set -uo pipefail
-          ref="${PROJECT_REF:?}"
-          uid="${USER_ID:?}"
-          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
-          echo "Checking JIT mapping for user_id $uid"
+          code_of() { awk -F'\t' -v l="$1" '$1==l{print $4; exit}' "$PROBE_FILE"; }
+          body_of() { awk -F'\t' -v l="$1" '$1==l{print $5; exit}' "$PROBE_FILE"; }
 
-          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit/list" 2>"$tmp/curl.err") || true
-          code="${resp##*$'\n'}"
-          body="${resp%$'\n'*}"
-          echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
-          printf '%s' "$body" | jq -c '.' 2>/dev/null | head -c 3000; echo
-          found=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_id' 2>/dev/null || echo "")
-          if [ -n "$found" ]; then
-            roles=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_roles[]? | .role' 2>/dev/null | tr '\n' ',' || echo "")
-            echo "Found mapping for $uid roles=$roles"
-            echo "has_mapping=true" >> "$GITHUB_OUTPUT"
-            echo "roles=$roles" >> "$GITHUB_OUTPUT"
+          # ---- GET /v1/organizations is the decisive organization-scope probe --
+          # organizations_read gates exactly this one endpoint, and it takes no
+          # slug. So:
+          #   200      -> organizations_read IS attached to the token
+          #   200 []   -> ...but the token's organization RESOURCE list is empty,
+          #               which is what makes every /v1/organizations/{slug}/*
+          #               call 403 no matter which organization permissions
+          #               (members_read, organization_admin_read) are selected.
+          #   403      -> organizations_read is not effective at all.
+          orgs_code=$(code_of orgs_all)
+          orgs_count=$(jq -r 'if type=="array" then length else -1 end' \
+                         "$TMPDIR_DIAG/body_orgs_all" 2>/dev/null || echo "-1")
+
+          if [ "$orgs_code" = "200" ] && [ "$orgs_count" = "0" ]; then
+            org_verdict="HTTP 200 with an EMPTY array. organizations_read IS attached and effective, but the token's ORGANIZATION RESOURCE SCOPE IS EMPTY (0 organizations). Therefore every /v1/organizations/{slug}/... call returns 403 regardless of members_read / organization_admin_read. Fix = add the organization as a RESOURCE when creating the scoped PAT (organization_slugs), not add another permission."
+            org_scope_empty="yes"
+          elif [ "$orgs_code" = "200" ]; then
+            org_verdict="HTTP 200 with ${orgs_count} organization(s) in scope. organizations_read is attached and the organization resource scope is NOT empty."
+            org_scope_empty="no"
+          elif [ "$orgs_code" = "403" ]; then
+            org_verdict="HTTP 403 on the single endpoint that organizations_read gates -> organizations_read is NOT effective on this token."
+            org_scope_empty="unknown"
           else
-            echo "No mapping for $uid"
-            echo "has_mapping=false" >> "$GITHUB_OUTPUT"
-            echo "roles=" >> "$GITHUB_OUTPUT"
+            org_verdict="inconclusive (HTTP ${orgs_code})"
+            org_scope_empty="unknown"
           fi
-          {
-            echo "### JIT mapping check (read-only)"
-            echo ""
-            echo "| field | value |"
-            echo "| --- | --- |"
-            echo "| user_id | \`$uid\` |"
-            echo "| has_mapping | ${found:+true} |"
-            echo "| roles | \`${roles:-none}\` |"
-          } >> "$GITHUB_STEP_SUMMARY"
+          echo "ORG SCOPE: $org_verdict"
+          echo "::notice title=organization scope::${org_verdict}"
 
-      - name: Final report
+          # ---- GET /v1/organizations/{slug} ------------------------------------
+          org_code=$(code_of org)
+          if [ "$org_code" = "403" ]; then
+            orgget_verdict="HTTP 403 is EXPECTED here: this endpoint is gated by organization_admin_read (Organization Settings: Read), which is a different permission from organizations_read. Selecting organizations_read can never unlock it."
+          else
+            orgget_verdict="HTTP ${org_code}"
+          fi
+          echo "ORG GET: $orgget_verdict"
+          echo "::notice title=GET /v1/organizations/{slug}::${orgget_verdict}"
+
+          # ---- GET /v1/profile -------------------------------------------------
+          prof_body=$(body_of profile)
+          case "$prof_body" in
+            *"user-scoped access token"*)
+              prof_verdict="Confirmed unreachable by design. The OpenAPI spec declares NO x-fga-permissions for GET /v1/profile (responses: 200 only), so there is no fine-grained permission that can unlock it — it needs a user-scoped OAuth/session token. gotrue_id must come from somewhere else."
+              ;;
+            *) prof_verdict="HTTP $(code_of profile) body=${prof_body}" ;;
+          esac
+          echo "PROFILE: $prof_verdict"
+          echo "::notice title=GET /v1/profile::$(printf '%s' "$prof_verdict" | tr -d '\r\n' | head -c 300)"
+
+          # ---- database_jit_read: the permission that actually matters ---------
+          jitself_code=$(code_of jit_self)
+          if [ "$jitself_code" = "403" ]; then
+            jit_verdict="database_jit_read NOT effective — POST /database/jit would be denied."
+            jit_post_ok="no"
+          else
+            jit_verdict="database_jit_read IS effective: GET /database/jit returned HTTP ${jitself_code}, which is NOT 403, so the permission gate passed (406 = gate passed, no mapping exists for this user yet). POST /v1/projects/{ref}/database/jit is therefore callable with {role, rhost} and returns the caller's user_id."
+            jit_post_ok="yes"
+          fi
+          echo "DATABASE JIT READ: $jit_verdict"
+          echo "::notice title=database_jit_read::${jit_verdict}"
+
+          jitlist_code=$(code_of jit_list)
+          if [ "$jitlist_code" = "200" ]; then
+            jitw_verdict="database_jit_write IS effective (GET /database/jit/list is gated by database_jit_write and returned 200). PUT and DELETE on /database/jit are callable."
+          else
+            jitw_verdict="GET /database/jit/list returned HTTP ${jitlist_code}; database_jit_write may be missing."
+          fi
+          echo "DATABASE JIT WRITE: $jitw_verdict"
+          echo "::notice title=database_jit_write::${jitw_verdict}"
+
+          # ---- organization identifier format ----------------------------------
+          if [ -n "$ORG_SLUG" ] && [ "$ORG_SLUG" = "$ORG_ID" ]; then
+            fmt_verdict="organization_slug == organization_id == '${ORG_SLUG}'. The identifier used in previous attempts was CORRECT, so a wrong slug is not the cause of the 403s."
+          elif [ -n "$ORG_SLUG" ]; then
+            fmt_verdict="organization_slug='${ORG_SLUG}' differs from the deprecated organization_id='${ORG_ID}'. Organization endpoints take the SLUG."
+          else
+            fmt_verdict="organization_slug unavailable (GET /v1/projects/{ref} did not return it)."
+          fi
+          echo "IDENTIFIER: $fmt_verdict"
+          echo "::notice title=organization identifier::${fmt_verdict}"
+
+          {
+            echo "org_verdict=$org_verdict"
+            echo "org_scope_empty=$org_scope_empty"
+            echo "orgget_verdict=$orgget_verdict"
+            echo "prof_verdict=$prof_verdict"
+            echo "jit_verdict=$jit_verdict"
+            echo "jit_post_ok=$jit_post_ok"
+            echo "jitw_verdict=$jitw_verdict"
+            echo "fmt_verdict=$fmt_verdict"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Report
         if: always()
         env:
-          TOKEN_CLASS: ${{ steps.guard.outputs.token_class }}
-          TOKEN_FP: ${{ steps.guard.outputs.token_fp }}
-          JIT_CODE: ${{ steps.jit-state.outputs.code }}
-          JIT_STATE: ${{ steps.jit-state.outputs.state }}
-          JIT_APPLIED: ${{ steps.jit-state.outputs.applied }}
-          USER_ID: ${{ steps.profile.outputs.user_id }}
-          USER_EMAIL: ${{ steps.profile.outputs.user_email }}
-          METHOD: ${{ steps.profile.outputs.method }}
-          HAS_MAPPING: ${{ steps.jit-check.outputs.has_mapping }}
-          ROLES: ${{ steps.jit-check.outputs.roles }}
+          PROBE_FILE: ${{ steps.probe.outputs.probe_file }}
+          ORG_SLUG_OUT: ${{ steps.probe.outputs.org_slug }}
+          ORG_VERDICT: ${{ steps.analyse.outputs.org_verdict }}
+          ORGGET_VERDICT: ${{ steps.analyse.outputs.orgget_verdict }}
+          PROF_VERDICT: ${{ steps.analyse.outputs.prof_verdict }}
+          JIT_VERDICT: ${{ steps.analyse.outputs.jit_verdict }}
+          JITW_VERDICT: ${{ steps.analyse.outputs.jitw_verdict }}
+          FMT_VERDICT: ${{ steps.analyse.outputs.fmt_verdict }}
         run: |
+          set -uo pipefail
           {
-            echo "### Supabase JIT readonly check — result"
+            echo "## Supabase JIT read-only diagnostic"
             echo ""
-            echo "| check | result |"
-            echo "| --- | --- |"
-            echo "| project ref | \`${PROJECT_REF}\` |"
-            echo "| token class | ${TOKEN_CLASS:-?} |"
-            echo "| token fp | ${TOKEN_FP:-?} |"
-            echo "| JIT HTTP code | ${JIT_CODE:-?} |"
-            echo "| JIT state | ${JIT_STATE:-?} |"
-            echo "| JIT appliedSuccessfully | ${JIT_APPLIED:-?} |"
-            echo "| user_id (gotrue_id) | \`${USER_ID:-not-found}\` |"
-            echo "| user email | ${USER_EMAIL:-?} |"
-            echo "| discovery method | ${METHOD:-?} |"
-            echo "| has JIT mapping | ${HAS_MAPPING:-?} |"
-            echo "| current roles | ${ROLES:-none} |"
+            echo "- project ref: \`${PROJECT_REF}\`"
+            echo "- token class: ${SB_TOKEN_CLASS}"
+            echo "- token length: ${SB_TOKEN_LEN}"
+            echo "- token sha256[1:12]: \`${SB_TOKEN_FP}\` (the token itself is never printed)"
+            echo "- organization slug: \`${ORG_SLUG_OUT}\`"
+            echo "- requests issued: GET only (no write request was made)"
             echo ""
-            if [ "${JIT_STATE:-}" = "enabled" ]; then
-              echo "✅ JIT is enabled"
-            else
-              echo "❌ JIT is NOT enabled (state=${JIT_STATE:-unknown})"
+            echo "### Observed result vs. documented requirement"
+            echo ""
+            echo "| probe | endpoint | required permission | HTTP | verdict |"
+            echo "| --- | --- | --- | --- | --- |"
+            if [ -f "$PROBE_FILE" ]; then
+              while IFS=$'\t' read -r label path perm code _body; do
+                [ -z "${label:-}" ] && continue
+                case "$code" in
+                  200) v="effective" ;;
+                  403) v="denied" ;;
+                  404) v="not visible in token scope" ;;
+                  406) v="gate passed, semantic failure" ;;
+                  *)   v="HTTP ${code}" ;;
+                esac
+                echo "| ${label} | \`GET ${path}\` | \`${perm}\` | ${code} | ${v} |"
+              done < "$PROBE_FILE"
             fi
-            if [ -n "${USER_ID:-}" ]; then
-              echo "✅ user_id discovered: \`${USER_ID}\` via ${METHOD:-?}"
-            else
-              echo "❌ user_id NOT discovered"
-            fi
             echo ""
-            echo "No role authorization performed (read-only)."
+            echo "### Analysis"
+            echo ""
+            echo "- **Organization resource scope:** ${ORG_VERDICT}"
+            echo "- **GET /v1/organizations/{slug}:** ${ORGGET_VERDICT}"
+            echo "- **GET /v1/profile:** ${PROF_VERDICT}"
+            echo "- **Database JIT read:** ${JIT_VERDICT}"
+            echo "- **Database JIT write:** ${JITW_VERDICT}"
+            echo "- **Organization identifier:** ${FMT_VERDICT}"
+            echo ""
+            echo "### Conclusion"
+            echo ""
+            echo "JIT authorization does not need \`members_read\`, \`organizations_read\`,"
+            echo "\`organization_admin_read\` or \`/v1/profile\`. \`POST /v1/projects/{ref}/database/jit\`"
+            echo "takes \`{role, rhost}\`, is gated by \`database_jit_read\`, resolves the user from"
+            echo "the bearer token, and returns \`user_id\`. Run the"
+            echo "**Supabase JIT authorize (gated)** workflow to use it."
           } >> "$GITHUB_STEP_SUMMARY"
-          echo "JIT state=${JIT_STATE:-unknown} user_id=${USER_ID:-not-found}"
+
+          echo "::notice title=DIAGNOSTIC COMPLETE::read-only; no POST/PUT/PATCH/DELETE was issued"

@@ -1,0 +1,394 @@
+name: Supabase JIT authorize (gated)
+
+# Authorizes the *calling token's own* Supabase user for a Postgres role under
+# Temporary Access (JIT), using the correct Management API contract.
+#
+# ── Why this workflow exists ───────────────────────────────────────────────────
+# The previous attempt assumed JIT authorization needs a `user_id` (gotrue_id)
+# obtained from `GET /v1/profile` or `GET /v1/organizations/{slug}/members`.
+# That assumption is wrong, and it is what produced the 403/400/406 dead end.
+#
+# Verified against supabase/supabase @ apps/docs/spec/api_v1_openapi.json:
+#
+#   POST /v1/projects/{ref}/database/jit          "Authorize JIT access"
+#     summary      : Authorize user-id to role mappings for JIT access
+#     description  : "Authorizes the request to assume a role in the project
+#                     database"   <- the API resolves the user FROM THE TOKEN
+#     x-fga-permissions : [["database_jit_read"]]   <- READ, not write
+#     requestBody  : AuthorizeJitAccessBody
+#                      role  : string, minLength 1, REQUIRED
+#                      rhost : REQUIRED, anyOf [ ipv4 literal, ipv6 literal ]
+#                      required: ["role", "rhost"]   <- there is NO user_id field
+#                      example : {"role":"postgres","rhost":"203.0.113.10"}
+#     200 response : JitAuthorizeAccessResponse_Output
+#                      user_id : uuid, REQUIRED   <- THIS is the gotrue_id
+#                      user_role: { role, expires_at?, allowed_networks?, branches_only? }
+#
+#   PUT  /v1/projects/{ref}/database/jit          "Update JIT access"
+#     x-fga-permissions : [["database_jit_write"]]
+#     requestBody  : UpdateJitAccessBody
+#                      user_id : uuid, REQUIRED
+#                      roles   : array, REQUIRED   <- "roles", NOT "user_roles"
+#                      example expires_at: 1740787200  (SECONDS)
+#
+#   DELETE /v1/projects/{ref}/database/jit/{user_id}
+#     x-fga-permissions : [["database_jit_write"]]
+#
+# So `rhost` (a bare IPv4/IPv6 literal — not a CIDR, not a hostname) was the
+# missing required field behind every HTTP 400 seen previously, and the
+# `user_roles` key in the Temporary-access guide page is stale: the spec and the
+# Dashboard's own apps/studio/data/jit-db-access/jit-db-access-grant-mutation.ts
+# both use `roles`.
+#
+# ── Security properties ────────────────────────────────────────────────────────
+# * workflow_dispatch ONLY. It can never be triggered by a pull_request, so no PR
+#   can cause a JIT grant.
+# * DRY RUN BY DEFAULT. `confirm` defaults to "false": the workflow prints the
+#   exact request it would send and exits 0 without issuing any write.
+# * The grant is IP-BOUND. `rhost` is the runner's own public egress IPv4, so the
+#   resulting mapping only authorizes connections from that address. That is a
+#   tighter posture than an unrestricted mapping, not a weaker one.
+# * Authorization and the psql verification happen in the SAME job, because a
+#   GitHub-hosted runner's egress IP is per-job and would change otherwise.
+# * The token is masked and never printed. It is passed to psql via PGPASSWORD,
+#   never on a command line.
+# * No migration is run. No schema, password, SSL or network setting is changed.
+# * Optional `revoke_after_test` deletes the mapping again when you only want a
+#   one-shot verification.
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_ref:
+        description: "Supabase project ref"
+        required: true
+        default: kijhqsyftzufydonggeb
+      role:
+        description: "Postgres role to authorize"
+        required: true
+        default: postgres
+      confirm:
+        description: "Set to 'true' to actually perform the authorization. Any other value = dry run."
+        required: true
+        default: "false"
+      rhost:
+        description: "Optional explicit IPv4/IPv6 literal for rhost. Blank = auto-detect this runner's egress IP."
+        required: false
+        default: ""
+      expires_hours:
+        description: "Optional. >0 issues a follow-up PUT that bounds the grant to N hours (expires_at in SECONDS). 0 = leave whatever the API applies."
+        required: false
+        default: "0"
+      db_host:
+        description: "Host used for the psql verification"
+        required: true
+        default: aws-1-eu-west-1.pooler.supabase.com
+      db_port:
+        description: "Port used for the psql verification (5432 = session pooler)"
+        required: true
+        default: "5432"
+      run_psql_test:
+        description: "After authorizing, verify with a real psql connection"
+        required: true
+        default: "true"
+      revoke_after_test:
+        description: "Delete the JIT mapping again once the test finishes"
+        required: true
+        default: "false"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-jit-authorize
+  cancel-in-progress: false
+
+jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
+      ROLE: ${{ github.event.inputs.role || 'postgres' }}
+      CONFIRM: ${{ github.event.inputs.confirm || 'false' }}
+      RHOST_INPUT: ${{ github.event.inputs.rhost || '' }}
+      EXPIRES_HOURS: ${{ github.event.inputs.expires_hours || '0' }}
+      DB_HOST: ${{ github.event.inputs.db_host || 'aws-1-eu-west-1.pooler.supabase.com' }}
+      DB_PORT: ${{ github.event.inputs.db_port || '5432' }}
+      RUN_PSQL: ${{ github.event.inputs.run_psql_test || 'true' }}
+      REVOKE: ${{ github.event.inputs.revoke_after_test || 'false' }}
+      API: https://api.supabase.com
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard — token present, normalised, masked
+        env:
+          RAW_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAW_TOKEN:-}" ]; then
+            echo "::error::Missing secret SUPABASE_ACCESS_TOKEN"
+            exit 1
+          fi
+          tok=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n\t' \
+                | sed -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//" \
+                      -e "s/^[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]*//" \
+                      -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//")
+          echo "::add-mask::$tok"
+          fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
+          case "$tok" in
+            sbp_fc*) cls="scoped fine-grained PAT (sbp_fc…)" ;;
+            sbp_*)   cls="classic PAT (sbp_…)" ;;
+            *)       cls="unrecognised" ;;
+          esac
+          echo "token class=$cls length=${#tok} sha256[1:12]=$fp"
+          echo "::notice title=token fingerprint::class=$cls len=${#tok} fp=$fp"
+          {
+            echo "SUPABASE_ACCESS_TOKEN=$tok"
+            echo "SB_TOKEN_FP=$fp"
+            echo "SB_TOKEN_CLASS=$cls"
+          } >> "$GITHUB_ENV"
+
+      - name: Install psql client
+        if: env.CONFIRM == 'true' && env.RUN_PSQL == 'true'
+        run: |
+          set -euo pipefail
+          if ! command -v psql >/dev/null 2>&1; then
+            sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-client
+          fi
+          psql --version
+
+      - name: Resolve rhost (IPv4/IPv6 literal, per AuthorizeJitAccessBody)
+        id: rhost
+        run: |
+          set -uo pipefail
+          # Strict literal-IPv4 pattern taken verbatim from AuthorizeJitAccessBody
+          # in apps/docs/spec/api_v1_openapi.json. rhost must NOT be a CIDR and
+          # must NOT be a hostname.
+          IPV4_RE='^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$'
+
+          candidate="${RHOST_INPUT}"
+          if [ -n "$candidate" ]; then
+            echo "using explicit rhost input"
+          else
+            echo "auto-detecting this runner's public egress IPv4…"
+            for svc in "https://api.ipify.org" "https://ifconfig.co/ip" "https://ipv4.icanhazip.com"; do
+              candidate=$(curl -sS -m 15 -4 "$svc" 2>/dev/null | tr -d '\r\n[:space:]' || true)
+              if printf '%s' "$candidate" | grep -Eq "$IPV4_RE"; then
+                echo "resolved via $svc"
+                break
+              fi
+              candidate=""
+            done
+          fi
+
+          if ! printf '%s' "$candidate" | grep -Eq "$IPV4_RE"; then
+            echo "::error::could not resolve a valid literal IPv4 for rhost (got '${candidate:-<empty>}'). Pass the rhost input explicitly."
+            exit 1
+          fi
+          echo "rhost=$candidate"
+          echo "rhost=$candidate" >> "$GITHUB_OUTPUT"
+
+      - name: Pre-flight (read-only) — JIT state and existing mapping
+        id: pre
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          g() {
+            curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                 -H "Accept: application/json" -w $'\n%{http_code}' "${API}$1" 2>/dev/null || true
+          }
+          r=$(g "/v1/projects/${ref}/jit-access");  c="${r##*$'\n'}"; b="${r%$'\n'*}"
+          echo "GET /v1/projects/${ref}/jit-access -> HTTP $c body=$(printf '%s' "$b" | head -c 200)"
+          state=$(printf '%s' "$b" | jq -r '.state // empty' 2>/dev/null || echo "")
+          if [ "$state" != "enabled" ]; then
+            echo "::error::Temporary Access is not enabled (state='${state:-unknown}'). Run the 'Supabase JIT enable (manual)' workflow first."
+            exit 1
+          fi
+
+          r=$(g "/v1/projects/${ref}/database/jit/list"); c="${r##*$'\n'}"; b="${r%$'\n'*}"
+          echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $c body=$(printf '%s' "$b" | head -c 400)"
+          echo "jit_list_code=$c" >> "$GITHUB_OUTPUT"
+
+          r=$(g "/v1/projects/${ref}/database/jit"); c="${r##*$'\n'}"; b="${r%$'\n'*}"
+          echo "GET /v1/projects/${ref}/database/jit -> HTTP $c body=$(printf '%s' "$b" | head -c 300)"
+          if [ "$c" = "403" ]; then
+            echo "::error::database_jit_read is not effective on this token (403). POST /database/jit cannot be used."
+            exit 1
+          fi
+          echo "database_jit_read is effective (HTTP $c != 403)."
+
+      - name: DRY RUN — print the exact request, issue nothing
+        if: env.CONFIRM != 'true'
+        env:
+          RHOST: ${{ steps.rhost.outputs.rhost }}
+        run: |
+          set -uo pipefail
+          echo "confirm='${CONFIRM}' -> DRY RUN. No write request was issued."
+          echo ""
+          echo "The single request that resolves this blocker is:"
+          echo ""
+          echo "  curl -X POST \"https://api.supabase.com/v1/projects/${PROJECT_REF}/database/jit\" \\"
+          echo "    -H \"Authorization: Bearer \$SUPABASE_ACCESS_TOKEN\" \\"
+          echo "    -H \"Content-Type: application/json\" \\"
+          echo "    -d '{\"role\": \"${ROLE}\", \"rhost\": \"${RHOST}\"}'"
+          echo ""
+          echo "Both fields are required; there is no user_id field. The 200 response"
+          echo "returns { user_id, user_role } — user_id is the caller's gotrue_id, so"
+          echo "this one call both authorizes and reveals the id."
+          echo ""
+          echo "::notice title=DRY RUN::re-dispatch with confirm=true to execute"
+
+      - name: Authorize (POST /v1/projects/{ref}/database/jit)
+        id: auth
+        if: env.CONFIRM == 'true'
+        env:
+          RHOST: ${{ steps.rhost.outputs.rhost }}
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"; role="${ROLE:?}"; rhost="${RHOST:?}"
+          payload=$(jq -cn --arg r "$role" --arg h "$rhost" '{role:$r, rhost:$h}')
+          echo "POST /v1/projects/${ref}/database/jit  payload=$payload"
+
+          resp=$(curl -sS -m 45 -X POST \
+                   -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                   -H "Accept: application/json" -H "Content-Type: application/json" \
+                   -d "$payload" -w $'\n%{http_code}' \
+                   "${API}/v1/projects/${ref}/database/jit" 2>/dev/null) || true
+          code="${resp##*$'\n'}"; body="${resp%$'\n'*}"
+          echo "HTTP $code"
+          printf '%s' "$body" | jq . 2>/dev/null || printf '%s' "$body" | head -c 800
+          echo ""
+
+          if [ "$code" != "200" ]; then
+            eb=$(printf '%s' "$body" | tr -d '\r\n' | head -c 400)
+            echo "::error title=authorize failed::POST /database/jit -> HTTP ${code} body=${eb}"
+            exit 1
+          fi
+          uid=$(printf '%s' "$body" | jq -r '.user_id // empty')
+          exp=$(printf '%s' "$body" | jq -r '.user_role.expires_at // "none"')
+          if [ -z "$uid" ]; then
+            echo "::error::200 but no user_id in response"
+            exit 1
+          fi
+          echo "::notice title=user_id resolved::gotrue_id=${uid} (from the POST response — no members_read / /v1/profile needed)"
+          echo "user_id=$uid"        >> "$GITHUB_OUTPUT"
+          echo "expires_at=$exp"    >> "$GITHUB_OUTPUT"
+
+      - name: Optionally bound the grant in time (PUT, expires_at in SECONDS)
+        id: bound
+        if: env.CONFIRM == 'true' && env.EXPIRES_HOURS != '0'
+        env:
+          UID_: ${{ steps.auth.outputs.user_id }}
+          RHOST: ${{ steps.rhost.outputs.rhost }}
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"; role="${ROLE:?}"
+          # AuthorizeJitAccessBody/UpdateJitAccessBody example uses SECONDS
+          # (1740787200). The Temporary-access guide page shows milliseconds —
+          # that page is stale; the spec and the Dashboard mutation use seconds.
+          exp=$(( $(date +%s) + EXPIRES_HOURS * 3600 ))
+          payload=$(jq -cn --arg u "$UID_" --arg r "$role" --argjson e "$exp" --arg c "${RHOST}/32" \
+                    '{user_id:$u, roles:[{role:$r, expires_at:$e, allowed_networks:{allowed_cidrs:[{cidr:$c}]}}]}')
+          echo "PUT /v1/projects/${ref}/database/jit  payload=$payload"
+          resp=$(curl -sS -m 45 -X PUT \
+                   -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                   -H "Accept: application/json" -H "Content-Type: application/json" \
+                   -d "$payload" -w $'\n%{http_code}' \
+                   "${API}/v1/projects/${ref}/database/jit" 2>/dev/null) || true
+          code="${resp##*$'\n'}"; body="${resp%$'\n'*}"
+          echo "HTTP $code"; printf '%s' "$body" | jq . 2>/dev/null || printf '%s' "$body" | head -c 600
+          if [ "$code" != "200" ]; then
+            echo "::warning title=PUT failed::HTTP $code — the POST grant is still in place; the body key is 'roles', not 'user_roles'."
+          fi
+
+      - name: Verify mapping (read-only)
+        id: verify
+        if: env.CONFIRM == 'true'
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          g() {
+            curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                 -H "Accept: application/json" -w $'\n%{http_code}' "${API}$1" 2>/dev/null || true
+          }
+          r=$(g "/v1/projects/${ref}/database/jit"); c="${r##*$'\n'}"; b="${r%$'\n'*}"
+          echo "GET /v1/projects/${ref}/database/jit -> HTTP $c"
+          printf '%s' "$b" | jq . 2>/dev/null || printf '%s' "$b" | head -c 500
+          r=$(g "/v1/projects/${ref}/database/jit/list"); c="${r##*$'\n'}"; b="${r%$'\n'*}"
+          echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $c"
+          printf '%s' "$b" | jq . 2>/dev/null || printf '%s' "$b" | head -c 800
+          echo ""
+
+      - name: Verify over a REAL Postgres connection (session pooler, jit=true)
+        id: psql
+        if: env.CONFIRM == 'true' && env.RUN_PSQL == 'true'
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          pguser="postgres.${ref}"
+          echo "host=${DB_HOST} port=${DB_PORT} user=${pguser} dbname=postgres sslmode=require options='-c jit=true'"
+          echo "(password = SUPABASE_ACCESS_TOKEN, masked, supplied via PGPASSWORD env only — never on a command line)"
+          set +e
+          # PGPASSWORD is taken from the normalised+masked env var written by the
+          # guard step, so the raw secret never appears in argv.
+          out=$(PGPASSWORD="$SUPABASE_ACCESS_TOKEN" PGSSLMODE=require PGOPTIONS='-c jit=true' \
+                psql -h "$DB_HOST" -p "$DB_PORT" -U "$pguser" -d postgres \
+                     -v ON_ERROR_STOP=1 -tAc 'SELECT current_user, current_database();' 2>&1)
+          rc=$?
+          set -e
+          echo "psql exit=$rc"
+          printf '%s\n' "$out" | sed -E "s/${SB_TOKEN_FP:-__nofp__}/<redacted>/g"
+          if [ "$rc" = "0" ]; then
+            echo "::notice title=Postgres connection OK::current_user/current_database = $(printf '%s' "$out" | tr -d '\r\n' | head -c 120)"
+            echo "result=success" >> "$GITHUB_OUTPUT"
+            echo "identities=$(printf '%s' "$out" | tr -d '\r\n' | head -c 200)" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error title=Postgres connection FAILED::exit=$rc $(printf '%s' "$out" | tr -d '\r\n' | head -c 400)"
+            echo "result=failed" >> "$GITHUB_OUTPUT"
+            exit "$rc"
+          fi
+
+      - name: Revoke mapping (only if requested)
+        if: env.CONFIRM == 'true' && env.REVOKE == 'true' && always()
+        env:
+          UID_: ${{ steps.auth.outputs.user_id }}
+        run: |
+          set -uo pipefail
+          [ -z "${UID_:-}" ] && { echo "no user_id to revoke"; exit 0; }
+          code=$(curl -sS -m 30 -o /dev/null -w '%{http_code}' -X DELETE \
+                   -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                   "${API}/v1/projects/${PROJECT_REF}/database/jit/${UID_}" 2>/dev/null) || true
+          echo "DELETE /v1/projects/${PROJECT_REF}/database/jit/${UID_} -> HTTP $code"
+
+      - name: Summary
+        if: always()
+        env:
+          RHOST_OUT: ${{ steps.rhost.outputs.rhost }}
+          USER_ID_OUT: ${{ steps.auth.outputs.user_id }}
+          EXPIRES_OUT: ${{ steps.auth.outputs.expires_at }}
+          PSQL_RESULT: ${{ steps.psql.outputs.result }}
+          PSQL_IDENTITIES: ${{ steps.psql.outputs.identities }}
+        run: |
+          set -uo pipefail
+          if [ "${CONFIRM}" = "true" ]; then mode="EXECUTED"; else mode="DRY RUN (no write request issued)"; fi
+          {
+            echo "## Supabase JIT authorize"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| mode | ${mode} |"
+            echo "| project ref | \`${PROJECT_REF}\` |"
+            echo "| role | \`${ROLE}\` |"
+            echo "| rhost | \`${RHOST_OUT}\` |"
+            echo "| token | ${SB_TOKEN_CLASS}, sha256[1:12]=\`${SB_TOKEN_FP}\` |"
+            echo "| user_id (gotrue_id) | \`${USER_ID_OUT:-n/a (dry run)}\` |"
+            echo "| expires_at applied | \`${EXPIRES_OUT:-n/a}\` |"
+            echo "| psql result | \`${PSQL_RESULT:-not run}\` |"
+            echo "| psql identities | \`${PSQL_IDENTITIES:-n/a}\` |"
+            echo ""
+            echo "Endpoint contract used: \`POST /v1/projects/{ref}/database/jit\` with"
+            echo "\`{\"role\": \"…\", \"rhost\": \"<ipv4|ipv6 literal>\"}\`, gated by"
+            echo "\`database_jit_read\`. No \`user_id\` is sent — the 200 response returns it."
+          } >> "$GITHUB_STEP_SUMMARY"
