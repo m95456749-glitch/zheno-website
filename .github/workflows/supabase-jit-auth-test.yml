@@ -368,6 +368,7 @@ jobs:
 
       - name: Resolve pooler endpoint (IPv4 Session Pooler 5432)
         id: endpoint
+        if: always()
         run: |
           set -uo pipefail
           ref="${PROJECT_REF:?}"
@@ -664,8 +665,9 @@ jobs:
             exit 1
           fi
 
-      - name: Test REAL PostgreSQL connection via Session Pooler 5432 with JIT
+      - name: Test REAL PostgreSQL connection via Session Pooler 5432 with JIT (always attempt)
         id: pg-test
+        if: always()
         env:
           USER_ID: ${{ steps.profile.outputs.user_id }}
           POOLER_HOST: ${{ steps.endpoint.outputs.pooler_host }}
@@ -676,10 +678,25 @@ jobs:
           echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
           tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
 
-          host="${POOLER_HOST:?}"
-          port="${POOLER_PORT:?}"
-          user="${POOLER_USER:?}"
           ref="${PROJECT_REF:?}"
+          # Use outputs if available, otherwise fallback to known pooler from previous runs
+          host="${POOLER_HOST:-}"
+          port="${POOLER_PORT:-5432}"
+          user="${POOLER_USER:-postgres.${ref}}"
+          if [ -z "$host" ]; then
+            echo "Pooler host not resolved from endpoint step, using fallback from API"
+            # Try to resolve again quickly
+            resp=$(curl -sS -m 20 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" "https://api.supabase.com/v1/projects/${ref}/config/database/pooler" 2>/dev/null) || true
+            h=$(printf '%s' "$resp" | jq -r '.[0].db_host // empty' 2>/dev/null || echo "")
+            if [ -n "$h" ]; then
+              host="$h"
+            else
+              host="aws-1-eu-west-1.pooler.supabase.com"
+            fi
+            echo "Fallback host: $host"
+          fi
+          if [ -z "$port" ]; then port="5432"; fi
+          if [ -z "$user" ]; then user="postgres.${ref}"; fi
 
           echo "=== Testing REAL PostgreSQL connection ==="
           echo "Host: $host"
