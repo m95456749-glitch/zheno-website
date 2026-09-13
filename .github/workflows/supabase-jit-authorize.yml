@@ -52,7 +52,10 @@ name: Supabase JIT authorize (gated)
 #   GitHub-hosted runner's egress IP is per-job and would change otherwise.
 # * The token is masked and never printed. It is passed to psql via PGPASSWORD,
 #   never on a command line.
-# * No migration is run. No schema, password, SSL or network setting is changed.
+# * No migration is applied. `run_dry_run` only reports what
+#   `supabase db push --dry-run` WOULD apply, and it must run in the same job
+#   as the grant because the JIT mapping is IP-bound. No schema, password,
+#   SSL or network setting is changed.
 # * Optional `revoke_after_test` deletes the mapping again when you only want a
 #   one-shot verification.
 
@@ -91,6 +94,10 @@ on:
         description: "After authorizing, verify with a real psql connection"
         required: true
         default: "true"
+      run_dry_run:
+        description: "If the psql check succeeds, run 'supabase db push --dry-run' in THIS job (read-only; applies nothing; must be same-job because the grant is IP-bound)"
+        required: false
+        default: "true"
       revoke_after_test:
         description: "Delete the JIT mapping again once the test finishes"
         required: true
@@ -116,6 +123,7 @@ jobs:
       DB_HOST: ${{ github.event.inputs.db_host || 'aws-1-eu-west-1.pooler.supabase.com' }}
       DB_PORT: ${{ github.event.inputs.db_port || '5432' }}
       RUN_PSQL: ${{ github.event.inputs.run_psql_test || 'true' }}
+      RUN_DRYRUN: ${{ github.event.inputs.run_dry_run || 'true' }}
       REVOKE: ${{ github.event.inputs.revoke_after_test || 'false' }}
       API: https://api.supabase.com
     steps:
@@ -350,6 +358,65 @@ jobs:
             exit "$rc"
           fi
 
+      - name: Install Supabase CLI (dry-run only)
+        if: env.CONFIRM == 'true' && env.RUN_DRYRUN == 'true' && steps.psql.outcome == 'success'
+        uses: supabase/setup-cli@v1
+        with:
+          # Pinned for the same reason as supabase-migrate.yml: 'latest' resolves
+          # through the unauthenticated GitHub API and dies on rate limits.
+          version: 2.117.0
+
+      - name: Migration dry-run — verify files, then 'supabase db push --dry-run' (read-only)
+        # Runs in THIS job on purpose: the JIT grant is bound to this runner's
+        # egress IP, so a second workflow run (different job, different IP) could
+        # not reuse it. Strictly --dry-run: it reports, it never applies.
+        id: dryrun
+        if: env.CONFIRM == 'true' && env.RUN_DRYRUN == 'true' && steps.psql.outcome == 'success'
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+
+          echo "== 1/2 Verify the repository migrations (read-only; nothing modified) =="
+          files=$(ls -1 supabase/migrations/*.sql)
+          printf '%s\n' "$files"
+          expected="$(printf 'supabase/migrations/20260912000000_initial_schema.sql\nsupabase/migrations/20260912000001_seed_catalog.sql')"
+          if [ "$files" != "$expected" ]; then
+            echo "::error::supabase/migrations does not contain exactly the two expected files"
+            exit 1
+          fi
+          sha256sum supabase/migrations/*.sql
+          echo "supabase CLI: $(supabase --version 2>&1 | head -1)"
+          if [ ! -f supabase/config.toml ]; then
+            # Runner-side placeholder so the CLI has a project config; the repo
+            # and the SQL files themselves are NOT touched. Same command as
+            # supabase-migrate.yml uses ("no SQL file was touched").
+            supabase init --force >/dev/null 2>&1 || true
+          fi
+
+          echo
+          echo "== 2/2 supabase db push --dry-run (reports only; applies NOTHING) =="
+          pguser="postgres.${ref}"
+          # Percent-encoded db URL built in-shell: the password is the masked PAT
+          # (temporary access / JIT credential) — never argv, never printed;
+          # options carries the required jit=true GUC for Supavisor.
+          url=$(python3 -c 'import sys, urllib.parse as u; h,p,usr,pw=sys.argv[1:5]; q=lambda s: u.quote(s, safe=""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require&options=%s" % (q(usr), q(pw), h, p, q("-c jit=true")))' "$DB_HOST" "$DB_PORT" "$pguser" "$SUPABASE_ACCESS_TOKEN")
+          echo "::add-mask::$url"
+          echo "target: ${pguser}@${DB_HOST}:${DB_PORT}/postgres (temporary-access/JIT credential)"
+
+          echo "-- supabase migration list (local vs remote history; read-only) --"
+          supabase migration list --db-url "$url" 2>&1 || echo "(migration list failed)"
+          echo
+          echo "-- supabase db push --dry-run --db-url --"
+          if supabase db push --dry-run --db-url "$url" 2>&1; then
+            echo "dryrun_ok=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Migration dry-run OK::supabase db push --dry-run completed — nothing was applied"
+          else
+            rc=$?
+            echo "dryrun_ok=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Migration dry-run FAILED::supabase db push --dry-run exited ${rc} — nothing was applied"
+            exit "$rc"
+          fi
+
       - name: Revoke mapping (only if requested)
         if: env.CONFIRM == 'true' && env.REVOKE == 'true' && always()
         env:
@@ -370,6 +437,7 @@ jobs:
           EXPIRES_OUT: ${{ steps.auth.outputs.expires_at }}
           PSQL_RESULT: ${{ steps.psql.outputs.result }}
           PSQL_IDENTITIES: ${{ steps.psql.outputs.identities }}
+          DRYRUN_OK: ${{ steps.dryrun.outputs.dryrun_ok }}
         run: |
           set -uo pipefail
           if [ "${CONFIRM}" = "true" ]; then mode="EXECUTED"; else mode="DRY RUN (no write request issued)"; fi
@@ -387,6 +455,7 @@ jobs:
             echo "| expires_at applied | \`${EXPIRES_OUT:-n/a}\` |"
             echo "| psql result | \`${PSQL_RESULT:-not run}\` |"
             echo "| psql identities | \`${PSQL_IDENTITIES:-n/a}\` |"
+            echo "| supabase db push --dry-run | \`${DRYRUN_OK:-not run}\` (nothing is ever applied) |"
             echo ""
             echo "Endpoint contract used: \`POST /v1/projects/{ref}/database/jit\` with"
             echo "\`{\"role\": \"…\", \"rhost\": \"<ipv4|ipv6 literal>\"}\`, gated by"
