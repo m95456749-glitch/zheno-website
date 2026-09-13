@@ -16,6 +16,12 @@ npm-debug.log*
 .env.*
 !.env.example
 
+# Supabase CLI local artifacts (never commit local state or credentials)
+supabase/.temp/
+supabase/.branches/
+supabase/.env
+supabase/**/*.local
+
 # editor / os
 .vscode/*
 !.vscode/extensions.json

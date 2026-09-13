@@ -1216,6 +1216,33 @@ jobs:
             end;"
           echo "local files : $(ls -1 supabase/migrations/*.sql | wc -l)"
 
+      - name: APPLY gate — a real PostgreSQL connection is mandatory for mode=apply
+        # Without this step an APPLY run whose database probe failed — but whose
+        # read-only Management API path worked (mgmt_sql_ok=true) — would skip the
+        # fail-fast step above, skip every apply/verify step below (they are gated
+        # on db_reachable == 'true'), and finish GREEN having applied nothing.
+        # A read-only fallback is acceptable for a dry-run report; it must never be
+        # reported as a successful apply. This gate turns that silent skip into a
+        # hard, clearly-worded failure. It prints no secret values.
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable != 'true'
+        env:
+          DB_ERROR: ${{ steps.probe.outputs.db_error }}
+        run: |
+          set -uo pipefail
+          echo "::error::mode=apply was requested but NO real PostgreSQL connection was confirmed (db_reachable != true). Nothing was applied — the read-only Management API fallback can only produce dry-run reports and is never a substitute for an apply."
+          if [ -n "${DB_ERROR:-}" ]; then echo "::error::Database probe: ${DB_ERROR}"; fi
+          {
+            echo "### APPLY refused — no confirmed PostgreSQL connection"
+            echo
+            echo "This run was started with \`mode = apply\`, but the database probe could not"
+            echo "confirm a working PostgreSQL connection. **No migration was applied.**"
+            echo
+            echo "The read-only Management API path (used for dry-run reports) is NOT accepted"
+            echo "as an apply path. Fix the database connectivity (see the probe step above),"
+            echo "then re-run with \`mode = apply\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
       - name: Apply migrations (only when mode = apply)
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:

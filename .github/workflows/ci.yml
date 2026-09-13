@@ -1,0 +1,61 @@
+# ZHINO — lightweight, read-only CI for pull requests.
+#
+# Everything in this workflow is safe by construction:
+#   - no database connection is ever opened
+#   - no secrets are read or required
+#   - nothing is deployed and nothing is written anywhere
+#
+# It runs the same checks a developer runs locally:
+#   typecheck, production build, catalog data consistency, runtime smoke
+#   tests, and offline validation of the supabase/ directory (file
+#   presence, migration naming/ordering, read-only verify.sql, and a
+#   committed-secret scan).
+#
+# Production migrations remain MANUAL ONLY via the separate
+# "Supabase migrate (manual)" workflow (workflow_dispatch).
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate Supabase structure (offline — no DB connection)
+        run: npm run verify:supabase
+
+      - name: Verify catalog data consistency
+        run: npm run verify:data
+
+      - name: Build (production)
+        run: npm run build
+
+      - name: Runtime smoke tests
+        run: npm run smoke
