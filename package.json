@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "verify:data": "node scripts/verify-data.mjs",
+    "verify:supabase": "node scripts/verify-supabase.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
   "dependencies": {
