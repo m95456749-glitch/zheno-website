@@ -79,41 +79,190 @@ jobs:
           echo "token_class=$cls" >> "$GITHUB_OUTPUT"
           echo "token_fp=$fp" >> "$GITHUB_OUTPUT"
 
-      - name: Determine authenticated user_id via GET /v1/profile
+      - name: Determine authenticated user_id via multiple fallbacks
         id: profile
         run: |
           set -uo pipefail
           tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
-          echo "=== GET /v1/profile to obtain gotrue_id (user_id for JIT) ==="
-          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/profile" 2>"$tmp/curl.err") || true
-          code="${resp##*$'\n'}"
-          body="${resp%$'\n'*}"
-          case "$code" in ''|*[!0-9]*) code="000" ;; esac
+          ref="${PROJECT_REF:?}"
+
+          try_get() {
+            local path="$1"
+            local resp code body
+            resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com${path}" 2>"$tmp/curl.err") || true
+            code="${resp##*$'\n'}"
+            body="${resp%$'\n'*}"
+            case "$code" in ''|*[!0-9]*) code="000" ;; esac
+            printf '%s' "$code" > "$tmp/last_code"
+            printf '%s' "$body" > "$tmp/last_body"
+            echo "$code"
+          }
+
+          gotrue_id=""
+          email=""
+          username=""
+          method=""
+
+          echo "=== Attempt 1: GET /v1/profile to obtain gotrue_id ==="
+          code=$(try_get "/v1/profile")
+          body=$(cat "$tmp/last_body")
           echo "GET /v1/profile -> HTTP $code"
           echo "::notice title=profile GET::HTTP $code"
           printf '%s' "$body" | head -c 1000; echo
-          echo "$body" > "$tmp/profile_body"
-          echo "$code" > "$tmp/profile_code"
-
-          gotrue_id=$(printf '%s' "$body" | jq -r '.gotrue_id // .id // empty' 2>/dev/null || echo "")
-          email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
-          username=$(printf '%s' "$body" | jq -r '.username // empty' 2>/dev/null || echo "")
+          if [ "$code" = "200" ]; then
+            gotrue_id=$(printf '%s' "$body" | jq -r '.gotrue_id // .id // empty' 2>/dev/null || echo "")
+            email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
+            username=$(printf '%s' "$body" | jq -r '.username // empty' 2>/dev/null || echo "")
+            if [ -n "$gotrue_id" ]; then
+              method="profile"
+              echo "Found via profile: $gotrue_id"
+            fi
+          else
+            echo "Profile failed (HTTP $code): $body"
+          fi
 
           if [ -z "$gotrue_id" ]; then
-            echo "::error::Could not determine gotrue_id from /v1/profile response"
-            echo "Body: $body"
+            echo
+            echo "=== Attempt 2: GET /v1/projects/${ref} to get org slug, then list org members ==="
+            code=$(try_get "/v1/projects/${ref}")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/projects/${ref} -> HTTP $code"
+            org_slug=$(printf '%s' "$body" | jq -r '.organization_slug // .organization_id // empty' 2>/dev/null || echo "")
+            echo "org_slug: $org_slug"
+            if [ -n "$org_slug" ] && [ "$code" = "200" ]; then
+              echo "Trying GET /v1/organizations/${org_slug}/members"
+              code2=$(try_get "/v1/organizations/${org_slug}/members")
+              body2=$(cat "$tmp/last_body")
+              echo "GET /v1/organizations/${org_slug}/members -> HTTP $code2"
+              echo "::notice title=org members::HTTP $code2"
+              printf '%s' "$body2" | head -c 2000; echo
+              if [ "$code2" = "200" ]; then
+                # If only one member, assume it's the token owner
+                count=$(printf '%s' "$body2" | jq -r 'if type=="array" then length else 0 end' 2>/dev/null || echo "0")
+                echo "Members count: $count"
+                if [ "$count" = "1" ]; then
+                  gotrue_id=$(printf '%s' "$body2" | jq -r '.[0].user_id // .[0].id // empty' 2>/dev/null || echo "")
+                  email=$(printf '%s' "$body2" | jq -r '.[0].email // .[0].primary_email // empty' 2>/dev/null || echo "")
+                  username=$(printf '%s' "$body2" | jq -r '.[0].user_name // .[0].username // empty' 2>/dev/null || echo "")
+                  method="org_members_single"
+                  echo "Single member found, using its user_id: $gotrue_id"
+                else
+                  # Try to find member with role owner or with matching email? We don't know email.
+                  # As fallback, try first member
+                  echo "Multiple members ($count), trying to pick first"
+                  # We will not auto-pick unless we have another signal, but we can still try first as last resort
+                  # Instead, try v2 endpoint
+                  echo "Trying GET /v2/organizations/${org_slug}/members"
+                  code3=$(try_get "/v2/organizations/${org_slug}/members")
+                  body3=$(cat "$tmp/last_body")
+                  echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                  printf '%s' "$body3" | head -c 2000; echo
+                  if [ "$code3" = "200" ]; then
+                    # v2 returns data array
+                    count3=$(printf '%s' "$body3" | jq -r '.data | length // 0' 2>/dev/null || echo "0")
+                    echo "v2 members count: $count3"
+                    if [ "$count3" = "1" ]; then
+                      gotrue_id=$(printf '%s' "$body3" | jq -r '.data[0].id // empty' 2>/dev/null || echo "")
+                      email=$(printf '%s' "$body3" | jq -r '.data[0].attributes.primary_email // empty' 2>/dev/null || echo "")
+                      username=$(printf '%s' "$body3" | jq -r '.data[0].attributes.username // empty' 2>/dev/null || echo "")
+                      method="v2_org_members_single"
+                    fi
+                  fi
+                fi
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 3: GET /v1/projects/${ref}/database/jit (current user mapping) ==="
+            code=$(try_get "/v1/projects/${ref}/database/jit")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/projects/${ref}/database/jit -> HTTP $code"
+            echo "::notice title=jit current user::HTTP $code"
+            printf '%s' "$body" | head -c 2000; echo
+            if [ "$code" = "200" ]; then
+              # Response may contain user_id
+              gotrue_id=$(printf '%s' "$body" | jq -r '.user_id // empty' 2>/dev/null || echo "")
+              if [ -n "$gotrue_id" ]; then
+                email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
+                method="jit_current"
+                echo "Found via jit current: $gotrue_id"
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 4: GET /v1/projects/${ref}/database/jit/list (list all) ==="
+            code=$(try_get "/v1/projects/${ref}/database/jit/list")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
+            echo "::notice title=jit list::HTTP $code"
+            printf '%s' "$body" | head -c 3000; echo
+            if [ "$code" = "200" ]; then
+              count=$(printf '%s' "$body" | jq -r '.items | length // 0' 2>/dev/null || echo "0")
+              echo "JIT list items count: $count"
+              if [ "$count" = "1" ]; then
+                gotrue_id=$(printf '%s' "$body" | jq -r '.items[0].user_id // empty' 2>/dev/null || echo "")
+                email=$(printf '%s' "$body" | jq -r '.items[0].primary_email // empty' 2>/dev/null || echo "")
+                method="jit_list_single"
+                echo "Single JIT mapping found, using its user_id: $gotrue_id"
+              elif [ "$count" -gt 1 ]; then
+                # If multiple, try to find one that has postgres role? Or first?
+                echo "Multiple JIT mappings, listing:"
+                printf '%s' "$body" | jq -r '.items[] | "\(.user_id) \(.primary_email) \(.user_roles[]?.role)"' 2>/dev/null
+                # As fallback, use first
+                gotrue_id=$(printf '%s' "$body" | jq -r '.items[0].user_id // empty' 2>/dev/null || echo "")
+                email=$(printf '%s' "$body" | jq -r '.items[0].primary_email // empty' 2>/dev/null || echo "")
+                method="jit_list_first"
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 5: GET /v1/organizations (list orgs) ==="
+            code=$(try_get "/v1/organizations")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/organizations -> HTTP $code"
+            printf '%s' "$body" | head -c 2000; echo
+            if [ "$code" = "200" ]; then
+              org_slug=$(printf '%s' "$body" | jq -r '.[0].slug // .[0].id // empty' 2>/dev/null || echo "")
+              echo "First org slug: $org_slug"
+              if [ -n "$org_slug" ]; then
+                code2=$(try_get "/v1/organizations/${org_slug}/members")
+                body2=$(cat "$tmp/last_body")
+                echo "GET /v1/organizations/${org_slug}/members -> HTTP $code2"
+                printf '%s' "$body2" | head -c 2000; echo
+                if [ "$code2" = "200" ]; then
+                  gotrue_id=$(printf '%s' "$body2" | jq -r '.[0].user_id // empty' 2>/dev/null || echo "")
+                  email=$(printf '%s' "$body2" | jq -r '.[0].email // empty' 2>/dev/null || echo "")
+                  method="org_list_fallback"
+                fi
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo "::error::Could not determine gotrue_id (user_id) via any fallback method"
+            echo "Tried: profile (403), org members, jit current, jit list, org list"
+            echo "If JIT list is empty and profile/members require extra permission, we need members_read permission."
+            echo "Please ensure token has members_read or that JIT list already contains a mapping."
             exit 1
           fi
 
-          echo "gotrue_id (user_id for JIT): $gotrue_id"
+          echo
+          echo "FINAL gotrue_id (user_id for JIT): $gotrue_id via method $method"
           echo "email: $email username: $username"
-          echo "::notice title=user_id::gotrue_id=$gotrue_id email=$email"
+          echo "::notice title=user_id::gotrue_id=$gotrue_id method=$method email=$email"
 
           {
             echo "user_id=$gotrue_id"
             echo "user_email=$email"
             echo "user_name=$username"
-            echo "profile_code=$code"
+            echo "profile_code=${code:-?}"
+            echo "method=$method"
           } >> "$GITHUB_OUTPUT"
 
           {
@@ -122,9 +271,9 @@ jobs:
             echo "| field | value |"
             echo "| --- | --- |"
             echo "| gotrue_id (user_id for JIT) | \`$gotrue_id\` |"
+            echo "| method | $method |"
             echo "| email | $email |"
             echo "| username | $username |"
-            echo "| HTTP code | $code |"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Resolve pooler endpoint (IPv4 Session Pooler 5432)
