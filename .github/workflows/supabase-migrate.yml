@@ -619,29 +619,26 @@ jobs:
       - name: Verify — run supabase/verify.sql (apply only)
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
-          PGHOST: ${{ steps.endpoint.outputs.db_host }}
-          PGPORT: ${{ steps.endpoint.outputs.db_port }}
-          PGUSER: ${{ steps.endpoint.outputs.db_user }}
           PGDATABASE: postgres
           PGSSLMODE: require
         run: |
           set -euo pipefail
           export PGPASSWORD="$SUPABASE_DB_PASSWORD"
           echo "::add-mask::$PGPASSWORD"
+          export PGHOST="$SB_DB_HOST" PGPORT="$SB_DB_PORT" PGUSER="$SB_DB_USER"
+          echo "verifying against ${PGUSER}@${PGHOST}:${PGPORT}"
           psql -v ON_ERROR_STOP=1 -f supabase/verify.sql
 
       - name: Verify — assert expected seed counts (apply only)
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
-          PGHOST: ${{ steps.endpoint.outputs.db_host }}
-          PGPORT: ${{ steps.endpoint.outputs.db_port }}
-          PGUSER: ${{ steps.endpoint.outputs.db_user }}
           PGDATABASE: postgres
           PGSSLMODE: require
         run: |
           set -euo pipefail
           export PGPASSWORD="$SUPABASE_DB_PASSWORD"
           echo "::add-mask::$PGPASSWORD"
+          export PGHOST="$SB_DB_HOST" PGPORT="$SB_DB_PORT" PGUSER="$SB_DB_USER"
           actual=$(psql -v ON_ERROR_STOP=1 -At -F, -c "
             select
               (select count(*) from public.flavors),
