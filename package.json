@@ -6,9 +6,12 @@
   "description": "ZHINO — فروشگاه پودر ژله و کاستر",
   "scripts": {
     "dev": "vite",
+    "prebuild": "node scripts/check-env.mjs",
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
+    "check:env": "node scripts/check-env.mjs",
+    "check:bundle": "node scripts/check-env.mjs --dist",
     "verify:data": "node scripts/verify-data.mjs",
     "smoke": "node scripts/smoke.mjs"
   },
