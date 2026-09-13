@@ -1,11 +1,25 @@
 name: Supabase migrate (manual)
 
-# Manual-only workflow. It applies the exact SQL files in supabase/migrations/
-# to the real Supabase project and then runs supabase/verify.sql.
+# Manual-only workflow. It reports (dry-run) or applies the exact SQL files in
+# supabase/migrations/ to the real Supabase project and then runs supabase/verify.sql.
 #
 # Nothing here touches the frontend, design, cart, checkout or animations.
-# No secret value is ever printed: the DB password is masked and psql reads
-# the connection string from the environment (PGPASSWORD is never echoed).
+# No secret value is ever printed: the access token is described only by its
+# class / length / sha256 fingerprint, the DB password is masked, and every
+# Postgres connection string is registered with ::add-mask:: before it is used.
+#
+# Why this version no longer dies on
+# "Authorization failed for the access token and project ref pair":
+#   1. The token is normalised first — a pasted newline, space, quote or
+#      "Bearer " prefix is stripped automatically (a very common cause of a 401).
+#   2. A pre-flight step asks the Management API directly what the token can do,
+#      so the log names the exact failure mode instead of a generic message.
+#   3. `supabase link` is now a best-effort diagnostic, not a gate. A
+#      scoped/fine-grained PAT can never satisfy
+#      GET /v1/projects/{ref}/api-keys?reveal=true — the call `supabase link`
+#      depends on (open Supabase bug supabase/supabase#50244, reported
+#      2026-09-10). All migration commands therefore run against an explicit
+#      percent-encoded Postgres URL (--db-url), which needs no link at all.
 
 on:
   workflow_dispatch:
@@ -15,13 +29,24 @@ on:
         required: true
         default: kijhqsyftzufydonggeb
       mode:
-        description: "dry-run = show pending migrations only | apply = really push"
+        description: "dry-run = report pending migrations only | apply = really push"
         required: true
         default: dry-run
         type: choice
         options:
           - dry-run
           - apply
+      db_host:
+        description: "Optional: Postgres host from Dashboard > Connect (blank = auto-detect)"
+        required: false
+        default: ""
+      db_port:
+        description: "Optional: Postgres port, 5432 = session / 6543 = transaction (blank = auto)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
 
 concurrency:
   group: supabase-migrate
@@ -30,24 +55,81 @@ concurrency:
 jobs:
   migrate:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
+    env:
+      PROJECT_REF: ${{ inputs.project_ref }}
+      # Only a private repository's log may show project / organization names.
+      SHOW_NAMES: ${{ github.event.repository.private }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Guard — required secrets are present
+      - name: Guard — secrets present, token normalised and classified
+        id: guard
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          RAW_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          RAW_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -euo pipefail
           missing=0
-          [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] || { echo "::error::Missing repository secret SUPABASE_ACCESS_TOKEN"; missing=1; }
-          [ -n "${SUPABASE_DB_PASSWORD:-}" ]  || { echo "::error::Missing repository secret SUPABASE_DB_PASSWORD"; missing=1; }
+          if [ -z "${RAW_TOKEN:-}" ]; then
+            echo "::error::Missing repository secret SUPABASE_ACCESS_TOKEN (Settings > Secrets and variables > Actions)."
+            missing=1
+          fi
+          if [ -z "${RAW_PASSWORD:-}" ]; then
+            echo "::error::Missing repository secret SUPABASE_DB_PASSWORD (Dashboard > Project Settings > Database > Database password)."
+            missing=1
+          fi
           [ "$missing" -eq 0 ] || exit 1
-          echo "Both secrets are present."
 
-      - name: Show the exact migration files that will be applied
+          # A token pasted into a GitHub secret very often carries a trailing
+          # newline, surrounding spaces/quotes or a "Bearer " prefix. Any of
+          # those makes the Management API answer 401 and the CLI report
+          # "Authorization failed for the access token and project ref pair".
+          tok=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n\t' \
+                | sed -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//" \
+                      -e "s/^[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]*//" \
+                      -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//")
+          if [ "$tok" != "$RAW_TOKEN" ]; then
+            echo "note: SUPABASE_ACCESS_TOKEN contained stray whitespace/quotes/'Bearer ' — trimmed automatically."
+          fi
+          echo "::add-mask::$tok"
+
+          is_pat=no; is_scoped=no
+          case "$tok" in
+            sbp_fc*)          cls="scoped (fine-grained) personal access token, sbp_fc…"
+                              is_pat=yes; is_scoped=yes ;;
+            sbp_*)            cls="classic personal access token, sbp_…"
+                              is_pat=yes ;;
+            sb_secret_*)      cls="PROJECT SECRET API KEY, sb_secret_… (data key — the CLI cannot use it)" ;;
+            sb_publishable_*) cls="PROJECT PUBLISHABLE API KEY, sb_publishable_… (data key — the CLI cannot use it)" ;;
+            eyJ*)             cls="legacy JWT, eyJ… (anon/service_role key — the CLI cannot use it)" ;;
+            *)                cls="unrecognised format (a Supabase access token starts with sbp_)" ;;
+          esac
+
+          fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
+          echo "Both secrets are present."
+          echo "  token class        : $cls"
+          echo "  token length       : ${#tok}"
+          echo "  token sha256[1:12] : $fp"
+          echo "  db password length : ${#RAW_PASSWORD}"
+          echo "  (to check which token is stored, run locally:"
+          echo "   printf '%s' \"\$MY_TOKEN\" | sha256sum | cut -c1-12 )"
+
+          {
+            echo "SUPABASE_ACCESS_TOKEN=$tok"
+            echo "SB_TOKEN_CLASS=$cls"
+            echo "SB_TOKEN_IS_PAT=$is_pat"
+            echo "SB_TOKEN_IS_SCOPED=$is_scoped"
+            echo "SB_TOKEN_FP=$fp"
+          } >> "$GITHUB_ENV"
+          {
+            echo "token_is_pat=$is_pat"
+            echo "token_is_scoped=$is_scoped"
+            echo "token_class=$cls"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Show the exact migration files that would be applied
         run: |
           set -euo pipefail
           ls -l supabase/migrations
@@ -59,74 +141,371 @@ jobs:
         with:
           version: latest
 
-      - name: Ensure supabase/config.toml exists (CLI requirement, no SQL touched)
+      - name: Record CLI version and ensure supabase/config.toml exists
         run: |
           set -euo pipefail
+          echo "supabase CLI: $(supabase --version 2>&1 | head -1)"
           if [ ! -f supabase/config.toml ]; then
-            supabase init --force --with-vscode-settings=false --with-intellij-settings=false
-            echo "Created a default supabase/config.toml for the CLI."
+            supabase init --force
+            echo "Created a default supabase/config.toml for the CLI (no SQL file was touched)."
           fi
           sha256sum supabase/migrations/*.sql
 
-      - name: Link to the Supabase project
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      - name: Pre-flight — what can this token actually do?
+        id: preflight
         run: |
-          set -euo pipefail
-          echo "::add-mask::$SUPABASE_DB_PASSWORD"
-          supabase link --project-ref "${{ inputs.project_ref }}"
+          set -uo pipefail
+          ref="${PROJECT_REF:?the project_ref input is empty}"
+          tmp="$RUNNER_TEMP/preflight"; mkdir -p "$tmp"
+          CODE=000; BODY=""
 
-      - name: Dry run — list pending migrations
+          api_get() {  # $1 = path -> sets CODE and BODY, never fails the step
+            local resp
+            resp=$(curl -sS -m 30 \
+                     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                     -H "Accept: application/json" \
+                     -w $'\n%{http_code}' \
+                     "https://api.supabase.com$1" 2>"$tmp/curl.err") || true
+            CODE="${resp##*$'\n'}"
+            BODY="${resp%$'\n'*}"
+            case "$CODE" in ''|*[!0-9]*) CODE="000" ;; esac
+          }
+
+          echo "== 1/4  Does project ref '$ref' exist? (public probe, no credentials used) =="
+          rest=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "https://${ref}.supabase.co/rest/v1/" 2>/dev/null) || rest="000"
+          echo "https://${ref}.supabase.co/rest/v1/ -> HTTP ${rest}"
+          ref_exists=yes
+          if [ "$rest" = "000" ]; then
+            ref_exists=no
+            echo "::warning::That hostname did not answer at all — the ref is mistyped, or the project is paused/deleted."
+          else
+            echo "The API gateway answered, so the ref itself is real."
+          fi
+
+          echo
+          echo "== 2/4  Token -> Management API =="
+          api_get "/v1/projects"
+          projects_code="$CODE"; projects_body="$BODY"
+          token_valid=false
+          if [ "$projects_code" = "200" ]; then
+            token_valid=true
+            n=$(printf '%s' "$projects_body" | jq -r 'if type=="array" then length else 0 end' 2>/dev/null || echo "?")
+            echo "GET /v1/projects -> 200 — the token is accepted and can see ${n} project(s)."
+            if [ "$SHOW_NAMES" = "true" ]; then
+              printf '%s' "$projects_body" | jq -r '.[]? | "    - \(.id // .ref)  name=\(.name)  status=\(.status)  org=\(.organization_slug // .organization_id)"'
+            else
+              printf '%s' "$projects_body" | jq -r '.[]? | "    - \(.id // .ref)  status=\(.status)"'
+            fi
+          else
+            echo "GET /v1/projects -> HTTP ${projects_code}"
+            [ -s "$tmp/curl.err" ] && sed 's/^/  curl: /' "$tmp/curl.err"
+            printf '%s' "$projects_body" | head -c 400; echo
+          fi
+
+          api_get "/v1/organizations"
+          echo "GET /v1/organizations -> HTTP ${CODE}"
+          if [ "$CODE" = "200" ] && [ "$SHOW_NAMES" = "true" ]; then
+            printf '%s' "$BODY" | jq -r '.[]? | "    - \(.id)  \(.name)"'
+          fi
+
+          echo
+          echo "== 3/4  This project, as seen by this token =="
+          api_get "/v1/projects/${ref}"
+          proj_code="$CODE"; proj_body="$BODY"
+          project_visible=false; region=""; pstatus=""; pname=""
+          if [ "$proj_code" = "200" ]; then
+            project_visible=true
+            region=$(printf '%s' "$proj_body"  | jq -r '.region // empty' 2>/dev/null) || region=""
+            pstatus=$(printf '%s' "$proj_body" | jq -r '.status // empty' 2>/dev/null) || pstatus=""
+            pname=$(printf '%s' "$proj_body"   | jq -r '.name // empty'   2>/dev/null) || pname=""
+            echo "GET /v1/projects/${ref} -> 200   status=${pstatus:-?}   region=${region:-?}"
+            if [ "$SHOW_NAMES" = "true" ] && [ -n "$pname" ]; then
+              echo "project name: $pname"
+            fi
+          else
+            echo "GET /v1/projects/${ref} -> HTTP ${proj_code}"
+            printf '%s' "$proj_body" | head -c 300; echo
+          fi
+
+          echo
+          echo "== 4/4  The endpoint 'supabase link' depends on =="
+          api_get "/v1/projects/${ref}/api-keys?reveal=false"
+          akeys_code="$CODE"
+          link_api_ok=false
+          case "$akeys_code" in 2*) link_api_ok=true ;; esac
+          echo "GET /v1/projects/${ref}/api-keys -> HTTP ${akeys_code}"
+
+          # ---- verdict ------------------------------------------------------
+          verdict=ok
+          action="None — token, project and API access all look healthy."
+          if [ "$token_valid" != "true" ]; then
+            if [ "$SB_TOKEN_IS_PAT" != "yes" ]; then
+              verdict=wrong-token-type
+              action="Replace the GitHub secret SUPABASE_ACCESS_TOKEN with a personal access token created at https://supabase.com/dashboard/account/tokens (it must start with sbp_). The stored value is a ${SB_TOKEN_CLASS}, which the Supabase CLI / Management API cannot use."
+            elif [ "$projects_code" = "403" ]; then
+              verdict=token-forbidden
+              action="The token is valid but forbidden (403): it was created by a different Supabase account/organization than the owner of project ${ref}, or it is a scoped PAT without 'Project Settings: Read'. Sign in to the account that owns the project, create a CLASSIC token at https://supabase.com/dashboard/account/tokens, and update the secret."
+            elif [ "$projects_code" = "000" ]; then
+              verdict=api-unreachable
+              action="api.supabase.com could not be reached from the runner — just re-run the workflow."
+            else
+              verdict=token-rejected
+              action="The token was rejected (HTTP ${projects_code}): expired, revoked, or copied incompletely. Create a new one at https://supabase.com/dashboard/account/tokens and update the secret. Stored fingerprint sha256:${SB_TOKEN_FP}."
+            fi
+          elif [ "$project_visible" != "true" ]; then
+            verdict=project-not-visible
+            action="The token works but this account cannot see project ${ref}. While signed in to the SAME account that created the token, open https://supabase.com/dashboard/project/${ref}/settings/general — if that 404s, the ref is wrong or belongs to another account; copy the ref from that URL into the workflow input."
+          elif [ -n "$pstatus" ] && [ "$pstatus" != "ACTIVE_HEALTHY" ]; then
+            verdict=project-unhealthy
+            action="Project status is ${pstatus}. Restore it first (Dashboard > Project Settings > General > Restore project); a paused project refuses migrations."
+          fi
+
+          if [ "$project_visible" = "true" ] && [ "$link_api_ok" != "true" ]; then
+            echo
+            echo "::warning::'supabase link' will fail on the api-keys endpoint (HTTP ${akeys_code})."
+            echo "::warning::With a scoped PAT that is Supabase bug supabase/supabase#50244 — no scoped token can pass it."
+            echo "::warning::Not fatal here: this workflow pushes over a direct Postgres URL instead of linking."
+            if [ "$verdict" = "ok" ]; then
+              action="Optional only: create a CLASSIC personal access token (https://supabase.com/dashboard/account/tokens, permissions left at full access) so that 'supabase link' works again. The dry-run/apply below does not need it."
+            fi
+          fi
+
+          echo
+          echo "verdict: $verdict"
+          {
+            echo "token_valid=$token_valid"
+            echo "project_visible=$project_visible"
+            echo "project_status=$pstatus"
+            echo "region=$region"
+            echo "link_api_ok=$link_api_ok"
+            echo "ref_exists=$ref_exists"
+            echo "verdict=$verdict"
+            echo "manual_action=$action"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Resolve the Postgres endpoint to work against
+        id: endpoint
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          INPUT_DB_HOST: ${{ inputs.db_host }}
+          INPUT_DB_PORT: ${{ inputs.db_port }}
+          PREFLIGHT_REGION: ${{ steps.preflight.outputs.region }}
         run: |
           set -euo pipefail
+          ref="$PROJECT_REF"
+          if [ -n "$INPUT_DB_HOST" ]; then
+            host="$INPUT_DB_HOST"; port="${INPUT_DB_PORT:-5432}"; why="workflow input"
+          elif [ -n "$PREFLIGHT_REGION" ]; then
+            # session-mode pooler (5432); transaction mode (6543) cannot run migrations
+            host="aws-0-${PREFLIGHT_REGION}.pooler.supabase.com"; port="${INPUT_DB_PORT:-5432}"
+            why="session pooler, region resolved through the Management API"
+          else
+            host="db.${ref}.supabase.co"; port="${INPUT_DB_PORT:-5432}"
+            why="direct connection (region unknown)"
+          fi
+          case "$host" in
+            *pooler.supabase.com) user="postgres.${ref}" ;;
+            *)                    user="postgres" ;;
+          esac
+          echo "endpoint: ${user}@${host}:${port}/postgres   (${why})"
+          {
+            echo "SB_DB_HOST=$host"
+            echo "SB_DB_PORT=$port"
+            echo "SB_DB_USER=$user"
+          } >> "$GITHUB_ENV"
+          {
+            echo "db_host=$host"
+            echo "db_port=$port"
+            echo "db_user=$user"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Probe the database (read-only, also validates SUPABASE_DB_PASSWORD)
+        id: probe
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PREFLIGHT_REGION: ${{ steps.preflight.outputs.region }}
+        run: |
+          set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
-          supabase db push --dry-run
+          export PGSSLMODE=require PGCONNECT_TIMEOUT=15
+          errfile="$RUNNER_TEMP/psql.err"
+
+          try() {  # host port user — password comes from PGPASSWORD, never argv
+            PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -h "$1" -p "$2" -U "$3" -d postgres -Atc 'select 1' >/dev/null 2>"$errfile"
+          }
+
+          cands="${SB_DB_HOST}:${SB_DB_PORT}:${SB_DB_USER}"
+          case "$SB_DB_HOST" in
+            *pooler.supabase.com)
+              cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres" ;;
+            *)
+              if [ -n "$PREFLIGHT_REGION" ]; then
+                cands="$cands aws-0-${PREFLIGHT_REGION}.pooler.supabase.com:5432:postgres.${PROJECT_REF}"
+              fi ;;
+          esac
+
+          reachable=false; db_error=""
+          for c in $cands; do
+            h="${c%%:*}"; remainder="${c#*:}"; p="${remainder%%:*}"; u="${remainder#*:}"
+            echo "probing ${u}@${h}:${p} (password hidden) …"
+            if try "$h" "$p" "$u"; then
+              echo "  connected and authenticated OK"
+              reachable=true
+              if [ "$h" != "$SB_DB_HOST" ] || [ "$p" != "$SB_DB_PORT" ] || [ "$u" != "$SB_DB_USER" ]; then
+                echo "  switching to this endpoint for the rest of the run"
+                {
+                  echo "SB_DB_HOST=$h"
+                  echo "SB_DB_PORT=$p"
+                  echo "SB_DB_USER=$u"
+                } >> "$GITHUB_ENV"
+              fi
+              break
+            fi
+            msg=$(head -3 "$errfile" 2>/dev/null | tr '\n' ' ')
+            echo "  failed: ${msg}"
+            case "$msg" in
+              *"password authentication failed"*)
+                db_error="SUPABASE_DB_PASSWORD is not the database password of this project (Dashboard > Project Settings > Database > Database password)." ;;
+              *"could not translate host name"*)
+                db_error="Host ${h} does not resolve — wrong project ref or wrong region." ;;
+              *"Connection refused"*|*"timed out"*|*"timeout"*)
+                db_error="Host ${h} refused the connection or timed out — the project may be paused, or IPv4 direct access is off (then pass the pooler host via the db_host input)." ;;
+              *)
+                if [ -z "$db_error" ]; then db_error="psql could not connect (see message above)."; fi ;;
+            esac
+          done
+
+          if [ "$reachable" != "true" ]; then
+            echo "::warning::${db_error}"
+          fi
+          {
+            echo "db_reachable=$reachable"
+            echo "db_error=$db_error"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: supabase link — diagnostic only, no longer a hard requirement
+        id: link
+        if: steps.guard.outputs.token_is_pat == 'yes'
+        continue-on-error: true
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -uo pipefail
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          if supabase link --project-ref "$PROJECT_REF"; then
+            echo "supabase link succeeded."
+            echo "link_ok=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::warning::supabase link failed. With a scoped PAT that is Supabase bug supabase/supabase#50244; it is not fatal here because the steps below use --db-url."
+            echo "link_ok=false" >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Fail fast when neither the Management API nor Postgres can be reached
+        if: steps.probe.outputs.db_reachable != 'true' && steps.link.outputs.link_ok != 'true'
+        env:
+          ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
+          DB_ERROR: ${{ steps.probe.outputs.db_error }}
+          TOKEN_VALID: ${{ steps.preflight.outputs.token_valid }}
+        run: |
+          set -uo pipefail
+          echo "::error::No working path to project ${PROJECT_REF}: the access token is not accepted AND the database is not reachable."
+          if [ -n "$DB_ERROR" ]; then echo "::error::Database: ${DB_ERROR}"; fi
+          if [ "$TOKEN_VALID" = "true" ]; then
+            echo "::error::The token itself IS accepted, so what is left is the database connection: check SUPABASE_DB_PASSWORD (Dashboard > Project Settings > Database > Database password), make sure the project is not paused, and/or pass the exact Session-pooler host shown in Dashboard > Connect as the db_host input with db_port 5432."
+          elif [ -n "$ACTION_NEEDED" ]; then
+            echo "::error::Action needed: ${ACTION_NEEDED}"
+          fi
+          exit 1
+
+      - name: Dry run — list pending migrations (never writes)
+        id: dryrun
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
+          LINK_OK: ${{ steps.link.outputs.link_ok }}
+        run: |
+          set -uo pipefail
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          # percent-encoded connection string, built in-shell so the password is
+          # never repeated on a command line and never printed
+          build_db_url() {
+            python3 -c 'import sys, urllib.parse as u; h, p, usr, pw = sys.argv[1:5]; q = lambda s: u.quote(s, safe=""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require" % (q(usr), q(pw), h, p))' \
+              "$1" "$2" "$3" "$SUPABASE_DB_PASSWORD"
+          }
+          url=$(build_db_url "$SB_DB_HOST" "$SB_DB_PORT" "$SB_DB_USER")
+          echo "::add-mask::$url"
+          echo "target: ${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT}/postgres"
+          echo "local migration files: $(ls -1 supabase/migrations/*.sql | wc -l)"
+          echo
+
+          ran=false
+          if [ "$DB_REACHABLE" = "true" ]; then
+            echo "== supabase migration list (local files vs remote history) =="
+            if supabase migration list --db-url "$url"; then ran=true; else echo "(migration list --db-url failed)"; fi
+            echo
+            echo "== supabase db push --dry-run =="
+            if supabase db push --dry-run --db-url "$url"; then ran=true; else echo "(db push --dry-run --db-url failed)"; fi
+          fi
+
+          if [ "$ran" != "true" ] && [ "$LINK_OK" = "true" ]; then
+            echo
+            echo "== falling back to the linked project =="
+            if supabase migration list --linked; then ran=true; fi
+            supabase db push --dry-run || true
+          fi
+
+          if [ "$ran" != "true" ]; then
+            echo "::error::Could not produce a dry-run report through any available path."
+            exit 1
+          fi
+          echo "dry_run_ok=true" >> "$GITHUB_OUTPUT"
+
+      - name: Dry run — read-only cross-check of the remote migration history
+        if: steps.probe.outputs.db_reachable == 'true'
+        env:
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          set -uo pipefail
+          echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          export PGSSLMODE=require PGCONNECT_TIMEOUT=15 PGPASSWORD="$SUPABASE_DB_PASSWORD"
+          psql -h "$SB_DB_HOST" -p "$SB_DB_PORT" -U "$SB_DB_USER" -d postgres -v ON_ERROR_STOP=1 -Atc "
+            select case
+              when to_regclass('supabase_migrations.schema_migrations') is null
+                then 'remote history: supabase_migrations.schema_migrations does not exist yet -> nothing applied'
+              else 'remote history: ' || coalesce(
+                     (select string_agg(version, ', ' order by version)
+                        from supabase_migrations.schema_migrations),
+                     'table exists but is empty -> nothing applied')
+            end;"
+          echo "local files : $(ls -1 supabase/migrations/*.sql | wc -l)"
 
       - name: Apply migrations (only when mode = apply)
-        if: ${{ inputs.mode == 'apply' }}
+        if: inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          PROJECT_STATUS: ${{ steps.preflight.outputs.project_status }}
         run: |
           set -euo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
-          supabase db push --include-all --yes
-
-      - name: Resolve pooler connection (IPv4-safe) for verification
-        if: ${{ inputs.mode == 'apply' }}
-        id: pooler
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          REF: ${{ inputs.project_ref }}
-        run: |
-          set -euo pipefail
-          api() { curl -sf -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "$@"; }
-          host=""
-          port="6543"
-          if cfg=$(api "https://api.supabase.com/v1/projects/$REF/config/database/pooler" 2>/dev/null); then
-            host=$(echo "$cfg" | jq -r 'if type=="array" then .[0] else . end | (.db_host // empty)')
-            p=$(echo "$cfg" | jq -r 'if type=="array" then .[0] else . end | (.db_port // empty)')
-            [ -n "$p" ] && [ "$p" != "null" ] && port="$p"
+          if [ -n "$PROJECT_STATUS" ] && [ "$PROJECT_STATUS" != "ACTIVE_HEALTHY" ]; then
+            echo "::error::Refusing to push: project status is ${PROJECT_STATUS}."
+            exit 1
           fi
-          if [ -z "$host" ] || [ "$host" = "null" ]; then
-            region=$(api "https://api.supabase.com/v1/projects/$REF" | jq -r '.region')
-            host="aws-0-$region.pooler.supabase.com"
-          fi
-          echo "Pooler host: $host:$port"
-          echo "host=$host" >> "$GITHUB_OUTPUT"
-          echo "port=$port" >> "$GITHUB_OUTPUT"
+          build_db_url() {
+            python3 -c 'import sys, urllib.parse as u; h, p, usr, pw = sys.argv[1:5]; q = lambda s: u.quote(s, safe=""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require" % (q(usr), q(pw), h, p))' \
+              "$1" "$2" "$3" "$SUPABASE_DB_PASSWORD"
+          }
+          url=$(build_db_url "$SB_DB_HOST" "$SB_DB_PORT" "$SB_DB_USER")
+          echo "::add-mask::$url"
+          supabase db push --db-url "$url" --include-all --yes
 
-      - name: Verify — run supabase/verify.sql
-        if: ${{ inputs.mode == 'apply' }}
+      - name: Verify — run supabase/verify.sql (apply only)
+        if: inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          PGHOST: ${{ steps.pooler.outputs.host }}
-          PGPORT: ${{ steps.pooler.outputs.port }}
-          PGUSER: postgres.${{ inputs.project_ref }}
+          PGHOST: ${{ steps.endpoint.outputs.db_host }}
+          PGPORT: ${{ steps.endpoint.outputs.db_port }}
+          PGUSER: ${{ steps.endpoint.outputs.db_user }}
           PGDATABASE: postgres
           PGSSLMODE: require
         run: |
@@ -134,13 +513,13 @@ jobs:
           echo "::add-mask::$PGPASSWORD"
           psql -v ON_ERROR_STOP=1 -f supabase/verify.sql
 
-      - name: Verify — assert expected seed counts
-        if: ${{ inputs.mode == 'apply' }}
+      - name: Verify — assert expected seed counts (apply only)
+        if: inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
-          PGHOST: ${{ steps.pooler.outputs.host }}
-          PGPORT: ${{ steps.pooler.outputs.port }}
-          PGUSER: postgres.${{ inputs.project_ref }}
+          PGHOST: ${{ steps.endpoint.outputs.db_host }}
+          PGPORT: ${{ steps.endpoint.outputs.db_port }}
+          PGUSER: ${{ steps.endpoint.outputs.db_user }}
           PGDATABASE: postgres
           PGSSLMODE: require
         run: |
@@ -165,3 +544,55 @@ jobs:
             exit 1
           fi
           echo "✅ Migrations applied and verified."
+
+      - name: Result summary
+        if: always()
+        env:
+          MODE: ${{ inputs.mode }}
+          TOKEN_CLASS: ${{ steps.guard.outputs.token_class }}
+          TOKEN_VALID: ${{ steps.preflight.outputs.token_valid }}
+          PROJECT_VISIBLE: ${{ steps.preflight.outputs.project_visible }}
+          PROJECT_STATUS: ${{ steps.preflight.outputs.project_status }}
+          REGION: ${{ steps.preflight.outputs.region }}
+          LINK_API_OK: ${{ steps.preflight.outputs.link_api_ok }}
+          VERDICT: ${{ steps.preflight.outputs.verdict }}
+          ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
+          DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
+          DB_ERROR: ${{ steps.probe.outputs.db_error }}
+          LINK_OK: ${{ steps.link.outputs.link_ok }}
+          DRY_RUN_OK: ${{ steps.dryrun.outputs.dry_run_ok }}
+        run: |
+          set -uo pipefail
+          db_action=""
+          if [ "${DB_REACHABLE:-}" != "true" ]; then
+            db_action="Database not reachable. ${DB_ERROR:-See the probe step.} Check SUPABASE_DB_PASSWORD (Dashboard > Project Settings > Database), confirm the project is running, and/or pass the Session-pooler host from Dashboard > Connect as the db_host input with db_port 5432."
+          fi
+          {
+            echo "### Supabase migrate — ${MODE}"
+            echo
+            echo "| check | result |"
+            echo "| --- | --- |"
+            echo "| project ref | \`${PROJECT_REF}\` |"
+            echo "| token class | ${TOKEN_CLASS:-n/a} |"
+            echo "| token accepted by the Management API | ${TOKEN_VALID:-n/a} |"
+            echo "| project visible to this token | ${PROJECT_VISIBLE:-n/a} |"
+            echo "| project status | ${PROJECT_STATUS:-unknown} |"
+            echo "| region | ${REGION:-unknown} |"
+            echo "| api-keys endpoint (needed by \`supabase link\`) | ${LINK_API_OK:-n/a} |"
+            echo "| \`supabase link\` | ${LINK_OK:-skipped} |"
+            echo "| Postgres endpoint used | \`${SB_DB_USER:-?}@${SB_DB_HOST:-?}:${SB_DB_PORT:-?}\` |"
+            echo "| database reachable | ${DB_REACHABLE:-n/a} |"
+            echo "| dry-run report produced | ${DRY_RUN_OK:-no} |"
+            echo
+            echo "**Verdict:** \`${VERDICT:-unknown}\`"
+            echo
+            echo "**Action needed (access token):** ${ACTION_NEEDED:-none}"
+            if [ -n "$db_action" ]; then
+              echo
+              echo "**Action needed (database):** ${db_action}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "verdict: ${VERDICT:-unknown}"
+          echo "action needed (access token): ${ACTION_NEEDED:-none}"
+          if [ -n "$db_action" ]; then echo "action needed (database): ${db_action}"; fi
+          exit 0
