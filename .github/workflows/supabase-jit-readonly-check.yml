@@ -1,0 +1,337 @@
+name: Supabase JIT readonly check (manual)
+
+# Safe read-only workflow:
+# 1. Verify Temporary Access / JIT is still enabled for project ref
+# 2. Discover current Supabase project user's user_id using scoped Management API perms
+# Does NOT authorize any role, does NOT run migrations, does NOT modify frontend/schema
+
+on:
+  workflow_dispatch:
+    inputs:
+      project_ref:
+        description: "Supabase project ref"
+        required: true
+        default: kijhqsyftzufydonggeb
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-jit-readonly
+  cancel-in-progress: false
+
+jobs:
+  readonly-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard token present and normalized
+        id: guard
+        env:
+          RAW_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAW_TOKEN:-}" ]; then
+            echo "::error::Missing secret SUPABASE_ACCESS_TOKEN"
+            exit 1
+          fi
+          tok=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n\t' | sed -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//" -e "s/^[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]*//" -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//")
+          echo "::add-mask::$tok"
+          case "$tok" in
+            sbp_fc*) cls="scoped fine-grained sbp_fc…"; is_scoped=yes ;;
+            sbp_*)   cls="classic sbp_…"; is_scoped=no ;;
+            sbp_oat*) cls="org access token sbp_oat…"; is_scoped=no ;;
+            *)       cls="unrecognised"; is_scoped=no ;;
+          esac
+          fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
+          echo "token class: $cls len=${#tok} fp=$fp"
+          echo "::notice title=token::class=$cls len=${#tok} fp=$fp"
+          {
+            echo "SUPABASE_ACCESS_TOKEN=$tok"
+            echo "SB_TOKEN_CLASS=$cls"
+            echo "SB_TOKEN_FP=$fp"
+          } >> "$GITHUB_ENV"
+          echo "token_class=$cls" >> "$GITHUB_OUTPUT"
+          echo "token_fp=$fp" >> "$GITHUB_OUTPUT"
+          echo "token_len=${#tok}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify JIT enabled (GET /v1/projects/{ref}/jit-access)
+        id: jit-state
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/jit-access" 2>"$tmp/curl.err") || true
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          case "$code" in ''|*[!0-9]*) code="000" ;; esac
+          state=$(printf '%s' "$body" | jq -r '(.state // (if .enabled == true then "enabled" elif .enabled == false then "disabled" else empty end) // empty)' 2>/dev/null || echo "")
+          applied=$(printf '%s' "$body" | jq -r '.appliedSuccessfully // empty' 2>/dev/null || echo "")
+          echo "GET /v1/projects/${ref}/jit-access -> HTTP $code state=${state:-unknown} applied=${applied:-?}"
+          printf '%s' "$body" | jq -c 'if type=="object" then del(.users) else . end' 2>/dev/null | head -c 1000; echo
+          echo "code=$code" >> "$GITHUB_OUTPUT"
+          echo "state=${state:-unknown}" >> "$GITHUB_OUTPUT"
+          echo "applied=${applied:-}" >> "$GITHUB_OUTPUT"
+          echo "body=$(printf '%s' "$body" | jq -c 'if type=="object" then del(.users) else . end' 2>/dev/null | head -c 500)" >> "$GITHUB_OUTPUT"
+          {
+            echo "### JIT state check"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| project ref | \`$ref\` |"
+            echo "| HTTP code | $code |"
+            echo "| state | ${state:-unknown} |"
+            echo "| appliedSuccessfully | ${applied:-?} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Discover current user_id (read-only)
+        id: profile
+        run: |
+          set -uo pipefail
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+          ref="${PROJECT_REF:?}"
+          gotrue_id=""; email=""; username=""; method=""; org_slug=""
+
+          api_try_get() {
+            local path="$1"
+            local out="$2"
+            local resp code body
+            resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com${path}" 2>"$tmp/curl.err") || true
+            code="${resp##*$'\n'}"
+            body="${resp%$'\n'*}"
+            case "$code" in ''|*[!0-9]*) code="000" ;; esac
+            printf '%s' "$code" > "$tmp/${out}_code"
+            printf '%s' "$body" > "$tmp/${out}_body"
+            echo "$code"
+          }
+
+          echo "=== Attempt 1: GET /v1/profile to obtain gotrue_id ==="
+          code=$(api_try_get "/v1/profile" "profile")
+          body=$(cat "$tmp/profile_body")
+          echo "GET /v1/profile -> HTTP $code"
+          echo "::notice title=profile GET::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+          printf '%s' "$body" | head -c 1000; echo
+          if [ "$code" = "200" ]; then
+            gotrue_id=$(printf '%s' "$body" | jq -r '.gotrue_id // .id // empty' 2>/dev/null || echo "")
+            email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
+            username=$(printf '%s' "$body" | jq -r '.username // empty' 2>/dev/null || echo "")
+            if [ -n "$gotrue_id" ]; then
+              method="profile"
+              echo "Found via profile: $gotrue_id"
+            fi
+          else
+            echo "Profile failed HTTP $code: $body"
+            echo "::warning title=profile GET failed::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo ""
+            echo "=== Attempt 2: GET /v1/projects/${ref} to get org slug ==="
+            code=$(api_try_get "/v1/projects/${ref}" "project")
+            body=$(cat "$tmp/project_body")
+            echo "GET /v1/projects/${ref} -> HTTP $code"
+            printf '%s' "$body" | jq -c 'del(.databases) | del(.services)' 2>/dev/null | head -c 1000; echo
+            if [ "$code" = "200" ]; then
+              org_slug=$(printf '%s' "$body" | jq -r '.organization_slug // .organization.slug // .org_slug // empty' 2>/dev/null || echo "")
+              echo "org_slug: ${org_slug:-unknown}"
+              echo "org_slug=$org_slug" >> "$GITHUB_OUTPUT" || true
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ] && [ -n "${org_slug:-}" ]; then
+            echo ""
+            echo "=== Attempt 3: GET /v1/organizations/${org_slug}/members (v1) ==="
+            code=$(api_try_get "/v1/organizations/${org_slug}/members" "org_members_v1")
+            body=$(cat "$tmp/org_members_v1_body")
+            echo "GET /v1/organizations/${org_slug}/members -> HTTP $code"
+            echo "::notice title=org members v1::HTTP $code"
+            printf '%s' "$body" | head -c 1500; echo
+            if [ "$code" = "200" ]; then
+              count=$(printf '%s' "$body" | jq -r 'if type=="array" then length else 0 end' 2>/dev/null || echo "0")
+              echo "members count: $count"
+              if [ "$count" = "1" ]; then
+                gotrue_id=$(printf '%s' "$body" | jq -r '.[0].user_id // .[0].id // empty' 2>/dev/null || echo "")
+                email=$(printf '%s' "$body" | jq -r '.[0].primary_email // .[0].email // empty' 2>/dev/null || echo "")
+                if [ -n "$gotrue_id" ]; then method="org_members_v1_single"; echo "Found via org members v1 single: $gotrue_id"; fi
+              else
+                printf '%s' "$body" | jq -r '.[] | "\(.user_id) \(.primary_email // .email) \(.role)"' 2>/dev/null | head -20
+                # try to find primary owner or first
+                gotrue_id=$(printf '%s' "$body" | jq -r 'if type=="array" then .[0].user_id // empty else empty end' 2>/dev/null || echo "")
+                if [ -n "$gotrue_id" ]; then method="org_members_v1_first"; fi
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ] && [ -n "${org_slug:-}" ]; then
+            echo ""
+            echo "=== Attempt 4: GET /v2/organizations/${org_slug}/members ==="
+            code=$(api_try_get "/v2/organizations/${org_slug}/members" "org_members_v2")
+            body=$(cat "$tmp/org_members_v2_body")
+            echo "GET /v2/organizations/${org_slug}/members -> HTTP $code"
+            printf '%s' "$body" | head -c 1500; echo
+            if [ "$code" = "200" ]; then
+              gotrue_id=$(printf '%s' "$body" | jq -r '.data[0].id // .data[0].user_id // .[0].user_id // empty' 2>/dev/null || echo "")
+              email=$(printf '%s' "$body" | jq -r '.data[0].primary_email // .data[0].email // empty' 2>/dev/null || echo "")
+              if [ -n "$gotrue_id" ]; then method="org_members_v2"; echo "Found via v2: $gotrue_id"; fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo ""
+            echo "=== Attempt 5: GET /v1/projects/${ref}/database/jit (current user) ==="
+            code=$(api_try_get "/v1/projects/${ref}/database/jit" "jit_current")
+            body=$(cat "$tmp/jit_current_body")
+            echo "GET /v1/projects/${ref}/database/jit -> HTTP $code"
+            printf '%s' "$body" | head -c 1000; echo
+            if [ "$code" = "200" ]; then
+              gotrue_id=$(printf '%s' "$body" | jq -r '.user_id // empty' 2>/dev/null || echo "")
+              if [ -n "$gotrue_id" ]; then method="jit_current"; echo "Found via jit current: $gotrue_id"; fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo ""
+            echo "=== Attempt 6: GET /v1/projects/${ref}/database/jit/list ==="
+            code=$(api_try_get "/v1/projects/${ref}/database/jit/list" "jit_list")
+            body=$(cat "$tmp/jit_list_body")
+            echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
+            printf '%s' "$body" | head -c 2000; echo
+            if [ "$code" = "200" ]; then
+              cnt=$(printf '%s' "$body" | jq -r '.items | length' 2>/dev/null || echo "0")
+              echo "items count: $cnt"
+              if [ "$cnt" -gt 0 ]; then
+                printf '%s' "$body" | jq -r '.items[] | "\(.user_id) \(.primary_email) \(.user_roles[]?.role)"' 2>/dev/null | head -20
+                gotrue_id=$(printf '%s' "$body" | jq -r '.items[0].user_id // empty' 2>/dev/null || echo "")
+                if [ -n "$gotrue_id" ]; then method="jit_list"; echo "Found via jit list: $gotrue_id"; fi
+              else
+                echo "JIT list empty (0 items) — no user_id extractable"
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo ""
+            echo "=== Attempt 7: GET /v1/organizations (list orgs) ==="
+            code=$(api_try_get "/v1/organizations" "orgs_list")
+            body=$(cat "$tmp/orgs_list_body")
+            echo "GET /v1/organizations -> HTTP $code"
+            printf '%s' "$body" | head -c 1000; echo
+          fi
+
+          echo ""
+          if [ -z "$gotrue_id" ]; then
+            echo "::error::Could not determine gotrue_id (user_id) via any fallback"
+            echo "Tried profile 403? org members 403? jit current 406? jit list 200 empty? orgs list?"
+            exit 1
+          fi
+
+          echo ""
+          echo "FINAL gotrue_id (user_id for JIT): $gotrue_id via method $method email=${email:-?}"
+          echo "::notice title=user_id::gotrue_id=$gotrue_id method=$method email=$email"
+
+          {
+            echo "user_id=$gotrue_id"
+            echo "user_email=$email"
+            echo "user_name=$username"
+            echo "method=$method"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Discovered user_id (read-only)"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| gotrue_id (user_id for JIT) | \`$gotrue_id\` |"
+            echo "| email | ${email:-?} |"
+            echo "| username | ${username:-?} |"
+            echo "| method | $method |"
+            echo "| project ref | \`$ref\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check current JIT role mapping for user (read-only)
+        id: jit-check
+        env:
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          uid="${USER_ID:?}"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+          echo "Checking JIT mapping for user_id $uid"
+
+          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit/list" 2>"$tmp/curl.err") || true
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
+          printf '%s' "$body" | jq -c '.' 2>/dev/null | head -c 3000; echo
+          found=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_id' 2>/dev/null || echo "")
+          if [ -n "$found" ]; then
+            roles=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_roles[]? | .role' 2>/dev/null | tr '\n' ',' || echo "")
+            echo "Found mapping for $uid roles=$roles"
+            echo "has_mapping=true" >> "$GITHUB_OUTPUT"
+            echo "roles=$roles" >> "$GITHUB_OUTPUT"
+          else
+            echo "No mapping for $uid"
+            echo "has_mapping=false" >> "$GITHUB_OUTPUT"
+            echo "roles=" >> "$GITHUB_OUTPUT"
+          fi
+          {
+            echo "### JIT mapping check (read-only)"
+            echo ""
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| user_id | \`$uid\` |"
+            echo "| has_mapping | ${found:+true} |"
+            echo "| roles | \`${roles:-none}\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Final report
+        if: always()
+        env:
+          TOKEN_CLASS: ${{ steps.guard.outputs.token_class }}
+          TOKEN_FP: ${{ steps.guard.outputs.token_fp }}
+          JIT_CODE: ${{ steps.jit-state.outputs.code }}
+          JIT_STATE: ${{ steps.jit-state.outputs.state }}
+          JIT_APPLIED: ${{ steps.jit-state.outputs.applied }}
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+          USER_EMAIL: ${{ steps.profile.outputs.user_email }}
+          METHOD: ${{ steps.profile.outputs.method }}
+          HAS_MAPPING: ${{ steps.jit-check.outputs.has_mapping }}
+          ROLES: ${{ steps.jit-check.outputs.roles }}
+        run: |
+          {
+            echo "### Supabase JIT readonly check — result"
+            echo ""
+            echo "| check | result |"
+            echo "| --- | --- |"
+            echo "| project ref | \`${PROJECT_REF}\` |"
+            echo "| token class | ${TOKEN_CLASS:-?} |"
+            echo "| token fp | ${TOKEN_FP:-?} |"
+            echo "| JIT HTTP code | ${JIT_CODE:-?} |"
+            echo "| JIT state | ${JIT_STATE:-?} |"
+            echo "| JIT appliedSuccessfully | ${JIT_APPLIED:-?} |"
+            echo "| user_id (gotrue_id) | \`${USER_ID:-not-found}\` |"
+            echo "| user email | ${USER_EMAIL:-?} |"
+            echo "| discovery method | ${METHOD:-?} |"
+            echo "| has JIT mapping | ${HAS_MAPPING:-?} |"
+            echo "| current roles | ${ROLES:-none} |"
+            echo ""
+            if [ "${JIT_STATE:-}" = "enabled" ]; then
+              echo "✅ JIT is enabled"
+            else
+              echo "❌ JIT is NOT enabled (state=${JIT_STATE:-unknown})"
+            fi
+            if [ -n "${USER_ID:-}" ]; then
+              echo "✅ user_id discovered: \`${USER_ID}\` via ${METHOD:-?}"
+            else
+              echo "❌ user_id NOT discovered"
+            fi
+            echo ""
+            echo "No role authorization performed (read-only)."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "JIT state=${JIT_STATE:-unknown} user_id=${USER_ID:-not-found}"
