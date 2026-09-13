@@ -107,7 +107,7 @@ jobs:
           code=$(try_get "/v1/profile")
           body=$(cat "$tmp/last_body")
           echo "GET /v1/profile -> HTTP $code"
-          echo "::notice title=profile GET::HTTP $code"
+          echo "::notice title=profile GET::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
           printf '%s' "$body" | head -c 1000; echo
           if [ "$code" = "200" ]; then
             gotrue_id=$(printf '%s' "$body" | jq -r '.gotrue_id // .id // empty' 2>/dev/null || echo "")
@@ -119,6 +119,7 @@ jobs:
             fi
           else
             echo "Profile failed (HTTP $code): $body"
+            echo "::warning title=profile GET failed::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
           fi
 
           if [ -z "$gotrue_id" ]; then
@@ -134,7 +135,7 @@ jobs:
               code2=$(try_get "/v1/organizations/${org_slug}/members")
               body2=$(cat "$tmp/last_body")
               echo "GET /v1/organizations/${org_slug}/members -> HTTP $code2"
-              echo "::notice title=org members::HTTP $code2"
+              echo "::notice title=org members::HTTP $code2 body=$(printf '%s' "$body2" | head -c 500)"
               printf '%s' "$body2" | head -c 2000; echo
               if [ "$code2" = "200" ]; then
                 # If only one member, assume it's the token owner
@@ -156,6 +157,7 @@ jobs:
                   code3=$(try_get "/v2/organizations/${org_slug}/members")
                   body3=$(cat "$tmp/last_body")
                   echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                  echo "::notice title=org members v2::HTTP $code3 body=$(printf '%s' "$body3" | head -c 500)"
                   printf '%s' "$body3" | head -c 2000; echo
                   if [ "$code3" = "200" ]; then
                     # v2 returns data array
@@ -167,6 +169,29 @@ jobs:
                       username=$(printf '%s' "$body3" | jq -r '.data[0].attributes.username // empty' 2>/dev/null || echo "")
                       method="v2_org_members_single"
                     fi
+                  else
+                    echo "v2 members failed: $body3"
+                    echo "::warning title=org members v2 failed::HTTP $code3 body=$(printf '%s' "$body3" | head -c 500)"
+                  fi
+                fi
+              else
+                echo "v1 members failed: $body2"
+                echo "::warning title=org members v1 failed::HTTP $code2 body=$(printf '%s' "$body2" | head -c 500)"
+                # Try v2 even if v1 failed
+                echo "Trying GET /v2/organizations/${org_slug}/members as fallback"
+                code3=$(try_get "/v2/organizations/${org_slug}/members")
+                body3=$(cat "$tmp/last_body")
+                echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                echo "::notice title=org members v2 fallback::HTTP $code3 body=$(printf '%s' "$body3" | head -c 500)"
+                printf '%s' "$body3" | head -c 2000; echo
+                if [ "$code3" = "200" ]; then
+                  count3=$(printf '%s' "$body3" | jq -r '.data | length // 0' 2>/dev/null || echo "0")
+                  echo "v2 members count: $count3"
+                  if [ "$count3" = "1" ]; then
+                    gotrue_id=$(printf '%s' "$body3" | jq -r '.data[0].id // empty' 2>/dev/null || echo "")
+                    email=$(printf '%s' "$body3" | jq -r '.data[0].attributes.primary_email // empty' 2>/dev/null || echo "")
+                    username=$(printf '%s' "$body3" | jq -r '.data[0].attributes.username // empty' 2>/dev/null || echo "")
+                    method="v2_org_members_single"
                   fi
                 fi
               fi
@@ -179,7 +204,7 @@ jobs:
             code=$(try_get "/v1/projects/${ref}/database/jit")
             body=$(cat "$tmp/last_body")
             echo "GET /v1/projects/${ref}/database/jit -> HTTP $code"
-            echo "::notice title=jit current user::HTTP $code"
+            echo "::notice title=jit current user::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
             printf '%s' "$body" | head -c 2000; echo
             if [ "$code" = "200" ]; then
               # Response may contain user_id
@@ -189,6 +214,20 @@ jobs:
                 method="jit_current"
                 echo "Found via jit current: $gotrue_id"
               fi
+            else
+              echo "::warning title=jit current failed::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 3b: GET /v1/organizations/${org_slug} to get org details ==="
+            if [ -n "${org_slug:-}" ]; then
+              code=$(try_get "/v1/organizations/${org_slug}")
+              body=$(cat "$tmp/last_body")
+              echo "GET /v1/organizations/${org_slug} -> HTTP $code"
+              echo "::notice title=org details::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+              printf '%s' "$body" | head -c 2000; echo
             fi
           fi
 
