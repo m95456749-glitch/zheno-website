@@ -19,6 +19,9 @@ name: Supabase JIT enable (manual)
 # and then enables JIT if needed.
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-enable.yml"
   workflow_dispatch:
     inputs:
       project_ref:
