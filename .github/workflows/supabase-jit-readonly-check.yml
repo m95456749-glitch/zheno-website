@@ -167,7 +167,9 @@ jobs:
 
           echo "=== project scope ==="
           get "project"       "/v1/projects/${ref}"                         "project_admin_read"
-          get "project_health" "/v1/projects/${ref}/health"                 "project_admin_read"
+          # `services` is a REQUIRED query param on this endpoint; without it the
+          # API returns 400 (a validation rejection, not an authorization result).
+          get "project_health" "/v1/projects/${ref}/health?services=auth,db,rest,storage,realtime,pooler" "project_admin_read"
           get "jit_config"    "/v1/projects/${ref}/jit-access"              "project_admin_read"
           get "jit_self"      "/v1/projects/${ref}/database/jit"            "database_jit_read"
           get "jit_list"      "/v1/projects/${ref}/database/jit/list"       "database_jit_write"
