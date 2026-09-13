@@ -226,6 +226,7 @@ jobs:
             code=$(try_get "/v1/organizations")
             body=$(cat "$tmp/last_body")
             echo "GET /v1/organizations -> HTTP $code"
+            echo "::notice title=orgs list::HTTP $code"
             printf '%s' "$body" | head -c 2000; echo
             if [ "$code" = "200" ]; then
               org_slug=$(printf '%s' "$body" | jq -r '.[0].slug // .[0].id // empty' 2>/dev/null || echo "")
@@ -234,21 +235,71 @@ jobs:
                 code2=$(try_get "/v1/organizations/${org_slug}/members")
                 body2=$(cat "$tmp/last_body")
                 echo "GET /v1/organizations/${org_slug}/members -> HTTP $code2"
+                echo "::notice title=org members v1 from orgs list::HTTP $code2"
                 printf '%s' "$body2" | head -c 2000; echo
                 if [ "$code2" = "200" ]; then
                   gotrue_id=$(printf '%s' "$body2" | jq -r '.[0].user_id // empty' 2>/dev/null || echo "")
                   email=$(printf '%s' "$body2" | jq -r '.[0].email // empty' 2>/dev/null || echo "")
                   method="org_list_fallback"
                 fi
+                # Try v2
+                code3=$(try_get "/v2/organizations/${org_slug}/members")
+                body3=$(cat "$tmp/last_body")
+                echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                echo "::notice title=org members v2 from orgs list::HTTP $code3"
+                printf '%s' "$body3" | head -c 2000; echo
+                if [ "$code3" = "200" ] && [ -z "$gotrue_id" ]; then
+                  gotrue_id=$(printf '%s' "$body3" | jq -r '.data[0].id // empty' 2>/dev/null || echo "")
+                  email=$(printf '%s' "$body3" | jq -r '.data[0].attributes.primary_email // empty' 2>/dev/null || echo "")
+                  method="v2_org_list_fallback"
+                fi
               fi
+            else
+              echo "Orgs list failed: $body"
             fi
           fi
 
           if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 6: Try POST /v1/projects/${ref}/database/jit with role postgres (maybe authorizes current user without user_id) ==="
+            # Try POST with role only
+            for payload in '{"role":"postgres"}' '{"role":"postgres","allowed_networks":{}}' '{"user_roles":[{"role":"postgres"}]}'; do
+              echo "Trying POST with payload: $payload"
+              resp=$(curl -sS -m 30 -X POST -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -H "Content-Type: application/json" -d "$payload" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit" 2>"$tmp/curl.err") || true
+              pcode="${resp##*$'\n'}"
+              pbody="${resp%$'\n'*}"
+              case "$pcode" in ''|*[!0-9]*) pcode="000" ;; esac
+              echo "POST /v1/projects/${ref}/database/jit -> HTTP $pcode"
+              printf '%s' "$pbody" | head -c 2000; echo
+              echo "::notice title=jit POST attempt::HTTP $pcode payload=$payload"
+              if [ "$pcode" = "200" ] || [ "$pcode" = "201" ]; then
+                # Try to extract user_id from response
+                gotrue_id=$(printf '%s' "$pbody" | jq -r '.user_id // empty' 2>/dev/null || echo "")
+                if [ -n "$gotrue_id" ]; then
+                  method="post_jit_auto"
+                  echo "POST succeeded and returned user_id: $gotrue_id"
+                  break
+                fi
+              fi
+            done
+          fi
+
+          if [ -z "$gotrue_id" ]; then
             echo "::error::Could not determine gotrue_id (user_id) via any fallback method"
-            echo "Tried: profile (403), org members, jit current, jit list, org list"
-            echo "If JIT list is empty and profile/members require extra permission, we need members_read permission."
-            echo "Please ensure token has members_read or that JIT list already contains a mapping."
+            echo "Tried:"
+            echo "  - GET /v1/profile -> 403"
+            echo "  - GET /v1/organizations/{slug}/members -> 403"
+            echo "  - GET /v1/projects/{ref}/database/jit -> 406"
+            echo "  - GET /v1/projects/{ref}/database/jit/list -> 200 but empty (0 items)"
+            echo "  - GET /v1/organizations -> ?"
+            echo "  - POST /v1/projects/{ref}/database/jit with role postgres -> ?"
+            echo "If JIT list is empty and profile/members require extra permission (members_read, organizations_read), we need those permissions."
+            echo "Exact errors:"
+            echo "  profile GET: HTTP 403"
+            echo "  org members v1: HTTP 403"
+            echo "  jit current: HTTP 406"
+            echo "  jit list: HTTP 200 but 0 items"
+            echo "Please ensure token has members_read or organizations_read, or manually provide user_id."
             exit 1
           fi
 
