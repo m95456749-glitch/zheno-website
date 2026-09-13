@@ -54,8 +54,9 @@ export default function AdminSiteContentPage() {
   const changed = FIELDS.some((f) => form[f.key] !== DEFAULT_SITE_CONTENT[f.key]);
 
   const save = () => {
-    saveSiteContent(form);
-    setSaved(true);
+    void saveSiteContent(form)
+      .then(() => setSaved(true))
+      .catch(() => window.alert('ذخیره محتوا در پایگاه داده ممکن نشد.'));
     window.setTimeout(() => setSaved(false), 2000);
   };
 

@@ -1,12 +1,15 @@
 // ============================================================
-// ZHINO — API Service Layer
-// Future: connect to real backend
-// Replace stub implementations with actual fetch calls
+// ZHINO — checkout integration service
 // ============================================================
+// Existing API_BASE support is preserved for a future payment gateway.
+// When only Supabase is configured, checkout creates a validated order via
+// the database RPC and does not pretend that a bank payment happened.
 
 import type { Order, Customer, Address, CartItem, ShippingMethod } from '../types';
+import { isSupabaseConfigured } from './supabase/client';
+import { createRemoteOrder } from './supabase/repository';
 
-const API_BASE: string = import.meta.env.VITE_API_BASE_URL ?? '';
+const API_BASE: string = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
 
 interface InitiatePaymentRequest {
   customer: Customer;
@@ -16,70 +19,48 @@ interface InitiatePaymentRequest {
   total: number;
 }
 
-interface InitiatePaymentResponse {
+export interface InitiatePaymentResponse {
   orderId: string;
-  gatewayUrl: string;  // redirect to bank gateway
-  token: string;
+  /** Present only when an external payment gateway is configured. */
+  gatewayUrl?: string;
+  token?: string;
+  paymentRequired: boolean;
 }
 
-/**
- * Initiate a payment session with the backend
- * Backend creates the order and returns a payment gateway URL
- * NEVER pass payment secrets from the frontend
- */
-export async function initiatePayment(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  _data: InitiatePaymentRequest
-): Promise<InitiatePaymentResponse> {
-  if (!API_BASE) {
-    // Stub for frontend-only mode
-    throw new Error('PAYMENT_API_NOT_CONFIGURED');
+export async function initiatePayment(data: InitiatePaymentRequest): Promise<InitiatePaymentResponse> {
+  if (isSupabaseConfigured() && !API_BASE) {
+    const order = await createRemoteOrder(data);
+    return { ...order, paymentRequired: false };
   }
+
+  if (!API_BASE) throw new Error('PAYMENT_API_NOT_CONFIGURED');
 
   const response = await fetch(`${API_BASE}/orders/initiate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(_data),
+    body: JSON.stringify(data),
   });
-
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
     throw new Error(error.message ?? 'خطا در اتصال به درگاه پرداخت');
   }
-
-  return response.json();
+  const result = (await response.json()) as Omit<InitiatePaymentResponse, 'paymentRequired'>;
+  return { ...result, paymentRequired: true };
 }
 
-/**
- * Verify payment after user returns from gateway
- */
-export async function verifyPayment(
-  orderId: string,
-  token: string
-): Promise<{ success: boolean; order?: Order }> {
-  if (!API_BASE) {
-    throw new Error('PAYMENT_API_NOT_CONFIGURED');
-  }
-
+export async function verifyPayment(orderId: string, token: string): Promise<{ success: boolean; order?: Order }> {
+  if (!API_BASE) throw new Error('PAYMENT_API_NOT_CONFIGURED');
   const response = await fetch(`${API_BASE}/orders/${orderId}/verify`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ token }),
   });
-
-  if (!response.ok) {
-    return { success: false };
-  }
-
+  if (!response.ok) return { success: false };
   return response.json();
 }
 
-/**
- * Get order details
- */
 export async function getOrder(orderId: string): Promise<Order | null> {
   if (!API_BASE) return null;
-
   const response = await fetch(`${API_BASE}/orders/${orderId}`);
   if (!response.ok) return null;
   return response.json();

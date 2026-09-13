@@ -9,6 +9,7 @@ import App from './App';
 import { CartProvider } from './context/CartContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getSiteBase } from './utils/siteBase';
+import { SupabaseBootstrap } from './services/supabase/hydration';
 import './index.css';
 import './admin/admin.css';
 
@@ -28,7 +29,9 @@ createRoot(rootElement).render(
     <ErrorBoundary>
       <BrowserRouter basename={basename}>
         <CartProvider>
-          <App />
+          <SupabaseBootstrap>
+            <App />
+          </SupabaseBootstrap>
         </CartProvider>
       </BrowserRouter>
     </ErrorBoundary>

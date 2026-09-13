@@ -9,7 +9,7 @@
 
 import { Link } from 'react-router-dom';
 import { toPersianDigits } from '../utils/format';
-import { getSiteContent } from '../services/siteContent';
+import { useSiteContent } from '../services/siteContent';
 
 const FOOT_LINKS = [
   { to: '/', label: 'خانه' },
@@ -28,7 +28,7 @@ const FLAG_REGIONS = [
 
 export default function Footer() {
   const year = toPersianDigits(new Date().getFullYear());
-  const content = getSiteContent();
+  const content = useSiteContent();
 
   return (
     <footer className="grain relative mt-14 overflow-hidden bg-noir text-cream-100">

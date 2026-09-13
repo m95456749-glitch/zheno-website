@@ -1,23 +1,13 @@
 // ============================================================
-// ZHINO — catalog service (single source for product lookups)
-//
-// The static catalog (src/data/products.ts) is the base data and
-// is NEVER mutated. Admin edits live in a localStorage overlay
-// ("zhino_admin_catalog_v1") and are merged on read:
-//
-//   effective catalog = base − removed, with per-product upserts
-//                       (edits to existing products or brand-new
-//                       products) applied on top.
-//
-// The storefront consumes ONLY getVisibleProducts /
-// getProductById / getVariantById — so when a real backend
-// lands, this module is the single swap point: its functions
-// become API-backed and every storefront page follows.
-//
-// In this phase the overlay is per-browser (demo), which is
-// exactly what the admin UI discloses to the operator.
+// ZHINO — catalog service
 // ============================================================
+// UI code uses this module only. With Supabase variables present it
+// hydrates products/variants/inventory from PostgreSQL and sends admin
+// writes through the repository. Without them, the immutable catalog in
+// src/data/products.ts remains the storefront-safe fallback; no remote
+// call or credential is attempted.
 
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   PRODUCTS,
   getProductById as getBaseProductById,
@@ -25,20 +15,23 @@ import {
 } from '../data/products';
 import type { Product, ProductVariant } from '../types';
 import { createLocalStore, useLocalStore } from './localStore';
+import { isSupabaseConfigured } from './supabase/client';
+import {
+  fetchRemoteCatalog,
+  removeRemoteProduct,
+  saveRemoteProduct,
+  setRemoteProductActive,
+  setRemoteVariantStock,
+} from './supabase/repository';
 
-/** admin flags per product */
 export interface CatalogMeta {
-  /** false = hidden from the storefront (deactivated in admin) */
   active: boolean;
   updatedAt?: string;
 }
 
 interface CatalogOverlay {
-  /** full records: edits of existing products or entirely new ones */
   upserts: Record<string, Product>;
-  /** base product ids removed in admin */
   removed: string[];
-  /** per-product admin flags */
   meta: Record<string, CatalogMeta>;
 }
 
@@ -68,40 +61,33 @@ function isProduct(value: unknown): value is Product {
 function sanitize(raw: unknown): CatalogOverlay | null {
   if (typeof raw !== 'object' || raw === null) return null;
   const r = raw as Record<string, unknown>;
-
   const upserts: Record<string, Product> = {};
   if (typeof r.upserts === 'object' && r.upserts && r.upserts !== null) {
     for (const [id, value] of Object.entries(r.upserts as Record<string, unknown>)) {
       if (id && isProduct(value)) upserts[id] = value;
     }
   }
-
   const removed = Array.isArray(r.removed)
     ? (r.removed as unknown[]).filter((x): x is string => typeof x === 'string')
     : [];
-
   const meta: Record<string, CatalogMeta> = {};
   if (typeof r.meta === 'object' && r.meta && r.meta !== null) {
     for (const [id, value] of Object.entries(r.meta as Record<string, unknown>)) {
       const m = value as CatalogMeta | null;
       if (id && m && typeof m.active === 'boolean') {
-        meta[id] = {
-          active: m.active,
-          updatedAt: typeof m.updatedAt === 'string' ? m.updatedAt : undefined,
-        };
+        meta[id] = { active: m.active, updatedAt: typeof m.updatedAt === 'string' ? m.updatedAt : undefined };
       }
     }
   }
-
   return { upserts, removed, meta };
 }
 
 const store = createLocalStore<CatalogOverlay>('zhino_admin_catalog_v1', EMPTY_OVERLAY, sanitize);
-
-/* ── merge (cached per overlay version — stable refs for React) ── */
-
 let cachedOverlay: CatalogOverlay | null = null;
 let cachedList: Product[] = [];
+let remoteCatalog: Product[] | null = null;
+let remoteAttempted = false;
+const remoteListeners = new Set<() => void>();
 
 function mergedList(overlay: CatalogOverlay): Product[] {
   if (cachedOverlay === overlay) return cachedList;
@@ -118,112 +104,137 @@ function mergedList(overlay: CatalogOverlay): Product[] {
   return list;
 }
 
-/* ── reads ─────────────────────────────────────────────────── */
-
-/**
- * The full effective catalog (admin view — includes deactivated
- * products so the operator can re-activate them).
- */
-export function getEffectiveCatalog(): Product[] {
-  return mergedList(store.get());
+function notifyRemoteCatalog() {
+  remoteListeners.forEach((listener) => listener());
 }
 
-/**
- * Products shown by the storefront: effective catalog minus
- * deactivated products. Identical to the base catalog until an
- * admin changes something.
- */
+/** Fetches the database catalog. RLS decides whether this is public or admin data. */
+export async function hydrateCatalogFromSupabase(force = false): Promise<void> {
+  if (!isSupabaseConfigured() || (remoteAttempted && !force)) return;
+  remoteAttempted = true;
+  try {
+    remoteCatalog = await fetchRemoteCatalog(true);
+    notifyRemoteCatalog();
+  } catch (error) {
+    // Keep the real static catalog usable if a project is not migrated yet.
+    remoteCatalog = null;
+    notifyRemoteCatalog();
+    if (import.meta.env.DEV) console.warn('[zhino] Supabase catalog unavailable; using bundled data.', error);
+  }
+}
+
+function getCatalog(): Product[] {
+  return remoteCatalog ?? (isSupabaseConfigured() ? PRODUCTS : mergedList(store.get()));
+}
+
+export function getEffectiveCatalog(): Product[] {
+  return getCatalog();
+}
+
 export function getVisibleProducts(): Product[] {
+  if (remoteCatalog) return remoteCatalog.filter((product) => product.active !== false);
+  if (isSupabaseConfigured()) return PRODUCTS;
   const overlay = store.get();
   return mergedList(overlay).filter((p) => overlay.meta[p.id]?.active !== false);
 }
 
-/**
- * Lookup used by cart / checkout / product pages. Resolves
- * overlay edits and deletions; unknown ids resolve against the
- * base catalog (a deleted product resolves to undefined, exactly
- * like an unknown one — cart guards already handle that).
- */
 export function getProductById(id: string): Product | undefined {
+  if (remoteCatalog) return remoteCatalog.find((product) => product.id === id);
   const overlay = store.get();
   if (overlay.removed.includes(id)) return undefined;
   return overlay.upserts[id] ?? getBaseProductById(id);
 }
 
 export function getVariantById(productId: string, variantId: string): ProductVariant | undefined {
-  const overlay = store.get();
-  if (overlay.removed.includes(productId)) return undefined;
-  const product = overlay.upserts[productId] ?? getBaseProductById(productId);
-  if (product) {
-    const variant = product.variants.find((v) => v.id === variantId);
-    if (variant) return variant;
-  }
+  const product = getProductById(productId);
+  if (product) return product.variants.find((variant) => variant.id === variantId);
   return getBaseVariantById(productId, variantId);
 }
 
-/** admin flags for a product (defaults: active) */
 export function getCatalogMeta(id: string): CatalogMeta {
+  if (remoteCatalog) {
+    const product = remoteCatalog.find((item) => item.id === id);
+    return { active: product?.active !== false, updatedAt: product?.updatedAt };
+  }
+  if (isSupabaseConfigured()) return { active: true };
   const meta = store.get().meta[id];
   return meta ? { ...meta } : { active: true };
 }
 
-/* ── writes (admin) ────────────────────────────────────────── */
-
-/** Create or update a product (+ its active flag). */
-export function upsertProduct(product: Product, active: boolean): void {
+export async function upsertProduct(product: Product, active: boolean): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await saveRemoteProduct(product, active);
+    await hydrateCatalogFromSupabase(true);
+    return;
+  }
   const overlay = store.get();
   store.set({
     upserts: { ...overlay.upserts, [product.id]: product },
     removed: overlay.removed.filter((id) => id !== product.id),
-    meta: {
-      ...overlay.meta,
-      [product.id]: { active, updatedAt: new Date().toISOString() },
-    },
+    meta: { ...overlay.meta, [product.id]: { active, updatedAt: new Date().toISOString() } },
   });
 }
 
-/** Remove a product from the storefront (overlay tombstone). */
-export function removeProduct(id: string): void {
+export async function removeProduct(id: string): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await removeRemoteProduct(id);
+    await hydrateCatalogFromSupabase(true);
+    return;
+  }
+  const overlay = store.get();
+  store.set({ ...overlay, removed: overlay.removed.includes(id) ? overlay.removed : [...overlay.removed, id] });
+}
+
+export async function setProductActive(id: string, active: boolean): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await setRemoteProductActive(id, active);
+    await hydrateCatalogFromSupabase(true);
+    return;
+  }
   const overlay = store.get();
   store.set({
     ...overlay,
-    removed: overlay.removed.includes(id) ? overlay.removed : [...overlay.removed, id],
+    meta: { ...overlay.meta, [id]: { active, updatedAt: new Date().toISOString() } },
   });
 }
 
-/** Toggle a product's active flag without touching its data. */
-export function setProductActive(id: string, active: boolean): void {
-  const overlay = store.get();
-  store.set({
-    ...overlay,
-    meta: {
-      ...overlay.meta,
-      [id]: { active, updatedAt: new Date().toISOString() },
-    },
-  });
-}
-
-/** Update one variant's stock (shared with the inventory page —
- *  same data as the storefront, no second inventory system). */
-export function setVariantStock(productId: string, variantId: string, stock: number): void {
+export async function setVariantStock(productId: string, variantId: string, stock: number): Promise<void> {
+  if (stock < 0) return;
+  if (isSupabaseConfigured()) {
+    await setRemoteVariantStock(productId, variantId, stock);
+    await hydrateCatalogFromSupabase(true);
+    return;
+  }
   const product = getProductById(productId);
-  if (!product || stock < 0) return;
+  if (!product) return;
   const next: Product = {
     ...product,
-    variants: product.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
+    variants: product.variants.map((variant) => (variant.id === variantId ? { ...variant, stock } : variant)),
   };
-  upsertProduct(next, getCatalogMeta(productId).active);
+  await upsertProduct(next, getCatalogMeta(productId).active);
 }
 
-/** Discard every admin catalog change (back to the base data). */
+/** Reset remains a local fallback operation. Remote data is managed by migrations/admin writes. */
 export function resetCatalog(): void {
+  if (isSupabaseConfigured()) {
+    void hydrateCatalogFromSupabase(true);
+    return;
+  }
   store.reset();
 }
 
-/* ── React binding ─────────────────────────────────────────── */
-
-/** Effective catalog as a hook (admin pages). */
 export function useCatalog(): Product[] {
   const overlay = useLocalStore(store);
-  return mergedList(overlay);
+  const remote = useSyncExternalStore(
+    (listener) => {
+      remoteListeners.add(listener);
+      return () => remoteListeners.delete(listener);
+    },
+    () => remoteCatalog,
+    () => null,
+  );
+  useEffect(() => {
+    void hydrateCatalogFromSupabase();
+  }, []);
+  return remote ?? mergedList(overlay);
 }

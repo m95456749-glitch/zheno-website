@@ -1,34 +1,23 @@
 // ============================================================
-// ZHINO — site settings (admin-editable, storefront-consumed)
-//
-// Defaults are the site's existing shipping constants
-// (src/data/products.ts), so behaviour is byte-for-byte the
-// same until an admin actually changes a value.
-//
-// Storefront call sites: cart hook, free-shipping progress,
-// cart/checkout totals, product-detail note.
-// Admin call sites: settings page (write), dashboard/inventory
-// (low-stock threshold).
-//
-// Future backend: saveSettings/resetSettings become API calls;
-// getSettings can hydrate from the same backend.
+// ZHINO — site settings service
 // ============================================================
+// Shipping and low-stock settings share one source. Supabase is used when
+// configured; original constants are the safe no-credentials fallback.
 
+import { useEffect, useSyncExternalStore } from 'react';
 import {
   FREE_SHIPPING_THRESHOLD,
   SHIPPING_COST_EXPRESS,
   SHIPPING_COST_STANDARD,
 } from '../data/products';
-import { createLocalStore } from './localStore';
+import { createLocalStore, useLocalStore } from './localStore';
+import { isSupabaseConfigured } from './supabase/client';
+import { fetchRemoteSettings, saveRemoteSettings } from './supabase/repository';
 
 export interface SiteSettings {
-  /** minimum cart subtotal for free shipping (Tomans) */
   freeShippingThreshold: number;
-  /** standard shipping cost (Tomans) */
   standardShippingCost: number;
-  /** express shipping cost (Tomans) */
   expressShippingCost: number;
-  /** units at or below which a variant is flagged low-stock */
   lowStockThreshold: number;
 }
 
@@ -41,34 +30,71 @@ export const DEFAULT_SITE_SETTINGS: SiteSettings = {
 
 function sanitize(raw: unknown): SiteSettings | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const r = raw as Record<string, unknown>;
-  const num = (value: unknown, fallback: number): number =>
-    typeof value === 'number' && Number.isFinite(value) && value >= 0
-      ? Math.round(value)
-      : fallback;
+  const value = raw as Record<string, unknown>;
+  const numberValue = (input: unknown, fallback: number) =>
+    typeof input === 'number' && Number.isFinite(input) && input >= 0 ? Math.round(input) : fallback;
   return {
-    freeShippingThreshold: num(r.freeShippingThreshold, DEFAULT_SITE_SETTINGS.freeShippingThreshold),
-    standardShippingCost: num(r.standardShippingCost, DEFAULT_SITE_SETTINGS.standardShippingCost),
-    expressShippingCost: num(r.expressShippingCost, DEFAULT_SITE_SETTINGS.expressShippingCost),
-    lowStockThreshold: num(r.lowStockThreshold, DEFAULT_SITE_SETTINGS.lowStockThreshold),
+    freeShippingThreshold: numberValue(value.freeShippingThreshold, DEFAULT_SITE_SETTINGS.freeShippingThreshold),
+    standardShippingCost: numberValue(value.standardShippingCost, DEFAULT_SITE_SETTINGS.standardShippingCost),
+    expressShippingCost: numberValue(value.expressShippingCost, DEFAULT_SITE_SETTINGS.expressShippingCost),
+    lowStockThreshold: numberValue(value.lowStockThreshold, DEFAULT_SITE_SETTINGS.lowStockThreshold),
   };
 }
 
-const store = createLocalStore<SiteSettings>(
-  'zhino_admin_settings_v1',
-  DEFAULT_SITE_SETTINGS,
-  sanitize,
-);
+const store = createLocalStore<SiteSettings>('zhino_admin_settings_v1', DEFAULT_SITE_SETTINGS, sanitize);
+let remoteSettings: SiteSettings | null = null;
+let remoteAttempted = false;
+const remoteListeners = new Set<() => void>();
 
-/** Read current settings (defaults + any admin override). Cheap — safe in render. */
-export function getSettings(): SiteSettings {
-  return store.get();
+function notifyRemoteSettings() {
+  remoteListeners.forEach((listener) => listener());
 }
 
-export function saveSettings(next: SiteSettings): void {
+export async function hydrateSettingsFromSupabase(force = false): Promise<void> {
+  if (!isSupabaseConfigured() || (remoteAttempted && !force)) return;
+  remoteAttempted = true;
+  try {
+    remoteSettings = await fetchRemoteSettings();
+  } catch (error) {
+    remoteSettings = null;
+    if (import.meta.env.DEV) console.warn('[zhino] Supabase settings unavailable; using bundled defaults.', error);
+  }
+  notifyRemoteSettings();
+}
+
+export function getSettings(): SiteSettings {
+  return remoteSettings ?? (isSupabaseConfigured() ? DEFAULT_SITE_SETTINGS : store.get());
+}
+
+export async function saveSettings(next: SiteSettings): Promise<void> {
+  if (isSupabaseConfigured()) {
+    await saveRemoteSettings(next);
+    await hydrateSettingsFromSupabase(true);
+    return;
+  }
   store.set(next);
 }
 
 export function resetSettings(): void {
+  if (isSupabaseConfigured()) {
+    void hydrateSettingsFromSupabase(true);
+    return;
+  }
   store.reset();
+}
+
+export function useSiteSettings(): SiteSettings {
+  const local = useLocalStore(store);
+  const remote = useSyncExternalStore(
+    (listener) => {
+      remoteListeners.add(listener);
+      return () => remoteListeners.delete(listener);
+    },
+    () => remoteSettings,
+    () => null,
+  );
+  useEffect(() => {
+    void hydrateSettingsFromSupabase();
+  }, []);
+  return remote ?? (isSupabaseConfigured() ? DEFAULT_SITE_SETTINGS : local);
 }

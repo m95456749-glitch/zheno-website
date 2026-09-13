@@ -1,13 +1,10 @@
 // ============================================================
-// ZHINO — tiny localStorage-backed store (admin data, phase 1)
+// ZHINO — tiny localStorage-backed offline preview store
 //
-// This is the storage foundation for the admin panel's local
-// data (catalog overlay, orders, site content, settings). It is
-// deliberately small and dependency-free.
-//
-// Future backend: every service built on createLocalStore exposes
-// plain functions (getX / saveX); swapping the body for fetch
-// calls does not change any storefront or admin call site.
+// Supabase-backed services are the production path. This dependency-free
+// store is retained only so the existing storefront/demo preview remains
+// usable when no project credentials are configured; it is never used when
+// the Supabase service layer is active.
 // ============================================================
 
 import { useSyncExternalStore } from 'react';

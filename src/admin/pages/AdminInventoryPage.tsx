@@ -67,9 +67,10 @@ export default function AdminInventoryPage() {
   );
 
   const save = (productId: string, variantId: string, stock: number) => {
-    setVariantStock(productId, variantId, stock);
     const key = `${productId}__${variantId}`;
-    setSavedId(key);
+    void setVariantStock(productId, variantId, stock)
+      .then(() => setSavedId(key))
+      .catch(() => window.alert('ذخیره موجودی در پایگاه داده ممکن نشد.'));
     window.setTimeout(() => setSavedId((cur) => (cur === key ? null : cur)), 1800);
   };
 

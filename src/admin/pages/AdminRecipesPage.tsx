@@ -124,7 +124,9 @@ export default function AdminRecipesPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm(`دستور «${recipe.title}» حذف شود؟`)) removeRecipe(recipe.id);
+                      if (window.confirm(`دستور «${recipe.title}» حذف شود؟`)) {
+                        void removeRecipe(recipe.id).catch(() => window.alert('حذف دستور در پایگاه داده ممکن نشد.'));
+                      }
                     }}
                     className="adm-btn-sm adm-btn-sm-danger"
                   >
@@ -164,7 +166,7 @@ function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => v
   );
   const [error, setError] = useState<string | null>(null);
 
-  const submit = () => {
+  const submit = async () => {
     const title = form.title.trim();
     const ingredients = form.ingredients.split('\n').map((s) => s.trim()).filter(Boolean);
     const steps = form.steps.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -180,16 +182,20 @@ function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => v
       setError('حداقل یک مرحله (هر مرحله در یک خط) وارد کنید.');
       return;
     }
-    upsertRecipe({
-      id: recipe?.id ?? `recipe-${Date.now().toString(36)}`,
-      title,
-      summary: form.summary.trim() || title,
-      emoji: form.emoji.trim() || '🍮',
-      category: form.category,
-      ingredients,
-      steps,
-    });
-    onDone();
+    try {
+      await upsertRecipe({
+        id: recipe?.id ?? `recipe-${Date.now().toString(36)}`,
+        title,
+        summary: form.summary.trim() || title,
+        emoji: form.emoji.trim() || '🍮',
+        category: form.category,
+        ingredients,
+        steps,
+      });
+      onDone();
+    } catch {
+      setError('ذخیره دستور در پایگاه داده ممکن نشد.');
+    }
   };
 
   return (

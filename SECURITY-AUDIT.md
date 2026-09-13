@@ -1,6 +1,6 @@
 # ZHINO — Security / External Connection Audit
 
-**Date:** 2026-09-08 · **Scope:** full repository (source, build output, config, workflows, packages, deployed site) · **Type:** audit + cleanup — no functional changes.
+**Date:** 2026-09-12 · **Scope:** full repository (source, build output, config, workflows, packages, deployed site) · **Type:** audit + cleanup — no functional changes.
 
 ## Verdict
 
@@ -10,7 +10,7 @@ and no unwanted iframes exist anywhere in the project files or the shipped build
 
 ## What was audited
 
-- Every file in the repository (53 tracked files), `package.json` + all 202 entries of
+- Every file in the repository (113 tracked files), `package.json` + all package-lock entries of
   `package-lock.json`, the built `dist/` output, `.github/workflows/deploy.yml`,
   `index.html`, all CSS `url()` references, and the live deployment.
 - Full-text search for: `arena`, `arena.site`, iframe/embed/object creation, tracking &
@@ -70,3 +70,19 @@ change.**
 `npm run smoke` ✅ (62 checks) · GitHub Pages base path `/zheno-website/` and
 deep-link 404 fallback re-verified against a Pages-fidelity server ✅ · live deployment
 checked — no injected content ✅
+
+## Supabase backend preparation addendum — 2026-09-12
+
+The optional production data connection is now isolated under `src/services/supabase/`.
+The browser reads only `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY`; no service-role
+key or database password is present in the repository. With those variables empty (the
+repository default), the Supabase client is not created and the existing runtime network
+behavior above remains unchanged.
+
+When configured, Supabase Auth is used for admin login and PostgreSQL RLS checks the
+immutable JWT `app_metadata.role === "admin"`. Catalog/content/settings/recipe reads
+are public only where their migration policies allow them; orders/customer data has no
+public read policy. Guest checkout calls the validated `create_order` RPC, which derives
+prices/shipping from the database and decrements inventory atomically. Admin stock
+writes use `set_inventory_stock` / `adjust_inventory` RPCs. The complete schema and
+policies are in `supabase/migrations/20260912000000_initial_schema.sql`.

@@ -98,8 +98,9 @@ export default function AdminProductsPage() {
 
   const doDelete = (product: Product) => {
     if (window.confirm(`محصول «${product.shortName}» حذف شود؟`)) {
-      removeProduct(product.id);
-      flashSaved();
+      void removeProduct(product.id)
+        .then(flashSaved)
+        .catch(() => window.alert('ذخیره محصول در پایگاه داده ممکن نشد.'));
     }
   };
 
@@ -197,8 +198,9 @@ export default function AdminProductsPage() {
                           <Toggle
                             checked={meta.active}
                             onChange={(on) => {
-                              setProductActive(product.id, on);
-                              flashSaved();
+                              void setProductActive(product.id, on)
+                                .then(flashSaved)
+                                .catch(() => window.alert('ذخیره وضعیت محصول ممکن نشد.'));
                             }}
                             label={`نمایش ${product.shortName} در فروشگاه`}
                           />
@@ -266,8 +268,9 @@ export default function AdminProductsPage() {
                       <Toggle
                         checked={meta.active}
                         onChange={(on) => {
-                          setProductActive(product.id, on);
-                          flashSaved();
+                          void setProductActive(product.id, on)
+                            .then(flashSaved)
+                            .catch(() => window.alert('ذخیره وضعیت محصول ممکن نشد.'));
                         }}
                         label={`نمایش ${product.shortName} در فروشگاه`}
                       />
@@ -365,7 +368,7 @@ function ProductFormModal({
     setForm((f) => ({ ...f, category, flavorId: first ? first.id : f.flavorId }));
   };
 
-  const submit = () => {
+  const submit = async () => {
     const next: Record<string, string> = {};
     const price = Number(form.price);
     const weight = Number(form.weightGrams);
@@ -407,8 +410,12 @@ function ProductFormModal({
         },
       ],
     };
-    upsertProduct(nextProduct, form.active);
-    onSaved();
+    try {
+      await upsertProduct(nextProduct, form.active);
+      onSaved();
+    } catch {
+      window.alert('ذخیره محصول در پایگاه داده ممکن نشد.');
+    }
   };
 
   const previewFlavor = getFlavor(form.flavorId);

@@ -6,9 +6,9 @@ import { Link } from 'react-router-dom';
 import { FLAVORS } from '../data/products';
 // counts + story lead go through the shared services (admin
 // overlay aware — identical output until an admin changes something)
-import { getVisibleProducts } from '../services/catalog';
-import { getActiveRecipes } from '../services/recipeStore';
-import { getSiteContent } from '../services/siteContent';
+import { useCatalog } from '../services/catalog';
+import { useActiveRecipes } from '../services/recipeStore';
+import { useSiteContent } from '../services/siteContent';
 import { formatNumber } from '../utils/format';
 import { soundService } from '../services/soundService';
 import PagePlate from '../components/PagePlate';
@@ -34,9 +34,9 @@ const VALUES = [
 
 export default function AboutPage() {
   const flavors = Object.values(FLAVORS);
-  const products = getVisibleProducts();
-  const recipes = getActiveRecipes();
-  const content = getSiteContent();
+  const products = useCatalog();
+  const recipes = useActiveRecipes();
+  const content = useSiteContent();
   const jellyCount = products.filter((p) => p.category === 'jelly').length;
   const custardCount = products.filter((p) => p.category === 'custard').length;
   const valuesReveal = useReveal<HTMLDivElement>();

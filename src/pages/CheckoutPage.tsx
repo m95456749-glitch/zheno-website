@@ -169,8 +169,18 @@ export default function CheckoutPage() {
     soundService.play('primaryButton');
     try {
       const res = await initiatePayment({ customer, address, items, shippingMethod, total });
-      // Real backend mode: continue to the bank gateway.
-      window.location.href = res.gatewayUrl;
+      // An external payment API returns a gateway URL. Supabase-only mode
+      // has already created the validated order, without pretending payment
+      // has happened, so it goes straight to the existing confirmation view.
+      if (res.gatewayUrl) {
+        window.location.href = res.gatewayUrl;
+      } else {
+        setOrderId(res.orderId);
+        clearCart();
+        soundService.play('orderComplete');
+        setStep('confirmation');
+        window.scrollTo({ top: 0 });
+      }
     } catch (err) {
       if (err instanceof Error && err.message === 'PAYMENT_API_NOT_CONFIGURED') {
         // Frontend-only mode: record the order locally and confirm.

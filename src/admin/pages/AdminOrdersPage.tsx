@@ -90,7 +90,11 @@ function OrderCard({ order }: { order: StoredOrder }) {
           <span className="text-sm font-extrabold text-wine-900">{formatPrice(order.total)}</span>
           <select
             value={order.status}
-            onChange={(e) => updateOrderStatus(order.id, e.target.value as OrderStatus)}
+            onChange={(e) => {
+              void updateOrderStatus(order.id, e.target.value as OrderStatus).catch(() => {
+                window.alert('تغییر وضعیت سفارش در پایگاه داده ممکن نشد.');
+              });
+            }}
             aria-label={`تغییر وضعیت سفارش ${order.id}`}
             className={cn('adm-status-select', `adm-status-select-${order.status}`)}
           >
