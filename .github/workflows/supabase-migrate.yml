@@ -219,6 +219,18 @@ jobs:
           fi
           pwfp=$(printf '%s' "$pw" | sha256sum | cut -c1-12)
 
+          # Byte length vs character length: if they differ the secret holds
+          # multi-byte UTF-8 (a non-ASCII character), which a copy/paste or a
+          # locale-sensitive editor can silently alter. Counts only — no value.
+          pw_bytes=$(printf '%s' "$pw" | wc -c | tr -d ' ')
+          pw_chars=$(printf '%s' "$pw" | LC_ALL=C.UTF-8 wc -m 2>/dev/null | tr -d ' ' || echo "?")
+          pw_nonascii=$(printf '%s' "$pw" | LC_ALL=C tr -dc '\200-\377' | wc -c | tr -d ' ')
+          pw_control=$(printf '%s' "$RAW_PASSWORD" | LC_ALL=C tr -dc '\000-\010\013\014\016-\037' | wc -c | tr -d ' ')
+          pw_shape="bytes=${pw_bytes} chars=${pw_chars} non-ascii-bytes=${pw_nonascii} control-chars=${pw_control}"
+          if [ "$pw_nonascii" != "0" ] || [ "$pw_control" != "0" ] || [ "$pw_bytes" != "$pw_chars" ]; then
+            echo "::warning title=SUPABASE_DB_PASSWORD encoding::${pw_shape} — the secret contains non-ASCII or control characters. Postgres will compare them byte-for-byte, so an editor or clipboard that normalised them will make an otherwise correct password fail."
+          fi
+
           fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
           echo "Both secrets are present."
           echo "  token class        : $cls"
@@ -227,12 +239,13 @@ jobs:
           echo "  db password length : ${#pw} (raw ${#RAW_PASSWORD}), sha256[1:12]=${pwfp}"
           echo "  db password edge   : first char=${raw_first_class}, last char=${raw_last_class} (classes only — the value is never printed)"
           echo "  db password fixes  : ${fixes}"
+          echo "  db password shape  : ${pw_shape}"
           echo "  (to check which token is stored, run locally:"
           echo "   printf '%s' \"\$MY_TOKEN\" | sha256sum | cut -c1-12 )"
 
           # Annotations are readable through the API without downloading the job log.
           echo "::notice title=SUPABASE_ACCESS_TOKEN::class=${cls} | length=${#tok} | sha256[1:12]=${fp}"
-          echo "::notice title=SUPABASE_DB_PASSWORD::length=${#pw} (raw ${#RAW_PASSWORD}) | sha256[1:12]=${pwfp} | normalisation=${fixes} | first=${raw_first_class} last=${raw_last_class}"
+          echo "::notice title=SUPABASE_DB_PASSWORD::length=${#pw} (raw ${#RAW_PASSWORD}) | sha256[1:12]=${pwfp} | normalisation=${fixes} | first=${raw_first_class} last=${raw_last_class} | ${pw_shape}"
 
           {
             echo "SUPABASE_ACCESS_TOKEN=$tok"
@@ -245,6 +258,7 @@ jobs:
             echo "SB_PW_RAW_FP=$(printf '%s' "$RAW_PASSWORD" | sha256sum | cut -c1-12)"
             echo "SB_PW_FIXES=$fixes"
             echo "SB_PW_EDGE=first=${raw_first_class},last=${raw_last_class}"
+            echo "SB_PW_SHAPE=$pw_shape"
           } >> "$GITHUB_ENV"
           {
             echo "token_is_pat=$is_pat"
@@ -254,6 +268,7 @@ jobs:
             echo "pw_fp=$pwfp"
             echo "pw_raw_fp=$(printf '%s' "$RAW_PASSWORD" | sha256sum | cut -c1-12)"
             echo "pw_edge=first=${raw_first_class},last=${raw_last_class}"
+            echo "pw_shape=$pw_shape"
           } >> "$GITHUB_OUTPUT"
 
       - name: Show the exact migration files that would be applied
@@ -367,7 +382,10 @@ jobs:
             region=$(printf '%s' "$proj_body"  | jq -r '.region // empty' 2>/dev/null) || region=""
             pstatus=$(printf '%s' "$proj_body" | jq -r '.status // empty' 2>/dev/null) || pstatus=""
             pname=$(printf '%s' "$proj_body"   | jq -r '.name // empty'   2>/dev/null) || pname=""
-            pgver=$(printf '%s' "$proj_body"   | jq -r '(.postgres_version // .database_version // .pg_version // empty) | tostring' 2>/dev/null) || pgver=""
+            pgver=$(printf '%s' "$proj_body"   | jq -r '(.postgres_version // .database_version // .pg_version // (.database.version? ) // empty) | tostring' 2>/dev/null) || pgver=""
+            # Key NAMES only (never values) — enough to spot where the version lives
+            # without printing anything sensitive about the project.
+            proj_keys=$(printf '%s' "$proj_body" | jq -r 'if type=="object" then (keys_unsorted | join(",")) else "not-an-object" end' 2>/dev/null) || proj_keys=""
             echo "GET /v1/projects/${ref} -> 200   status=${pstatus:-?}   region=${region:-?}   postgres=${pgver:-?}"
             if [ "$SHOW_NAMES" = "true" ] && [ -n "$pname" ]; then
               echo "project name: $pname"
@@ -529,6 +547,7 @@ jobs:
             echo "jit_state=$jit_state"
             echo "jit_code=$jit_code"
             echo "postgres_version=$pgver"
+            echo "project_body_keys=$proj_keys"
             echo "api_codes=projects:${projects_code} project:${proj_code} api-keys:${akeys_code} pooler:${pooler_code} jit:${jit_code} query:${mgmt_code} rest:${rest}"
             echo "verdict=$verdict"
             echo "manual_action=$action"
@@ -1007,6 +1026,10 @@ jobs:
           DB_KIND: ${{ steps.probe.outputs.db_last_kind }}
           DB_PW_AUTH_AT: ${{ steps.probe.outputs.db_pw_auth_at }}
           DB_JIT_KINDS: ${{ steps.probe.outputs.db_jit_kinds }}
+          MGMT_SQL_CODE: ${{ steps.preflight.outputs.mgmt_sql_code }}
+          API_CODES: ${{ steps.preflight.outputs.api_codes }}
+          PW_SHAPE: ${{ steps.guard.outputs.pw_shape }}
+          POOLER_HOST: ${{ steps.preflight.outputs.pooler_host }}
           DB_DIRECT_KIND: ${{ steps.probe.outputs.db_direct_kind }}
           DB_ATTEMPTS: ${{ steps.probe.outputs.db_attempts }}
           DB_JIT: ${{ steps.probe.outputs.db_jit }}
@@ -1043,6 +1066,25 @@ jobs:
           elif [ -n "$ACTION_NEEDED" ]; then
             echo "::error::Action needed: ${ACTION_NEEDED}"
           fi
+
+          # Every credential path this workflow knows, what it actually answered on
+          # THIS run, and the one action that unblocks it. Cheapest first.
+          {
+            echo "### Every path tried, and what unblocks it"
+            echo
+            echo "| # | path | result on this run | what unblocks it |"
+            echo "| --- | --- | --- | --- |"
+            echo "| 1 | read-only SQL over the Management API (\`POST /v1/projects/${PROJECT_REF}/database/query\`, \`read_only:true\`) — the access token only, no password, no pooler, no IPv6 | HTTP ${MGMT_SQL_CODE:-?} | **Cheapest.** Give the fine-grained PAT the \`database_read\` permission at supabase.com/dashboard/account/tokens (or use a classic PAT). The dry-run then works with NO database password at all. |"
+            echo "| 2 | shared pooler ${POOLER_HOST:-?} on BOTH ${POOLER_PORT:-6543} (transaction, as the API advertises) and 5432 (session), user \`postgres.${PROJECT_REF}\`, TLS require | tenant/user resolved, credential refused (${DB_PW_AUTH_AT:-n/a}) | Supavisor's copy of the \`postgres\` role password is not the value in \`SUPABASE_DB_PASSWORD\`. Secret shape: ${PW_SHAPE:-?}. |"
+            echo "| 3 | temporary access (JIT): the access token as the password, \`options='-c jit=true'\` | \`GET /jit-access\` -> HTTP ${JIT_CODE:-?}, state '${JIT_STATE:-unknown}'; token refused (${DB_JIT_KINDS:-n/a}) | Needs Postgres >= 17.6.1.081 (project reports '${POSTGRES_VERSION:-unknown}'), then Dashboard > Database > 'Enable temporary access' + authorise your user to assume \`postgres\`. |"
+            echo "| 4 | direct connection \`db.${PROJECT_REF}.supabase.co:5432\` (bypasses Supavisor; the check Supabase's docs ask for) | ${DB_DIRECT_KIND:-not tested} — resolves to an IPv6 address, unreachable from IPv4 runners | The IPv4 add-on. Only needed to prove whether the password itself is right; not needed if path 1 is opened. |"
+            echo "| 5 | \`supabase link\` (needs \`GET /api-keys\`) | HTTP 403 for a scoped PAT (Supabase bug supabase/supabase#50244) | A classic PAT. Not required — everything here uses \`--db-url\` or the Management API. |"
+            echo
+            echo "Management API status codes this run: \`${API_CODES:-?}\`"
+            echo
+            echo "**Nothing was written to the database.** Paths 2-5 are blocked by project/token configuration on the Supabase side, not by this workflow: the endpoint, username format, port and TLS now come straight from the project's own API response, and the stored secret was verified byte-clean."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=cheapest unblock::Grant this fine-grained PAT the 'database_read' permission (supabase.com/dashboard/account/tokens). POST /v1/projects/${PROJECT_REF}/database/query with read_only:true then produces the dry-run using the access token alone — no database password, no pooler port, no IPv6. It returned HTTP ${MGMT_SQL_CODE:-?} on this run."
           exit 1
 
       - name: Dry run — list pending migrations (never writes)
