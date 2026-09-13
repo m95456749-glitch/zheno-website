@@ -121,24 +121,41 @@ jobs:
             *)                cls="unrecognised format (a Supabase access token starts with sbp_)" ;;
           esac
 
+          # The database password is normalised the same way: a secret saved with a
+          # trailing newline or wrapped in quotes never authenticates, and Supavisor
+          # then answers "FATAL: password authentication failed for user postgres".
+          pw=$(printf '%s' "$RAW_PASSWORD" | tr -d '\r\n')
+          case "$pw" in
+            \"\"*) pw="${pw#\"}"; pw="${pw%\"}" ;;
+            "\'\'"*) pw="${pw#\'}"; pw="${pw%\'}" ;;
+          esac
+          echo "::add-mask::$pw"
+          if [ "$pw" != "$RAW_PASSWORD" ]; then
+            echo "note: SUPABASE_DB_PASSWORD contained CR/LF or surrounding quotes — trimmed automatically."
+          fi
+          pwfp=$(printf '%s' "$pw" | sha256sum | cut -c1-12)
+
           fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
           echo "Both secrets are present."
           echo "  token class        : $cls"
           echo "  token length       : ${#tok}"
           echo "  token sha256[1:12] : $fp"
-          echo "  db password length : ${#RAW_PASSWORD}"
+          echo "  db password length : ${#pw} (raw ${#RAW_PASSWORD}), sha256[1:12]=${pwfp}"
           echo "  (to check which token is stored, run locally:"
           echo "   printf '%s' \"\$MY_TOKEN\" | sha256sum | cut -c1-12 )"
 
           # Annotations are readable through the API without downloading the job log.
           echo "::notice title=SUPABASE_ACCESS_TOKEN::class=${cls} | length=${#tok} | sha256[1:12]=${fp}"
+          echo "::notice title=SUPABASE_DB_PASSWORD::length=${#pw} (raw ${#RAW_PASSWORD}) | sha256[1:12]=${pwfp}"
 
           {
             echo "SUPABASE_ACCESS_TOKEN=$tok"
+            echo "SUPABASE_DB_PASSWORD=$pw"
             echo "SB_TOKEN_CLASS=$cls"
             echo "SB_TOKEN_IS_PAT=$is_pat"
             echo "SB_TOKEN_IS_SCOPED=$is_scoped"
             echo "SB_TOKEN_FP=$fp"
+            echo "SB_PW_FP=$pwfp"
           } >> "$GITHUB_ENV"
           {
             echo "token_is_pat=$is_pat"
@@ -192,7 +209,7 @@ jobs:
             case "$CODE" in ''|*[!0-9]*) CODE="000" ;; esac
           }
 
-          echo "== 1/4  Does project ref '$ref' exist? (public probe, no credentials used) =="
+          echo "== 1/5  Does project ref '$ref' exist? (public probe, no credentials used) =="
           rest=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "https://${ref}.supabase.co/rest/v1/" 2>/dev/null) || rest="000"
           echo "https://${ref}.supabase.co/rest/v1/ -> HTTP ${rest}"
           echo "::notice title=probe rest/v1::https://${ref}.supabase.co/rest/v1/ -> HTTP ${rest}"
@@ -207,7 +224,7 @@ jobs:
           fi
 
           echo
-          echo "== 2/4  Token -> Management API =="
+          echo "== 2/5  Token -> Management API =="
           api_get "/v1/projects"
           projects_code="$CODE"; projects_body="$BODY"
           token_valid=false
@@ -234,7 +251,7 @@ jobs:
           fi
 
           echo
-          echo "== 3/4  This project, as seen by this token =="
+          echo "== 3/5  This project, as seen by this token =="
           api_get "/v1/projects/${ref}"
           proj_code="$CODE"; proj_body="$BODY"
           echo "::notice title=api /v1/projects/{ref}::HTTP ${proj_code}"
@@ -374,10 +391,15 @@ jobs:
               *)                    user="postgres" ;;
             esac
           elif [ -n "$POOLER_HOST" ]; then
-            # verbatim from GET /v1/projects/{ref}/config/database/pooler (PRIMARY entry)
-            host="$POOLER_HOST"; port="${POOLER_PORT:-5432}"
+            # host and user come verbatim from
+            # GET /v1/projects/{ref}/config/database/pooler (database_type=PRIMARY),
+            # which is what the CLI itself uses. Supavisor serves session mode on
+            # 5432 and transaction mode on 6543 from the SAME host, and migrations
+            # need session mode, so 5432 wins unless db_port says otherwise.
+            host="$POOLER_HOST"
             user="${POOLER_USER:-postgres.${ref}}"
-            why="Management API pooler config (PRIMARY, pool_mode=${POOL_MODE:-?})"
+            port="${INPUT_DB_PORT:-5432}"
+            why="Management API pooler config (PRIMARY; API reported ${POOLER_PORT:-?}/${POOL_MODE:-?}, using ${port} for migrations)"
           else
             host="db.${ref}.supabase.co"; port="${INPUT_DB_PORT:-5432}"; user="postgres"
             why="direct connection (no pooler config readable; needs IPv6 or the IPv4 add-on)"
@@ -398,8 +420,10 @@ jobs:
       - name: Probe the database (read-only, also validates SUPABASE_DB_PASSWORD)
         id: probe
         env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PREFLIGHT_REGION: ${{ steps.preflight.outputs.region }}
+          POOLER_HOST: ${{ steps.preflight.outputs.pooler_host }}
+          POOLER_PORT: ${{ steps.preflight.outputs.pooler_port }}
+          POOLER_USER: ${{ steps.preflight.outputs.pooler_user }}
         run: |
           set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
@@ -411,20 +435,23 @@ jobs:
           }
 
           cands="${SB_DB_HOST}:${SB_DB_PORT}:${SB_DB_USER}"
-          # the direct connection is IPv6-only unless the project bought the IPv4
+          # The direct connection is IPv6-only unless the project has the IPv4
           # add-on, and aws-N-{region} pooler hosts are NOT universal — they are
           # only tried as a last resort when the API gave us no pooler config.
-          case "$SB_DB_HOST" in
-            *pooler.supabase.com)
-              cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres" ;;
-            *)
-              if [ -n "$PREFLIGHT_REGION" ]; then
-                cands="$cands aws-0-${PREFLIGHT_REGION}.pooler.supabase.com:5432:postgres.${PROJECT_REF}"
-                cands="$cands aws-1-${PREFLIGHT_REGION}.pooler.supabase.com:6543:postgres.${PROJECT_REF}"
-              fi ;;
-          esac
+          if [ -n "$POOLER_HOST" ]; then
+            alt="${POOLER_HOST}:${POOLER_PORT:-6543}:${POOLER_USER:-postgres.${PROJECT_REF}}"
+            [ "$alt" = "$cands" ] || cands="$cands $alt"
+            cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres"
+          else
+            cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres"
+            if [ -n "$PREFLIGHT_REGION" ]; then
+              cands="$cands aws-0-${PREFLIGHT_REGION}.pooler.supabase.com:5432:postgres.${PROJECT_REF}"
+              cands="$cands aws-1-${PREFLIGHT_REGION}.pooler.supabase.com:6543:postgres.${PROJECT_REF}"
+            fi
+          fi
+          echo "candidates: $(printf '%s' "$cands" | tr ' ' '\n' | sed 's/:\([^:]*\)$/ as \1/' | tr '\n' ' ')"
 
-          reachable=false; db_error=""
+          reachable=false; db_error=""; auth_failed=no
           for c in $cands; do
             h="${c%%:*}"; remainder="${c#*:}"; p="${remainder%%:*}"; u="${remainder#*:}"
             echo "probing ${u}@${h}:${p} (password hidden) …"
@@ -447,7 +474,10 @@ jobs:
             low=$(printf '%s' "$msg" | tr '[:upper:]' '[:lower:]')
             case "$low" in
               *"password authentication failed"*)
-                db_error="SUPABASE_DB_PASSWORD is not the database password of this project (Dashboard > Project Settings > Database > Database password)." ;;
+                db_error="The pooler accepted the tenant/user ${u}@${h}:${p} but rejected the password: SUPABASE_DB_PASSWORD is not this project's database password. Fix it in Dashboard > Project Settings > Database > Database password (reset it if unknown) and store that exact value in the GitHub secret SUPABASE_DB_PASSWORD. Stored fingerprint sha256:${SB_PW_FP:-?}, length ${#SUPABASE_DB_PASSWORD}."
+                # every other endpoint would fail identically — stop here
+                auth_failed=yes
+                break ;;
               *"tenant or user not found"*)
                 db_error="The pooler rejected the user '${u}' — the project ref is wrong for this pooler host/region, or the project is paused." ;;
               *"could not translate host name"*|*"name or service not known"*|*"nodename nor servname"*)
@@ -475,8 +505,6 @@ jobs:
         id: link
         if: steps.guard.outputs.token_is_pat == 'yes'
         continue-on-error: true
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
@@ -495,13 +523,16 @@ jobs:
           ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
           DB_ERROR: ${{ steps.probe.outputs.db_error }}
           TOKEN_VALID: ${{ steps.preflight.outputs.token_valid }}
+          PROJECT_VISIBLE: ${{ steps.preflight.outputs.project_visible }}
           VERDICT: ${{ steps.preflight.outputs.verdict }}
         run: |
           set -uo pipefail
-          echo "::error::No working path to project ${PROJECT_REF} (verdict: ${VERDICT}): the access token is not accepted AND the database is not reachable."
+          echo "::error::No working path to project ${PROJECT_REF} yet (verdict: ${VERDICT}). Nothing was written to the database."
           if [ -n "$DB_ERROR" ]; then echo "::error::Database: ${DB_ERROR}"; fi
-          if [ "$TOKEN_VALID" = "true" ]; then
-            echo "::error::The token itself IS accepted, so what is left is the database connection: check SUPABASE_DB_PASSWORD (Dashboard > Project Settings > Database > Database password), make sure the project is not paused, and/or pass the exact Session-pooler host shown in Dashboard > Connect as the db_host input with db_port 5432."
+          if [ "$PROJECT_VISIBLE" = "true" ]; then
+            echo "::error::The access token CAN read this project, so the access token is not the blocker — fix the database credential/endpoint above and re-run."
+          elif [ "$TOKEN_VALID" = "true" ]; then
+            echo "::error::The token is accepted but cannot read this project; check the project ref and the token's account."
           elif [ -n "$ACTION_NEEDED" ]; then
             echo "::error::Action needed: ${ACTION_NEEDED}"
           fi
@@ -510,7 +541,6 @@ jobs:
       - name: Dry run — list pending migrations (never writes)
         id: dryrun
         env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
           LINK_OK: ${{ steps.link.outputs.link_ok }}
         run: |
@@ -552,8 +582,6 @@ jobs:
 
       - name: Dry run — read-only cross-check of the remote migration history
         if: steps.probe.outputs.db_reachable == 'true'
-        env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
         run: |
           set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
@@ -572,7 +600,6 @@ jobs:
       - name: Apply migrations (only when mode = apply)
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
-          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PROJECT_STATUS: ${{ steps.preflight.outputs.project_status }}
         run: |
           set -euo pipefail
@@ -592,7 +619,6 @@ jobs:
       - name: Verify — run supabase/verify.sql (apply only)
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PGHOST: ${{ steps.endpoint.outputs.db_host }}
           PGPORT: ${{ steps.endpoint.outputs.db_port }}
           PGUSER: ${{ steps.endpoint.outputs.db_user }}
@@ -600,13 +626,13 @@ jobs:
           PGSSLMODE: require
         run: |
           set -euo pipefail
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
           echo "::add-mask::$PGPASSWORD"
           psql -v ON_ERROR_STOP=1 -f supabase/verify.sql
 
       - name: Verify — assert expected seed counts (apply only)
         if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
-          PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PGHOST: ${{ steps.endpoint.outputs.db_host }}
           PGPORT: ${{ steps.endpoint.outputs.db_port }}
           PGUSER: ${{ steps.endpoint.outputs.db_user }}
@@ -614,6 +640,7 @@ jobs:
           PGSSLMODE: require
         run: |
           set -euo pipefail
+          export PGPASSWORD="$SUPABASE_DB_PASSWORD"
           echo "::add-mask::$PGPASSWORD"
           actual=$(psql -v ON_ERROR_STOP=1 -At -F, -c "
             select
