@@ -1,0 +1,64 @@
+name: Supabase JIT final readonly check
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-final-check.yml"
+jobs:
+  final-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Final readonly check - JIT state and user_id discovery
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          PROJECT_REF: kijhqsyftzufydonggeb
+        run: |
+          set -uo pipefail
+          tmp=$(mktemp -d)
+          get() {
+            local path=$1
+            resp=$(curl -sS -m 20 -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com${path}" 2>$tmp/err || true)
+            code=${resp##*$'\n'}
+            body=${resp%$'\n'*}
+            echo "GET $path -> HTTP $code"
+            echo "$body" | head -c 800; echo; echo
+            echo "::notice title=GET $path::HTTP $code body=$(echo "$body" | head -c 400)"
+            printf '%s' "$code" > "$tmp/code"
+            printf '%s' "$body" > "$tmp/body"
+          }
+          echo "=== 1. Verify JIT enabled ==="
+          get "/v1/projects/${PROJECT_REF}/jit-access"
+          JIT_BODY=$(cat $tmp/body)
+          JIT_CODE=$(cat $tmp/code)
+          JIT_STATE=$(echo "$JIT_BODY" | jq -r '.state // empty' 2>/dev/null || echo "unknown")
+          echo "JIT state: $JIT_STATE code $JIT_CODE"
+
+          echo "=== 2. Discover user_id ==="
+          echo "--- Attempt A: GET /v1/profile ---"
+          get "/v1/profile"
+          echo "--- Attempt B: GET /v1/organizations ---"
+          get "/v1/organizations"
+          echo "--- Attempt C: GET project to get org slug ---"
+          resp=$(curl -sS -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" https://api.supabase.com/v1/projects/${PROJECT_REF})
+          echo "$resp" | jq -c '{ref, organization_id, organization_slug, name, region, status}' 2>/dev/null || echo "$resp" | head -c 500
+          ORG_SLUG=$(echo "$resp" | jq -r '.organization_slug // empty')
+          ORG_ID=$(echo "$resp" | jq -r '.organization_id // empty')
+          echo "org_slug=$ORG_SLUG org_id=$ORG_ID"
+          if [ -n "$ORG_SLUG" ]; then
+            echo "--- Attempt D: GET /v1/organizations/$ORG_SLUG ---"
+            get "/v1/organizations/$ORG_SLUG"
+            echo "--- Attempt E: GET /v1/organizations/$ORG_SLUG/members ---"
+            get "/v1/organizations/$ORG_SLUG/members"
+            echo "--- Attempt F: GET /v2/organizations/$ORG_SLUG/members ---"
+            get "/v2/organizations/$ORG_SLUG/members"
+          fi
+          echo "--- Attempt G: GET /v1/projects/${PROJECT_REF}/database/jit/list ---"
+          get "/v1/projects/${PROJECT_REF}/database/jit/list"
+          echo "--- Attempt H: GET /v1/projects/${PROJECT_REF}/database/jit ---"
+          get "/v1/projects/${PROJECT_REF}/database/jit"
+
+          echo "=== 3. Summary ==="
+          echo "JIT enabled: $JIT_STATE (HTTP $JIT_CODE)"
+          echo "If org members returns 403, token lacks members_read"
+          echo "If profile returns 403 requires user-scoped, need classic PAT"
+          echo "If jit/list empty, no mapping yet"
