@@ -301,6 +301,19 @@ jobs:
             BODY="${resp%$'\n'*}"
             case "$CODE" in ''|*[!0-9]*) CODE="000" ;; esac
           }
+          api_post() {  # $1 = path, $2 = json body -> sets CODE and BODY
+            local resp
+            resp=$(curl -sS -m 60 -X POST \
+                     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                     -H "Accept: application/json" \
+                     -H "Content-Type: application/json" \
+                     -d "$2" \
+                     -w $'\n%{http_code}' \
+                     "https://api.supabase.com$1" 2>"$tmp/curl.err") || true
+            CODE="${resp##*$'\n'}"
+            BODY="${resp%$'\n'*}"
+            case "$CODE" in ''|*[!0-9]*) CODE="000" ;; esac
+          }
 
           echo "== 1/5  Does project ref '$ref' exist? (public probe, no credentials used) =="
           rest=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "https://${ref}.supabase.co/rest/v1/" 2>/dev/null) || rest="000"
@@ -428,6 +441,30 @@ jobs:
             echo "::notice title=temporary access::not confirmed enabled (HTTP ${jit_code}, state='${jit_state:-unknown}'). Enable it at Dashboard > Project Settings > Database > 'Enable temporary access', or: curl -X PUT https://api.supabase.com/v1/projects/${ref}/jit-access -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' -d '{\"state\":\"enabled\"}'. Needs Postgres >= 17.6.1.081 (this project reports '${pgver:-unknown}') and SSL enforcement on; then authorise your user to assume the 'postgres' role."
           fi
 
+          echo
+          echo "== 7/7  Can this token run READ-ONLY SQL through the Management API? =="
+          # POST /v1/projects/{ref}/database/query is the endpoint the Dashboard's
+          # own SQL editor uses. It authenticates with the ACCESS TOKEN alone — no
+          # database password, no pooler, no IPv6 — and accepts read_only:true. A
+          # fine-grained PAT needs the database_read (or database_write) permission.
+          # When it answers, a dry-run report can be produced even while every
+          # Postgres credential path is broken, which is exactly this project's
+          # situation: the password is refused by Supavisor on both ports, the
+          # direct host is IPv6-only, and temporary access reports 'unavailable'.
+          api_post "/v1/projects/${ref}/database/query" '{"query":"select 1 as ok","read_only":true}'
+          mgmt_code="$CODE"; mgmt_body="$BODY"
+          mgmt_sql_ok=false
+          echo "POST /v1/projects/${ref}/database/query (read_only) -> HTTP ${mgmt_code}"
+          echo "::notice title=api database/query::HTTP ${mgmt_code}"
+          case "$mgmt_code" in
+            200|201) mgmt_sql_ok=true
+                     echo "  the access token CAN run read-only SQL — a dry-run report is possible without the database password."
+                     printf '%s' "$mgmt_body" | head -c 200 | sed 's/^/  probe result: /'; echo ;;
+            403)     echo "  refused (403): this fine-grained PAT lacks the database_read permission."
+                     echo "::notice title=fix available::Grant this token the 'database_read' permission (https://supabase.com/dashboard/account/tokens) and the dry-run works with NO database password at all — it bypasses Supavisor, the pooler ports and the IPv6-only direct host." ;;
+            *)       printf '%s' "$mgmt_body" | head -c 300; echo ;;
+          esac
+
           # ---- verdict ------------------------------------------------------
           verdict=ok
           action="None — token, project and API access all look healthy."
@@ -487,10 +524,12 @@ jobs:
             echo "pooler_port=$pooler_port"
             echo "pooler_user=$pooler_user"
             echo "pool_mode=$pool_mode"
+            echo "mgmt_sql_ok=$mgmt_sql_ok"
+            echo "mgmt_sql_code=$mgmt_code"
             echo "jit_state=$jit_state"
             echo "jit_code=$jit_code"
             echo "postgres_version=$pgver"
-            echo "api_codes=projects:${projects_code} project:${proj_code} api-keys:${akeys_code} pooler:${pooler_code} jit:${jit_code} rest:${rest}"
+            echo "api_codes=projects:${projects_code} project:${proj_code} api-keys:${akeys_code} pooler:${pooler_code} jit:${jit_code} query:${mgmt_code} rest:${rest}"
             echo "verdict=$verdict"
             echo "manual_action=$action"
           } >> "$GITHUB_OUTPUT"
@@ -961,7 +1000,7 @@ jobs:
           fi
 
       - name: Fail fast when neither the Management API nor Postgres can be reached
-        if: steps.probe.outputs.db_reachable != 'true' && steps.link.outputs.link_ok != 'true'
+        if: steps.probe.outputs.db_reachable != 'true' && steps.link.outputs.link_ok != 'true' && steps.preflight.outputs.mgmt_sql_ok != 'true'
         env:
           ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
           DB_ERROR: ${{ steps.probe.outputs.db_error }}
@@ -1011,6 +1050,7 @@ jobs:
         env:
           DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
           LINK_OK: ${{ steps.link.outputs.link_ok }}
+          MGMT_SQL_OK: ${{ steps.preflight.outputs.mgmt_sql_ok }}
         run: |
           set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
@@ -1069,6 +1109,44 @@ jobs:
               ran=true
             else
               echo "(psql fallback failed too)"
+            fi
+          fi
+
+          # Management-API path: the endpoint the Dashboard's own SQL editor uses.
+          # It authenticates with the ACCESS TOKEN alone, so it needs no database
+          # password, no pooler port and no IPv6 reachability — and read_only:true
+          # keeps it strictly non-mutating. This is what makes the dry-run work for a
+          # project whose Supavisor credential is broken.
+          if [ "$ran" != "true" ] && [ "${MGMT_SQL_OK:-false}" = "true" ]; then
+            echo
+            echo "== Management API read-only SQL — dry-run report without the database password =="
+            mgmt_query() {  # $1 = sql ; never prints the token
+              local body
+              body=$(python3 -c 'import json,sys; print(json.dumps({"query": sys.argv[1], "read_only": True}))' "$1")
+              curl -sS -m 90 -X POST \
+                -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                -H "Accept: application/json" -H "Content-Type: application/json" \
+                -d "$body" \
+                "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query"
+            }
+            resp=$(mgmt_query "select case when to_regclass('supabase_migrations.schema_migrations') is null then '(none: history table does not exist)' else coalesce((select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations), '(none: history table is empty)') end as history") || resp=""
+            if printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
+              remote=$(printf '%s' "$resp" | jq -r 'if type=="array" then (.[0].history // "") else "" end' 2>/dev/null)
+              echo "  remote migration history : ${remote:-?}"
+              echo "  local migration files    : $(ls -1 supabase/migrations/*.sql | xargs -n1 basename | tr '\n' ' ')"
+              pending=""
+              for f in supabase/migrations/*.sql; do
+                v=$(basename "$f" .sql); v="${v%%_*}"
+                case ",${remote}," in
+                  *",${v},"*) echo "    already applied : $v" ;;
+                  *)          pending="${pending}${pending:+ }$v"; echo "    PENDING         : $v" ;;
+                esac
+              done
+              echo "  would be applied by 'mode = apply': ${pending:-nothing (remote is up to date)}"
+              echo "::notice title=dry-run via Management API::read-only SQL over the access token; remote history='${remote:-?}'; pending='${pending:-none}'. No database password, no pooler and no IPv6 needed."
+              ran=true
+            else
+              echo "  unexpected response: $(printf '%s' "$resp" | head -c 300)"
             fi
           fi
 
@@ -1179,6 +1257,8 @@ jobs:
           DB_DIRECT_KIND: ${{ steps.probe.outputs.db_direct_kind }}
           DB_JIT: ${{ steps.probe.outputs.db_jit }}
           JIT_STATE: ${{ steps.preflight.outputs.jit_state }}
+          MGMT_SQL_OK: ${{ steps.preflight.outputs.mgmt_sql_ok }}
+          MGMT_SQL_CODE: ${{ steps.preflight.outputs.mgmt_sql_code }}
           POSTGRES_VERSION: ${{ steps.preflight.outputs.postgres_version }}
           PW_FIXES: ${{ steps.guard.outputs.pw_fixes }}
           PW_EDGE: ${{ steps.guard.outputs.pw_edge }}
@@ -1219,6 +1299,7 @@ jobs:
             echo "| pooler refused the credential at | ${DB_PW_AUTH_AT:-never} |"
             echo "| last failure class (pooler) | ${DB_KIND:-none} |"
             echo "| last failure class (direct, bypasses Supavisor) | ${DB_DIRECT_KIND:-not tested} |"
+            echo "| read-only SQL via Management API | ${MGMT_SQL_OK:-false} (HTTP ${MGMT_SQL_CODE:-?}) |"
             echo "| dry-run report produced | ${DRY_RUN_OK:-no} |"
             echo
             echo "**Verdict:** \`${VERDICT:-unknown}\`"
