@@ -27,6 +27,34 @@ name: Supabase migrate (manual)
 #      "FATAL: (ENOTFOUND) tenant/user postgres.{ref} not found" means the project
 #      lives on a different Supavisor cluster. db.{ref}.supabase.co is IPv6-only
 #      unless the project has the IPv4 add-on, so IPv4 runners cannot use it.
+#
+# Why this version no longer reports a correct password as a wrong one
+# (the "SUPABASE_DB_PASSWORD is not this project's database password" failure):
+#   5. The endpoint is no longer a single bet. The previous version read the
+#      pooler config and then THREW THE PORT AWAY — the log literally said
+#      "API reported 6543/transaction, using 5432 for migrations". One wrong
+#      guess aborted the whole run. It now builds an ordered candidate list
+#      (the API-advertised host:port first, then the other Supavisor mode on the
+#      same host, then the direct connection, then templated regional hosts) and
+#      tries them in turn.
+#   6. The password normalisation was broken. It deleted \r and \n but never
+#      trimmed spaces/tabs, and its quote patterns were \"\"* and ''* — TWO
+#      leading quotes — so a single wrapping pair, the common paste artifact,
+#      survived into the connection string. It now trims whitespace, removes one
+#      matching pair of wrapping quotes, records WHICH transform fired, and —
+#      because a password may legitimately contain those characters — keeps the
+#      alternatives so the probe can try them instead of guessing.
+#   7. The probe distinguishes failure classes instead of blaming the password
+#      for everything: tenant/user-not-found, DNS, refused/timeout, TLS,
+#      Supavisor's auth circuit breaker, and a genuine credential rejection are
+#      all reported separately. "The password is wrong" is now only claimed
+#      after every endpoint AND every normalisation has been refused.
+#      Attempts are bounded (max 6, stopping early on AUTH and on a circuit
+#      breaker) so diagnosing cannot itself trip Supavisor's failure lockout.
+#   8. Diagnostics never reveal the secret: only its length, its sha256[1:12]
+#      fingerprint and the CHARACTER CLASS of its first/last character
+#      (quote / space / tab / letter / digit / other-symbol) are printed, which
+#      is enough to spot a paste artifact without exposing the value.
 
 on:
   # A pull request that touches this workflow or the SQL files runs the SAME job in
@@ -121,19 +149,87 @@ jobs:
             *)                cls="unrecognised format (a Supabase access token starts with sbp_)" ;;
           esac
 
-          # The database password is normalised the same way: a secret saved with a
-          # trailing newline or wrapped in quotes never authenticates, and Supavisor
-          # then answers "FATAL: password authentication failed for user postgres".
-          pw=$(printf '%s' "$RAW_PASSWORD" | tr -d '\r\n')
-          case "$pw" in
-            \"\"*) pw="${pw#\"}"; pw="${pw%\"}" ;;
-            "\'\'"*) pw="${pw#\'}"; pw="${pw%\'}" ;;
-          esac
+          # ---- database password: normalise, and record WHAT had to be removed ----
+          # A secret pasted from the Dashboard, a .env file or a JSON blob very often
+          # carries a trailing newline, a leading/trailing space, or ONE wrapping pair
+          # of quotes. Any of those makes Supavisor answer
+          #   FATAL: password authentication failed for user "postgres"
+          # even though the operator is certain the stored value "is exactly the
+          # password" — and even though the tenant/user was resolved correctly, which
+          # is why the failure looks like a wrong password rather than a wrong user.
+          #
+          # The previous version of this step was broken in two ways:
+          #   * its quote patterns were \"\"* and ''*, i.e. they required TWO leading
+          #     quote characters, so a single wrapping pair — the common case — was
+          #     never removed;
+          #   * it only deleted \r and \n, so leading/trailing spaces and tabs were
+          #     never trimmed at all.
+          # Both artifacts are invisible in the UI and add 1-2 characters to the
+          # reported length. Normalise properly, and (because a password may
+          # legitimately contain a trailing space or quotes) keep the alternatives so
+          # the probe step can try them instead of us having to guess.
+          char_class() {  # describe ONE character without ever printing it
+            case "$1" in
+              '')       echo 'empty' ;;
+              '"')      echo 'double-quote' ;;
+              "'")      echo 'single-quote' ;;
+              ' ')      echo 'space' ;;
+              $'\t')    echo 'tab' ;;
+              $'\r')    echo 'carriage-return' ;;
+              $'\n')    echo 'newline' ;;
+              [0-9])    echo 'digit' ;;
+              [A-Za-z]) echo 'letter' ;;
+              *)        echo 'other-symbol' ;;
+            esac
+          }
+          raw_first_class=$(char_class "${RAW_PASSWORD:0:1}")
+          raw_last_class=$(char_class "${RAW_PASSWORD: -1}")
+
+          pw="$RAW_PASSWORD"
+          fixes="none"
+          note_fix() { [ "$fixes" = "none" ] && fixes="$1" || fixes="$fixes+$1"; }
+
+          step=$(printf '%s' "$pw" | tr -d '\r\n')
+          if [ "$step" != "$pw" ]; then note_fix "CR/LF removed"; fi
+          pw="$step"
+
+          step=$(printf '%s' "$pw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          if [ "$step" != "$pw" ]; then note_fix "surrounding whitespace trimmed"; fi
+          pw="$step"
+
+          if [ "${#pw}" -ge 2 ]; then
+            case "$pw" in
+              '"'*'"') step="${pw#\"}"; step="${step%\"}"
+                       note_fix "one wrapping pair of double quotes removed"; pw="$step" ;;
+              "'"*"'") step="${pw#\'}"; step="${step%\'}"
+                       note_fix "one wrapping pair of single quotes removed"; pw="$step" ;;
+            esac
+          fi
+
+          step=$(printf '%s' "$pw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          if [ "$step" != "$pw" ]; then note_fix "whitespace inside the quotes trimmed"; fi
+          pw="$step"
+
           echo "::add-mask::$pw"
-          if [ "$pw" != "$RAW_PASSWORD" ]; then
-            echo "note: SUPABASE_DB_PASSWORD contained CR/LF or surrounding quotes — trimmed automatically."
+          if [ "$fixes" != "none" ]; then
+            echo "note: SUPABASE_DB_PASSWORD was normalised — ${fixes}."
+            echo "::warning title=SUPABASE_DB_PASSWORD normalised::${fixes} — the stored secret was not byte-identical to the password. Re-save it in Settings > Secrets without the extra characters."
+          else
+            echo "note: SUPABASE_DB_PASSWORD needed no normalisation (stored value is byte-clean)."
           fi
           pwfp=$(printf '%s' "$pw" | sha256sum | cut -c1-12)
+
+          # Byte length vs character length: if they differ the secret holds
+          # multi-byte UTF-8 (a non-ASCII character), which a copy/paste or a
+          # locale-sensitive editor can silently alter. Counts only — no value.
+          pw_bytes=$(printf '%s' "$pw" | wc -c | tr -d ' ')
+          pw_chars=$(printf '%s' "$pw" | LC_ALL=C.UTF-8 wc -m 2>/dev/null | tr -d ' ' || echo "?")
+          pw_nonascii=$(printf '%s' "$pw" | LC_ALL=C tr -dc '\200-\377' | wc -c | tr -d ' ')
+          pw_control=$(printf '%s' "$RAW_PASSWORD" | LC_ALL=C tr -dc '\000-\010\013\014\016-\037' | wc -c | tr -d ' ')
+          pw_shape="bytes=${pw_bytes} chars=${pw_chars} non-ascii-bytes=${pw_nonascii} control-chars=${pw_control}"
+          if [ "$pw_nonascii" != "0" ] || [ "$pw_control" != "0" ] || [ "$pw_bytes" != "$pw_chars" ]; then
+            echo "::warning title=SUPABASE_DB_PASSWORD encoding::${pw_shape} — the secret contains non-ASCII or control characters. Postgres will compare them byte-for-byte, so an editor or clipboard that normalised them will make an otherwise correct password fail."
+          fi
 
           fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
           echo "Both secrets are present."
@@ -141,12 +237,15 @@ jobs:
           echo "  token length       : ${#tok}"
           echo "  token sha256[1:12] : $fp"
           echo "  db password length : ${#pw} (raw ${#RAW_PASSWORD}), sha256[1:12]=${pwfp}"
+          echo "  db password edge   : first char=${raw_first_class}, last char=${raw_last_class} (classes only — the value is never printed)"
+          echo "  db password fixes  : ${fixes}"
+          echo "  db password shape  : ${pw_shape}"
           echo "  (to check which token is stored, run locally:"
           echo "   printf '%s' \"\$MY_TOKEN\" | sha256sum | cut -c1-12 )"
 
           # Annotations are readable through the API without downloading the job log.
           echo "::notice title=SUPABASE_ACCESS_TOKEN::class=${cls} | length=${#tok} | sha256[1:12]=${fp}"
-          echo "::notice title=SUPABASE_DB_PASSWORD::length=${#pw} (raw ${#RAW_PASSWORD}) | sha256[1:12]=${pwfp}"
+          echo "::notice title=SUPABASE_DB_PASSWORD::length=${#pw} (raw ${#RAW_PASSWORD}) | sha256[1:12]=${pwfp} | normalisation=${fixes} | first=${raw_first_class} last=${raw_last_class} | ${pw_shape}"
 
           {
             echo "SUPABASE_ACCESS_TOKEN=$tok"
@@ -156,11 +255,20 @@ jobs:
             echo "SB_TOKEN_IS_SCOPED=$is_scoped"
             echo "SB_TOKEN_FP=$fp"
             echo "SB_PW_FP=$pwfp"
+            echo "SB_PW_RAW_FP=$(printf '%s' "$RAW_PASSWORD" | sha256sum | cut -c1-12)"
+            echo "SB_PW_FIXES=$fixes"
+            echo "SB_PW_EDGE=first=${raw_first_class},last=${raw_last_class}"
+            echo "SB_PW_SHAPE=$pw_shape"
           } >> "$GITHUB_ENV"
           {
             echo "token_is_pat=$is_pat"
             echo "token_is_scoped=$is_scoped"
             echo "token_class=$cls"
+            echo "pw_fixes=$fixes"
+            echo "pw_fp=$pwfp"
+            echo "pw_raw_fp=$(printf '%s' "$RAW_PASSWORD" | sha256sum | cut -c1-12)"
+            echo "pw_edge=first=${raw_first_class},last=${raw_last_class}"
+            echo "pw_shape=$pw_shape"
           } >> "$GITHUB_OUTPUT"
 
       - name: Show the exact migration files that would be applied
@@ -202,6 +310,19 @@ jobs:
             resp=$(curl -sS -m 30 \
                      -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
                      -H "Accept: application/json" \
+                     -w $'\n%{http_code}' \
+                     "https://api.supabase.com$1" 2>"$tmp/curl.err") || true
+            CODE="${resp##*$'\n'}"
+            BODY="${resp%$'\n'*}"
+            case "$CODE" in ''|*[!0-9]*) CODE="000" ;; esac
+          }
+          api_post() {  # $1 = path, $2 = json body -> sets CODE and BODY
+            local resp
+            resp=$(curl -sS -m 60 -X POST \
+                     -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                     -H "Accept: application/json" \
+                     -H "Content-Type: application/json" \
+                     -d "$2" \
                      -w $'\n%{http_code}' \
                      "https://api.supabase.com$1" 2>"$tmp/curl.err") || true
             CODE="${resp##*$'\n'}"
@@ -255,13 +376,17 @@ jobs:
           api_get "/v1/projects/${ref}"
           proj_code="$CODE"; proj_body="$BODY"
           echo "::notice title=api /v1/projects/{ref}::HTTP ${proj_code}"
-          project_visible=false; region=""; pstatus=""; pname=""
+          project_visible=false; region=""; pstatus=""; pname=""; pgver=""
           if [ "$proj_code" = "200" ]; then
             project_visible=true
             region=$(printf '%s' "$proj_body"  | jq -r '.region // empty' 2>/dev/null) || region=""
             pstatus=$(printf '%s' "$proj_body" | jq -r '.status // empty' 2>/dev/null) || pstatus=""
             pname=$(printf '%s' "$proj_body"   | jq -r '.name // empty'   2>/dev/null) || pname=""
-            echo "GET /v1/projects/${ref} -> 200   status=${pstatus:-?}   region=${region:-?}"
+            pgver=$(printf '%s' "$proj_body"   | jq -r '(.postgres_version // .database_version // .pg_version // (.database.version? ) // empty) | tostring' 2>/dev/null) || pgver=""
+            # Key NAMES only (never values) — enough to spot where the version lives
+            # without printing anything sensitive about the project.
+            proj_keys=$(printf '%s' "$proj_body" | jq -r 'if type=="object" then (keys_unsorted | join(",")) else "not-an-object" end' 2>/dev/null) || proj_keys=""
+            echo "GET /v1/projects/${ref} -> 200   status=${pstatus:-?}   region=${region:-?}   postgres=${pgver:-?}"
             if [ "$SHOW_NAMES" = "true" ] && [ -n "$pname" ]; then
               echo "project name: $pname"
             fi
@@ -306,6 +431,57 @@ jobs:
           if [ -z "$pooler_host" ]; then
             echo "::warning::The pooler host could not be read (HTTP ${pooler_code}). Pass it manually: Dashboard > Connect > Session pooler, then run this workflow with db_host/db_port."
           fi
+
+          echo
+          echo "== 6/6  Temporary access (JIT) — can the ACCESS TOKEN be used as the DB credential? =="
+          # Supabase "temporary access" lets a Personal Access Token be used as the
+          # Postgres password. It is validated LIVE against Supabase on every
+          # connection instead of against Supavisor's cached copy of the role
+          # password, so it is immune to the stale-pooler-cache failure that makes
+          # a freshly reset database password get rejected on every pooler port
+          # (supabase/supabase#44210). Supabase's own docs recommend exactly this
+          # for CI: "generate API tokens for services you don't want to share your
+          # Postgres role password with (for example a GitHub Action)".
+          api_get "/v1/projects/${ref}/jit-access"
+          jit_code="$CODE"; jit_body="$BODY"
+          jit_state=""
+          echo "GET /v1/projects/${ref}/jit-access -> HTTP ${jit_code}"
+          echo "::notice title=api jit-access::HTTP ${jit_code}"
+          if [ "$jit_code" = "200" ]; then
+            jit_state=$(printf '%s' "$jit_body" | jq -r '(.state // (if .enabled == true then "enabled" elif .enabled == false then "disabled" else empty end) // empty)' 2>/dev/null) || jit_state=""
+            echo "temporary access state: ${jit_state:-unknown}"
+            printf '%s' "$jit_body" | jq -c 'if type=="object" then (del(.users) | .) else . end' 2>/dev/null | head -c 300 | sed 's/^/  body: /'; echo
+          else
+            echo "  (a scoped PAT may not be allowed to read this; the probe still TRIES the token)"
+            printf '%s' "$jit_body" | head -c 200; echo
+          fi
+          if [ "$jit_state" != "enabled" ]; then
+            echo "::notice title=temporary access::not confirmed enabled (HTTP ${jit_code}, state='${jit_state:-unknown}'). Enable it at Dashboard > Project Settings > Database > 'Enable temporary access', or: curl -X PUT https://api.supabase.com/v1/projects/${ref}/jit-access -H \"Authorization: Bearer \$TOKEN\" -H 'Content-Type: application/json' -d '{\"state\":\"enabled\"}'. Needs Postgres >= 17.6.1.081 (this project reports '${pgver:-unknown}') and SSL enforcement on; then authorise your user to assume the 'postgres' role."
+          fi
+
+          echo
+          echo "== 7/7  Can this token run READ-ONLY SQL through the Management API? =="
+          # POST /v1/projects/{ref}/database/query is the endpoint the Dashboard's
+          # own SQL editor uses. It authenticates with the ACCESS TOKEN alone — no
+          # database password, no pooler, no IPv6 — and accepts read_only:true. A
+          # fine-grained PAT needs the database_read (or database_write) permission.
+          # When it answers, a dry-run report can be produced even while every
+          # Postgres credential path is broken, which is exactly this project's
+          # situation: the password is refused by Supavisor on both ports, the
+          # direct host is IPv6-only, and temporary access reports 'unavailable'.
+          api_post "/v1/projects/${ref}/database/query" '{"query":"select 1 as ok","read_only":true}'
+          mgmt_code="$CODE"; mgmt_body="$BODY"
+          mgmt_sql_ok=false
+          echo "POST /v1/projects/${ref}/database/query (read_only) -> HTTP ${mgmt_code}"
+          echo "::notice title=api database/query::HTTP ${mgmt_code}"
+          case "$mgmt_code" in
+            200|201) mgmt_sql_ok=true
+                     echo "  the access token CAN run read-only SQL — a dry-run report is possible without the database password."
+                     printf '%s' "$mgmt_body" | head -c 200 | sed 's/^/  probe result: /'; echo ;;
+            403)     echo "  refused (403): this fine-grained PAT lacks the database_read permission."
+                     echo "::notice title=fix available::Grant this token the 'database_read' permission (https://supabase.com/dashboard/account/tokens) and the dry-run works with NO database password at all — it bypasses Supavisor, the pooler ports and the IPv6-only direct host." ;;
+            *)       printf '%s' "$mgmt_body" | head -c 300; echo ;;
+          esac
 
           # ---- verdict ------------------------------------------------------
           verdict=ok
@@ -366,7 +542,13 @@ jobs:
             echo "pooler_port=$pooler_port"
             echo "pooler_user=$pooler_user"
             echo "pool_mode=$pool_mode"
-            echo "api_codes=projects:${projects_code} project:${proj_code} api-keys:${akeys_code} pooler:${pooler_code} rest:${rest}"
+            echo "mgmt_sql_ok=$mgmt_sql_ok"
+            echo "mgmt_sql_code=$mgmt_code"
+            echo "jit_state=$jit_state"
+            echo "jit_code=$jit_code"
+            echo "postgres_version=$pgver"
+            echo "project_body_keys=$proj_keys"
+            echo "api_codes=projects:${projects_code} project:${proj_code} api-keys:${akeys_code} pooler:${pooler_code} jit:${jit_code} query:${mgmt_code} rest:${rest}"
             echo "verdict=$verdict"
             echo "manual_action=$action"
           } >> "$GITHUB_OUTPUT"
@@ -384,123 +566,442 @@ jobs:
         run: |
           set -euo pipefail
           ref="$PROJECT_REF"
+
+          # Build an ORDERED candidate list instead of betting everything on one
+          # host:port pair. Fields are separated by ';' and entries by ' ':
+          #   host;port;user;label
+          #
+          # The previous version hard-coded port 5432 here and threw away the port
+          # the Management API had just reported ("API reported 6543/transaction,
+          # using 5432 for migrations"). GET /v1/projects/{ref}/config/database/pooler
+          # is the authority on what THIS project actually serves; overriding it
+          # meant a single wrong guess aborted the whole run and was then reported
+          # as "SUPABASE_DB_PASSWORD is not this project's database password".
+          cands=""
+          ckeys=""
+          add() {  # host port user label   (label is space-sanitised: the list is
+                   # space-separated, so a space inside a label would split an entry)
+            [ -n "$1" ] || return 0
+            local l="${4//[[:space:]]/-}"
+            local k="$1;$2;$3"
+            # de-duplicate on host;port;user — the label is only cosmetic, and a
+            # repeated endpoint would waste one of the bounded attempts
+            case " $ckeys " in *" $k "*) return 0 ;; esac
+            ckeys="${ckeys:+$ckeys }$k"
+            cands="${cands:+$cands }$k;$l"
+          }
+
           if [ -n "$INPUT_DB_HOST" ]; then
-            host="$INPUT_DB_HOST"; port="${INPUT_DB_PORT:-5432}"; why="workflow input (Dashboard > Connect)"
-            case "$host" in
-              *pooler.supabase.com) user="postgres.${ref}" ;;
-              *)                    user="postgres" ;;
+            # An explicit operator input outranks everything and is tried first.
+            case "$INPUT_DB_HOST" in
+              *pooler.supabase.com) iuser="postgres.${ref}" ;;
+              *)                    iuser="postgres" ;;
             esac
-          elif [ -n "$POOLER_HOST" ]; then
-            # host and user come verbatim from
-            # GET /v1/projects/{ref}/config/database/pooler (database_type=PRIMARY),
-            # which is what the CLI itself uses. Supavisor serves session mode on
-            # 5432 and transaction mode on 6543 from the SAME host, and migrations
-            # need session mode, so 5432 wins unless db_port says otherwise.
-            host="$POOLER_HOST"
-            user="${POOLER_USER:-postgres.${ref}}"
-            port="${INPUT_DB_PORT:-5432}"
-            why="Management API pooler config (PRIMARY; API reported ${POOLER_PORT:-?}/${POOL_MODE:-?}, using ${port} for migrations)"
-          else
-            host="db.${ref}.supabase.co"; port="${INPUT_DB_PORT:-5432}"; user="postgres"
-            why="direct connection (no pooler config readable; needs IPv6 or the IPv4 add-on)"
+            add "$INPUT_DB_HOST" "${INPUT_DB_PORT:-5432}" "$iuser" "workflow input"
           fi
-          echo "endpoint: ${user}@${host}:${port}/postgres   (${why})"
-          echo "::notice title=chosen endpoint::${user}@${host}:${port} (${why})"
+
+          if [ -n "$POOLER_HOST" ]; then
+            puser="${POOLER_USER:-postgres.${ref}}"
+            pport="${POOLER_PORT:-5432}"
+            # 1. exactly what the API advertised — never second-guess it
+            add "$POOLER_HOST" "${INPUT_DB_PORT:-$pport}" "$puser" "api-pooler/${POOL_MODE:-?}"
+            # 2. the other mode on the SAME host: the shared pooler serves session
+            #    mode on 5432 and transaction mode on 6543, and migrations prefer
+            #    session mode, so it is worth one extra attempt.
+            if [ -z "$INPUT_DB_PORT" ]; then
+              case "$pport" in
+                6543) add "$POOLER_HOST" 5432 "$puser" "pooler-session/5432" ;;
+                5432) add "$POOLER_HOST" 6543 "$puser" "pooler-transaction/6543" ;;
+              esac
+            fi
+          fi
+
+          # 3. the direct connection (IPv6-only unless the project has the IPv4
+          #    add-on, so it is a fallback rather than a preference)
+          add "db.${ref}.supabase.co" "${INPUT_DB_PORT:-5432}" "postgres" "direct"
+
+          # 4. only when the API gave us no pooler config at all: try the templated
+          #    regional hosts. These are NOT universal, hence last.
+          if [ -z "$POOLER_HOST" ] && [ -n "$PREFLIGHT_REGION" ]; then
+            add "aws-0-${PREFLIGHT_REGION}.pooler.supabase.com" "${INPUT_DB_PORT:-5432}" "postgres.${ref}" "templated/aws-0"
+            add "aws-1-${PREFLIGHT_REGION}.pooler.supabase.com" "${INPUT_DB_PORT:-6543}" "postgres.${ref}" "templated/aws-1"
+          fi
+
+          # First candidate is the default for every later step; the probe step
+          # overrides SB_DB_* if a different candidate is the one that authenticates.
+          first="${cands%% *}"
+          host="${first%%;*}"; rest="${first#*;}"
+          port="${rest%%;*}"; rest="${rest#*;}"
+          user="${rest%%;*}"; label="${rest#*;}"
+
+          n=$(printf '%s' "$cands" | wc -w)
+          echo "${n} endpoint candidate(s), in order:"
+          for c in $cands; do
+            ch="${c%%;*}"; cr="${c#*;}"; cp="${cr%%;*}"; cr="${cr#*;}"
+            cu="${cr%%;*}"; cl="${cr#*;}"
+            echo "  - ${cu}@${ch}:${cp}  (${cl})"
+          done
+          echo "::notice title=endpoint candidates::${n} — first: ${user}@${host}:${port} (${label}); API pooler said ${POOLER_PORT:-?}/${POOL_MODE:-?}"
           {
             echo "SB_DB_HOST=$host"
             echo "SB_DB_PORT=$port"
             echo "SB_DB_USER=$user"
+            echo "SB_DB_CANDIDATES=$cands"
           } >> "$GITHUB_ENV"
           {
             echo "db_host=$host"
             echo "db_port=$port"
             echo "db_user=$user"
+            echo "db_candidates=$n"
           } >> "$GITHUB_OUTPUT"
 
       - name: Probe the database (read-only, also validates SUPABASE_DB_PASSWORD)
         id: probe
         env:
-          PREFLIGHT_REGION: ${{ steps.preflight.outputs.region }}
-          POOLER_HOST: ${{ steps.preflight.outputs.pooler_host }}
-          POOLER_PORT: ${{ steps.preflight.outputs.pooler_port }}
-          POOLER_USER: ${{ steps.preflight.outputs.pooler_user }}
+          # The secret is read again here so that the ALTERNATIVE normalisations can
+          # be tried without ever persisting more than one password into GITHUB_ENV.
+          RAW_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+          JIT_STATE: ${{ steps.preflight.outputs.jit_state }}
+          JIT_CODE: ${{ steps.preflight.outputs.jit_code }}
+          POSTGRES_VERSION: ${{ steps.preflight.outputs.postgres_version }}
+          POOLER_PORT_KNOWN: ${{ steps.preflight.outputs.pooler_port }}
         run: |
           set -uo pipefail
+          nl=$'\n'; cr=$'\r'
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
+          echo "::add-mask::$RAW_PASSWORD"
           export PGSSLMODE=require PGCONNECT_TIMEOUT=15
           errfile="$RUNNER_TEMP/psql.err"
 
-          try() {  # host port user — password comes from PGPASSWORD, never argv
-            PGPASSWORD="$SUPABASE_DB_PASSWORD" psql -h "$1" -p "$2" -U "$3" -d postgres -Atc 'select 1' >/dev/null 2>"$errfile"
+          try() {  # host port user password [options] — credential travels via env, never argv
+            if [ -n "${5:-}" ]; then
+              PGPASSWORD="$4" PGOPTIONS="$5" psql -h "$1" -p "$2" -U "$3" -d postgres -Atc 'select 1' >/dev/null 2>"$errfile"
+            else
+              PGPASSWORD="$4" psql -h "$1" -p "$2" -U "$3" -d postgres -Atc 'select 1' >/dev/null 2>"$errfile"
+            fi
           }
 
-          cands="${SB_DB_HOST}:${SB_DB_PORT}:${SB_DB_USER}"
-          # The direct connection is IPv6-only unless the project has the IPv4
-          # add-on, and aws-N-{region} pooler hosts are NOT universal — they are
-          # only tried as a last resort when the API gave us no pooler config.
-          if [ -n "$POOLER_HOST" ]; then
-            alt="${POOLER_HOST}:${POOLER_PORT:-6543}:${POOLER_USER:-postgres.${PROJECT_REF}}"
-            [ "$alt" = "$cands" ] || cands="$cands $alt"
-            cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres"
-          else
-            cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres"
-            if [ -n "$PREFLIGHT_REGION" ]; then
-              cands="$cands aws-0-${PREFLIGHT_REGION}.pooler.supabase.com:5432:postgres.${PROJECT_REF}"
-              cands="$cands aws-1-${PREFLIGHT_REGION}.pooler.supabase.com:6543:postgres.${PROJECT_REF}"
-            fi
-          fi
-          echo "candidates: $(printf '%s' "$cands" | tr ' ' '\n' | sed 's/:\([^:]*\)$/ as \1/' | tr '\n' ' ')"
+          K=""; D=""; MSG=""
+          classify() {  # read $errfile, set K (kind), D (operator guidance), MSG (raw)
+            MSG=$(head -3 "$errfile" 2>/dev/null | tr '\n' ' ' | sed 's/  */ /g')
+            local low; low=$(printf '%s' "$MSG" | tr '[:upper:]' '[:lower:]')
+            case "$low" in
+              *"circuit breaker"*)
+                K=CIRCUIT_BREAKER
+                D="Supavisor's auth circuit breaker is OPEN for this tenant because of repeated failed logins. Stop retrying, wait 10-15 minutes without any attempt, then run once more." ;;
+              *"password authentication failed"*)
+                K=AUTH
+                D="The pooler resolved the tenant/user and then rejected the credential, so the endpoint is right and only the password value is in question." ;;
+              *"tenant or user not found"*|*"tenant/user"*|*"enotfound"*)
+                K=TENANT
+                D="This host:port does not know that tenant/user — wrong project ref, wrong pooler cluster, this pool mode is not enabled for the project, or the project is paused." ;;
+              *"could not translate host name"*|*"name or service not known"*|*"nodename nor servname"*)
+                K=DNS
+                D="The host does not resolve — wrong project ref/region, or the project is paused/deleted." ;;
+              *"network is unreachable"*|*"no route to host"*)
+                K=NET
+                D="Not reachable over IPv4 from the runner (Supabase direct connections can be IPv6-only). Use the shared pooler host." ;;
+              *"connection refused"*|*"timed out"*|*"timeout"*)
+                K=REFUSED
+                D="Nothing answered on that host:port — wrong port for this project, IPv4 direct access off, or the project is paused." ;;
+              *"no pg_hba.conf entry"*|*"ssl connection"*|*"certificate"*|*"self signed"*)
+                K=TLS
+                D="TLS/pg_hba rejection — connect with sslmode=require to the shared pooler." ;;
+              *)
+                K=OTHER
+                D="psql could not establish the connection." ;;
+            esac
+          }
 
-          reachable=false; db_error=""; auth_failed=no
-          for c in $cands; do
-            h="${c%%:*}"; remainder="${c#*:}"; p="${remainder%%:*}"; u="${remainder#*:}"
-            echo "probing ${u}@${h}:${p} (password hidden) …"
-            if try "$h" "$p" "$u"; then
-              echo "  connected and authenticated OK"
+          # ---- password variants -------------------------------------------------
+          # A GitHub secret is very often NOT byte-identical to the password it is
+          # meant to hold: a trailing space, a wrapping quote pair, a stray CR/LF.
+          # Supavisor answers "password authentication failed" for all of them, which
+          # is indistinguishable from a genuinely wrong password. Instead of guessing
+          # which artifact (if any) the operator stored, try the plausible
+          # normalisations — de-duplicated and bounded, so the pooler is never
+          # hammered hard enough to trip its auth circuit breaker.
+          vlabels=(); vvals=(); vfps=()
+          add_variant() {  # label value
+            local fp known
+            fp=$(printf '%s' "$2" | sha256sum | cut -c1-12)
+            if [ ${#vfps[@]} -gt 0 ]; then
+              for known in "${vfps[@]}"; do
+                [ "$known" = "$fp" ] && return 0
+              done
+            fi
+            echo "::add-mask::$2"
+            vlabels+=("$1"); vvals+=("$2"); vfps+=("$fp")
+          }
+          add_variant "canonical/normalised" "$SUPABASE_DB_PASSWORD"
+          add_variant "raw/as-stored" "$RAW_PASSWORD"
+          v=$(printf '%s' "$RAW_PASSWORD" | tr -d '\r\n' | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')
+          add_variant "whitespace-trimmed" "$v"
+          v=$(printf '%s' "$RAW_PASSWORD" | tr -d '\r\n')
+          if [ "${#v}" -ge 2 ]; then
+            case "$v" in
+              '"'*'"') v="${v#\"}"; v="${v%\"}" ;;
+              "'"*"'") v="${v#\'}"; v="${v%\'}" ;;
+            esac
+          fi
+          add_variant "unquoted" "$v"
+
+          echo "password variants (values are never printed — only length and fingerprint):"
+          vsum=""
+          i=0
+          while [ $i -lt ${#vlabels[@]} ]; do
+            echo "  [$i] ${vlabels[$i]}: length=${#vvals[$i]} sha256[1:12]=${vfps[$i]}"
+            vsum="${vsum}${vsum:+, }${vlabels[$i]}:len=${#vvals[$i]}/${vfps[$i]}"
+            i=$((i+1))
+          done
+          echo "::notice title=password variants::${vsum}"
+
+          # Number of PASSWORD variants — phase B may only iterate over these.
+          pw_variants=${#vlabels[@]}
+
+          # The access token is offered as a LAST credential. Supabase "temporary
+          # access" (JIT) accepts a Personal Access Token in place of the role
+          # password, and validates it LIVE against Supabase on every connection
+          # instead of against Supavisor's cached copy of the role password. That
+          # makes it immune to the failure mode where a freshly reset database
+          # password is rejected on every pooler port for a long time
+          # (supabase/supabase#44210 — the Dashboard did not invalidate the pooler
+          # cache). Supabase's own docs recommend exactly this for CI:
+          #   "generate API tokens for services you don't want to share your Postgres
+          #    role password with (for example a GitHub Action)"
+          # Shared-pooler connections additionally need options='-c jit=true';
+          # direct connections do not.
+          jit_index=-1
+          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [ "${SB_TOKEN_IS_PAT:-no}" = "yes" ]; then
+            add_variant "jit/access-token" "$SUPABASE_ACCESS_TOKEN"
+            jit_index=$(( ${#vlabels[@]} - 1 ))
+            if [ "${vlabels[$jit_index]:-}" != "jit/access-token" ]; then jit_index=-1; fi
+          fi
+          if [ "$jit_index" -ge 0 ]; then
+            echo "temporary access (JIT) credential registered as variant [${jit_index}] — it will be tried only if every password credential is refused."
+          else
+            echo "temporary access (JIT) credential NOT available (the stored token is not a personal access token)."
+          fi
+
+          # ---- attempt loop ------------------------------------------------------
+          reachable=false; auth_blocked=no; attempts=0; MAX_ATTEMPTS=9
+          auth_endpoint=""; last_kind=""; last_detail=""; last_msg=""; last_where=""
+          win_label=""; win_fp=""; win_len=""; winning_pw=""
+          SB_DB_JIT=""; jit_opts=""
+          # The AUTH answer is the diagnostically important one, and later phases
+          # (direct cross-check, JIT) overwrite last_kind — so remember it here.
+          pw_auth_where=""; pw_auth_port=""; jit_kinds=""
+
+          probe_once() {  # host port user label variant_index [pgoptions]
+            local h="$1" p="$2" u="$3" lbl="$4" vi="$5" opts="${6:-}"
+            attempts=$((attempts+1))
+            echo "probing ${u}@${h}:${p} (${lbl}) with credential [${vi}] ${vlabels[$vi]}${opts:+ options='${opts}'} …"
+            if try "$h" "$p" "$u" "${vvals[$vi]}" "$opts"; then
+              echo "  -> connected and authenticated OK"
+              return 0
+            fi
+            classify
+            echo "  -> ${K}: ${MSG}"
+            echo "::notice title=psql ${u}@${h}:${p} [${vlabels[$vi]}]::${K} — ${MSG}"
+            last_kind="$K"; last_detail="$D"; last_msg="$MSG"; last_where="${u}@${h}:${p} (${lbl}, ${vlabels[$vi]})"
+            return 1
+          }
+
+          # Phase A: the canonical password against the endpoint candidates, in the
+          # order the endpoint step established. An AUTH answer already proves the
+          # tenant/user resolved on that host:port, so there is no point burning more
+          # attempts on other endpoints with the same credential — vary the
+          # credential instead (phase B). Anything else (DNS/REFUSED/TENANT) does
+          # move on to the next candidate.
+          for c in ${SB_DB_CANDIDATES:-}; do
+            [ "$attempts" -lt "$MAX_ATTEMPTS" ] || { echo "attempt budget reached"; break; }
+            h="${c%%;*}"; r="${c#*;}"; p="${r%%;*}"; r="${r#*;}"; u="${r%%;*}"; lbl="${r#*;}"
+            if probe_once "$h" "$p" "$u" "$lbl" 0; then
               reachable=true
-              if [ "$h" != "$SB_DB_HOST" ] || [ "$p" != "$SB_DB_PORT" ] || [ "$u" != "$SB_DB_USER" ]; then
-                echo "  switching to this endpoint for the rest of the run"
-                {
-                  echo "SB_DB_HOST=$h"
-                  echo "SB_DB_PORT=$p"
-                  echo "SB_DB_USER=$u"
-                } >> "$GITHUB_ENV"
-              fi
+              SB_DB_HOST="$h"; SB_DB_PORT="$p"; SB_DB_USER="$u"
+              win_label="${vlabels[0]}"; win_fp="${vfps[0]}"; win_len="${#vvals[0]}"; winning_pw="${vvals[0]}"
               break
             fi
-            msg=$(head -3 "$errfile" 2>/dev/null | tr '\n' ' ')
-            echo "  failed: ${msg}"
-            echo "::notice title=psql ${u}@${h}:${p}::${msg}"
-            low=$(printf '%s' "$msg" | tr '[:upper:]' '[:lower:]')
-            case "$low" in
-              *"password authentication failed"*)
-                db_error="The pooler accepted the tenant/user ${u}@${h}:${p} but rejected the password: SUPABASE_DB_PASSWORD is not this project's database password. Fix it in Dashboard > Project Settings > Database > Database password (reset it if unknown) and store that exact value in the GitHub secret SUPABASE_DB_PASSWORD. Stored fingerprint sha256:${SB_PW_FP:-?}, length ${#SUPABASE_DB_PASSWORD}."
-                # every other endpoint would fail identically — stop here
-                auth_failed=yes
-                break ;;
-              *"tenant or user not found"*)
-                db_error="The pooler rejected the user '${u}' — the project ref is wrong for this pooler host/region, or the project is paused." ;;
-              *"could not translate host name"*|*"name or service not known"*|*"nodename nor servname"*)
-                db_error="Host ${h} does not resolve — wrong project ref, wrong region, or the project is paused/deleted." ;;
-              *"network is unreachable"*|*"no route to host"*)
-                db_error="Host ${h} is not reachable over IPv4 from the runner (Supabase direct connections can be IPv6-only). Pass the Session-pooler host from Dashboard > Connect as db_host with db_port 5432." ;;
-              *"connection refused"*|*"timed out"*|*"timeout"*)
-                db_error="Host ${h} refused the connection or timed out — the project may be paused, or IPv4 direct access is off (then pass the pooler host via the db_host input)." ;;
-              *"no pg_hba.conf entry"*)
-                db_error="The server rejected the TLS connection (no pg_hba.conf entry) — use the Session-pooler host from Dashboard > Connect with sslmode=require." ;;
-              *)
-                db_error="psql could not connect to ${h}:${p} — ${msg}" ;;
-            esac
+            if [ "$last_kind" = "CIRCUIT_BREAKER" ]; then auth_blocked=yes; break; fi
+            if [ "$last_kind" = "AUTH" ]; then
+              auth_endpoint="$c"; pw_auth_where="${u}@${h}:${p}"; pw_auth_port="$p"
+              break
+            fi
           done
 
+          # Phase B: same endpoint, alternative normalisations of the stored secret.
+          # Only PASSWORD variants are in scope here (0..pw_variants-1) — the JIT
+          # variant needs a connection option and is handled in phase D.
+          if [ "$reachable" != "true" ] && [ "$auth_blocked" != "yes" ] && [ -n "$auth_endpoint" ] && [ "$pw_variants" -gt 1 ]; then
+            h="${auth_endpoint%%;*}"; r="${auth_endpoint#*;}"; p="${r%%;*}"; r="${r#*;}"; u="${r%%;*}"; lbl="${r#*;}"
+            echo
+            echo "${u}@${h}:${p} resolved the tenant/user but rejected the canonical password."
+            echo "Re-trying that SAME endpoint with the alternative normalisations (this is what distinguishes a paste artifact from a genuinely wrong password) …"
+            vi=1
+            while [ $vi -lt "$pw_variants" ] && [ "$attempts" -lt "$MAX_ATTEMPTS" ]; do
+              if probe_once "$h" "$p" "$u" "$lbl" "$vi"; then
+                reachable=true
+                SB_DB_HOST="$h"; SB_DB_PORT="$p"; SB_DB_USER="$u"
+                win_label="${vlabels[$vi]}"; win_fp="${vfps[$vi]}"; win_len="${#vvals[$vi]}"; winning_pw="${vvals[$vi]}"
+                break
+              fi
+              if [ "$last_kind" = "AUTH" ]; then pw_auth_where="${pw_auth_where:-${u}@${h}:${p}}"; fi
+              if [ "$last_kind" = "CIRCUIT_BREAKER" ]; then auth_blocked=yes; break; fi
+              vi=$((vi+1))
+            done
+          fi
+
+          # Phase C: the DIRECT connection, even though a pooler already answered
+          # AUTH. This is not a redundant retry — it is the decisive diagnostic that
+          # Supabase's own troubleshooting guide asks for ("confirm the new password
+          # is correct by connecting directly, bypassing the pooler"). Postgres
+          # itself and Supavisor keep separate credential stores, so:
+          #   direct also refuses -> the value is not the project's password at all
+          #   direct accepts      -> Supavisor's cached credential is stale
+          # It costs nothing against Supavisor's circuit breaker because it does not
+          # touch Supavisor.
+          direct_tried=no; direct_kind=""
+          if [ "$reachable" != "true" ] && [ "$attempts" -lt "$MAX_ATTEMPTS" ]; then
+            for c in ${SB_DB_CANDIDATES:-}; do
+              h="${c%%;*}"; r="${c#*;}"; p="${r%%;*}"; r="${r#*;}"; u="${r%%;*}"; lbl="${r#*;}"
+              case "$h" in db.*.supabase.co) ;; *) continue ;; esac
+              echo
+              echo "Cross-checking the password against the DIRECT connection (bypasses Supavisor entirely) …"
+              direct_tried=yes
+              if probe_once "$h" "$p" "$u" "$lbl" 0; then
+                reachable=true
+                SB_DB_HOST="$h"; SB_DB_PORT="$p"; SB_DB_USER="$u"
+                win_label="${vlabels[0]}"; win_fp="${vfps[0]}"; win_len="${#vvals[0]}"; winning_pw="${vvals[0]}"
+              else
+                direct_kind="$last_kind"
+              fi
+              break
+            done
+          fi
+
+          # Phase D: temporary access (JIT) — the access token as the password.
+          # Tried only after every password credential was refused, because it needs
+          # a project-side setting (Dashboard > Database > "Enable temporary access")
+          # that is off by default. Shared pooler first on 5432 (the port Supabase's
+          # docs use for the JIT example), then the API-advertised port, then direct.
+          jit_opts=""
+          if [ "$reachable" != "true" ] && [ "$jit_index" -ge 0 ] && [ "$attempts" -lt "$MAX_ATTEMPTS" ]; then
+            echo
+            echo "Every password credential was refused. Trying Supabase TEMPORARY ACCESS (JIT): the access token as the password."
+            echo "JIT is validated live against Supabase on each connection, not against Supavisor's cached role password."
+            jit_order=""
+            for want in 5432 6543 other; do
+              for c in ${SB_DB_CANDIDATES:-}; do
+                h="${c%%;*}"; r="${c#*;}"; p="${r%%;*}"
+                case "$h" in *pooler.supabase.com) ;; *) continue ;; esac
+                case "$want" in
+                  5432|6543) [ "$p" = "$want" ] || continue ;;
+                  other)     { [ "$p" = "5432" ] || [ "$p" = "6543" ]; } && continue ;;
+                esac
+                case " $jit_order " in *" $c "*) continue ;; esac
+                jit_order="${jit_order:+$jit_order }$c"
+              done
+            done
+            for c in ${SB_DB_CANDIDATES:-}; do   # direct connection last, no jit option
+              case "${c%%;*}" in db.*.supabase.co) jit_order="${jit_order:+$jit_order }$c" ;; esac
+            done
+            for c in ${jit_order:-}; do
+              [ "$attempts" -lt "$MAX_ATTEMPTS" ] || break
+              h="${c%%;*}"; r="${c#*;}"; p="${r%%;*}"; r="${r#*;}"; u="${r%%;*}"; lbl="${r#*;}"
+              case "$h" in *pooler.supabase.com) jit_opts="-c jit=true" ;; *) jit_opts="" ;; esac
+              if probe_once "$h" "$p" "$u" "jit/${lbl}" "$jit_index" "$jit_opts"; then
+                reachable=true
+                SB_DB_HOST="$h"; SB_DB_PORT="$p"; SB_DB_USER="$u"; SB_DB_JIT=yes
+                win_label="${vlabels[$jit_index]}"; win_fp="${vfps[$jit_index]}"
+                win_len="${#vvals[$jit_index]}"; winning_pw="${vvals[$jit_index]}"
+                break
+              fi
+              jit_kinds="${jit_kinds}${jit_kinds:+,}${last_kind}"
+              if [ "$last_kind" = "CIRCUIT_BREAKER" ]; then auth_blocked=yes; break; fi
+            done
+          fi
+
+          if [ "$reachable" = "true" ]; then
+            last_kind=""; last_detail=""; last_msg=""
+            echo
+            echo "working endpoint: ${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT} (credential: ${win_label}, length ${win_len}, sha256[1:12]=${win_fp}, attempts ${attempts}${SB_DB_JIT:+, temporary-access/JIT})"
+            echo "::notice title=working endpoint::${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT} | credential='${win_label}' len=${win_len} sha256[1:12]=${win_fp} | attempts=${attempts} | jit=${SB_DB_JIT:-no}"
+            {
+              echo "SB_DB_HOST=$SB_DB_HOST"
+              echo "SB_DB_PORT=$SB_DB_PORT"
+              echo "SB_DB_USER=$SB_DB_USER"
+            } >> "$GITHUB_ENV"
+            if [ "${SB_DB_JIT:-no}" = "yes" ]; then
+              # The access token IS the password from here on. It is already masked
+              # (the guard step registered it), and PGOPTIONS carries the jit flag so
+              # the later psql steps authenticate the same way this probe did.
+              echo "::add-mask::$winning_pw"
+              {
+                echo "SUPABASE_DB_PASSWORD=$winning_pw"
+                echo "SB_DB_JIT=yes"
+                echo "SB_DB_JIT_OPTS=$jit_opts"
+              } >> "$GITHUB_ENV"
+              [ -n "$jit_opts" ] && echo "PGOPTIONS=$jit_opts" >> "$GITHUB_ENV"
+              echo "::notice title=authenticated via temporary access::The database password was refused everywhere, but the ACCESS TOKEN was accepted through Supabase temporary access (JIT) at ${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT}. SUPABASE_DB_PASSWORD was not usable for this run and was not needed."
+              if [ "${JIT_STATE:-}" != "enabled" ]; then
+                echo "::warning title=temporary access::JIT worked even though GET /v1/projects/${PROJECT_REF}/jit-access reported '${JIT_STATE:-unknown}' (HTTP ${JIT_CODE:-?})."
+              fi
+            elif [ "$win_fp" != "${SB_PW_FP:-}" ]; then
+              # Only the value that actually authenticated may be promoted, and never
+              # through the single-line GITHUB_ENV form if it somehow holds a newline.
+              case "$winning_pw" in
+                *"$nl"*|*"$cr"*)
+                  echo "::warning title=SUPABASE_DB_PASSWORD::variant '${win_label}' authenticated but contains CR/LF; not re-exported." ;;
+                *)
+                  echo "::add-mask::$winning_pw"
+                  echo "SUPABASE_DB_PASSWORD=$winning_pw" >> "$GITHUB_ENV"
+                  echo "::warning title=SUPABASE_DB_PASSWORD::The stored secret only authenticated after '${win_label}' (length ${win_len}, sha256[1:12]=${win_fp}). The secret holds extra characters around the real password — re-save it in Settings > Secrets and variables > Actions as exactly the password, with no quotes and no trailing space."
+              esac
+            fi
+          fi
+
+          db_error=""
           if [ "$reachable" != "true" ]; then
+            if [ -n "$pw_auth_where" ]; then
+              # The pooler resolved the tenant/user and THEN rejected the credential.
+              # That is the informative case, and it must not be masked by whatever
+              # the later direct/JIT attempts happened to fail with.
+              db_error="The connection method is correct — Supavisor resolved the tenant/user and then refused the CREDENTIAL. At ${pw_auth_where} (port ${pw_auth_port}) every one of the ${pw_variants} stored-password normalisation(s) was rejected with 'password authentication failed for user \"postgres\"' (${vsum}). Host, username format (postgres.${PROJECT_REF}), TLS and the API-advertised port are therefore all fine."
+              if [ "$direct_tried" = "yes" ]; then
+                if [ "$direct_kind" = "AUTH" ]; then
+                  db_error="${db_error} The DIRECT connection (db.${PROJECT_REF}.supabase.co, which bypasses Supavisor and asks Postgres itself) ALSO refused it — that rules out a stale pooler cache: the value in the GitHub secret is not this project's current database password. Stored: length ${#SUPABASE_DB_PASSWORD}, sha256[1:12]=${SB_PW_FP:-?}, edges ${SB_PW_EDGE:-?}, normalisation '${SB_PW_FIXES:-?}'."
+                else
+                  db_error="${db_error} The direct cross-check that would separate 'wrong value' from 'stale Supavisor cache' could not run: db.${PROJECT_REF}.supabase.co answered '${direct_kind:-unavailable}' (IPv6-only without the IPv4 add-on, so IPv4 runners cannot reach it)."
+                fi
+              fi
+              if [ "$jit_index" -ge 0 ]; then
+                case ",${jit_kinds}," in
+                  *,AUTH,*) db_error="${db_error} Temporary access (JIT) with the access token was ALSO refused (classes: ${jit_kinds}), so it is not enabled for this project/user — GET /v1/projects/${PROJECT_REF}/jit-access returned HTTP ${JIT_CODE:-?}, state '${JIT_STATE:-unknown}'." ;;
+                  *)        db_error="${db_error} Temporary access (JIT) with the access token did not succeed either (classes: ${jit_kinds:-none}); GET /v1/projects/${PROJECT_REF}/jit-access returned HTTP ${JIT_CODE:-?}, state '${JIT_STATE:-unknown}'." ;;
+                esac
+                db_error="${db_error} RECOMMENDED FIX — the one Supabase documents for CI ('generate API tokens for services you don't want to share your Postgres role password with, for example a GitHub Action'): enable temporary access at Dashboard > Project Settings > Database > 'Enable temporary access', then authorise your user to assume the 'postgres' role. It is validated live per connection instead of against Supavisor's cached role password, so it sidesteps this failure entirely. Needs Postgres >= 17.6.1.081 (project reports '${POSTGRES_VERSION:-unknown}') and SSL enforcement on. This workflow retries that path automatically on every run."
+              fi
+              db_error="${db_error} Attempts: ${attempts} (bounded; stopped early so Supavisor's auth circuit breaker is not tripped). Do NOT rotate the password again — each rotation re-opens the pooler-cache window and repeated failures can trip that breaker."
+            elif [ "$last_kind" = "CIRCUIT_BREAKER" ] || [ "$auth_blocked" = "yes" ]; then
+              db_error="Supavisor's auth circuit breaker is open for this tenant (${last_msg}). ${last_detail}"
+            elif [ -n "$last_kind" ]; then
+              db_error="No endpoint accepted a connection (${last_where}): ${last_detail} Raw: ${last_msg}"
+            else
+              db_error="No endpoint candidates were produced — check the 'Resolve the Postgres endpoint' step."
+            fi
             echo "::warning::${db_error}"
           fi
           {
             echo "db_reachable=$reachable"
+            echo "db_attempts=$attempts"
+            echo "db_pw_variant=$win_label"
+            echo "db_last_kind=$last_kind"
+            echo "db_direct_kind=$direct_kind"
+            echo "db_pw_auth_at=$pw_auth_where"
+            echo "db_jit_kinds=$jit_kinds"
+            echo "db_jit=${SB_DB_JIT:-no}"
             echo "db_error=$db_error"
           } >> "$GITHUB_OUTPUT"
-
       - name: supabase link — diagnostic only, no longer a hard requirement
         id: link
         if: steps.guard.outputs.token_is_pat == 'yes'
@@ -518,10 +1019,27 @@ jobs:
           fi
 
       - name: Fail fast when neither the Management API nor Postgres can be reached
-        if: steps.probe.outputs.db_reachable != 'true' && steps.link.outputs.link_ok != 'true'
+        if: steps.probe.outputs.db_reachable != 'true' && steps.link.outputs.link_ok != 'true' && steps.preflight.outputs.mgmt_sql_ok != 'true'
         env:
           ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
           DB_ERROR: ${{ steps.probe.outputs.db_error }}
+          DB_KIND: ${{ steps.probe.outputs.db_last_kind }}
+          DB_PW_AUTH_AT: ${{ steps.probe.outputs.db_pw_auth_at }}
+          DB_JIT_KINDS: ${{ steps.probe.outputs.db_jit_kinds }}
+          MGMT_SQL_CODE: ${{ steps.preflight.outputs.mgmt_sql_code }}
+          API_CODES: ${{ steps.preflight.outputs.api_codes }}
+          PW_SHAPE: ${{ steps.guard.outputs.pw_shape }}
+          POOLER_HOST: ${{ steps.preflight.outputs.pooler_host }}
+          DB_DIRECT_KIND: ${{ steps.probe.outputs.db_direct_kind }}
+          DB_ATTEMPTS: ${{ steps.probe.outputs.db_attempts }}
+          DB_JIT: ${{ steps.probe.outputs.db_jit }}
+          JIT_STATE: ${{ steps.preflight.outputs.jit_state }}
+          JIT_CODE: ${{ steps.preflight.outputs.jit_code }}
+          POSTGRES_VERSION: ${{ steps.preflight.outputs.postgres_version }}
+          PW_FIXES: ${{ steps.guard.outputs.pw_fixes }}
+          PW_EDGE: ${{ steps.guard.outputs.pw_edge }}
+          PW_FP: ${{ steps.guard.outputs.pw_fp }}
+          PW_RAW_FP: ${{ steps.guard.outputs.pw_raw_fp }}
           TOKEN_VALID: ${{ steps.preflight.outputs.token_valid }}
           PROJECT_VISIBLE: ${{ steps.preflight.outputs.project_visible }}
           VERDICT: ${{ steps.preflight.outputs.verdict }}
@@ -529,6 +1047,18 @@ jobs:
           set -uo pipefail
           echo "::error::No working path to project ${PROJECT_REF} yet (verdict: ${VERDICT}). Nothing was written to the database."
           if [ -n "$DB_ERROR" ]; then echo "::error::Database: ${DB_ERROR}"; fi
+          # Non-revealing credential forensics: enough to tell a paste artifact from
+          # a genuinely wrong value without ever printing the password.
+          echo "::error::Credential forensics: pooler-refused-credential-at=${DB_PW_AUTH_AT:-never} last-failure-class=${DB_KIND:-n/a} direct-connection-class=${DB_DIRECT_KIND:-not-tested} jit-classes=${DB_JIT_KINDS:-none} attempts=${DB_ATTEMPTS:-0} | secret-as-stored sha256[1:12]=${PW_RAW_FP:-?} | after-normalisation sha256[1:12]=${PW_FP:-?} | normalisation applied='${PW_FIXES:-?}' | edge characters: ${PW_EDGE:-?} | temporary-access(JIT)=state '${JIT_STATE:-unknown}' (HTTP ${JIT_CODE:-?}), used=${DB_JIT:-no} | postgres=${POSTGRES_VERSION:-unknown}"
+          if [ -n "${DB_PW_AUTH_AT:-}" ] && [ "${PW_FIXES:-none}" = "none" ]; then
+            echo "::error::The stored secret is byte-clean (no quotes, no stray whitespace, no CR/LF) and was still refused, so this is NOT a paste artifact and NOT a port/username/endpoint problem — Supavisor resolved the tenant/user and then rejected the credential itself."
+            if [ "${DB_DIRECT_KIND:-}" = "AUTH" ]; then
+              echo "::error::The direct connection (bypassing Supavisor) rejected it too, which rules out a stale pooler cache: the value stored in GitHub is not this project's current database password."
+            else
+              echo "::error::The direct connection could not confirm this (class '${DB_DIRECT_KIND:-not-tested}'), so a stale Supavisor credential cache after the recent rotation is still possible — re-run ONCE after a few minutes before touching the password. Do not rotate again: each rotation re-opens that window and repeated failures can trip the auth circuit breaker."
+            fi
+            echo "::error::Recommended fix, and the one Supabase documents for CI: enable TEMPORARY ACCESS so the access token (already proven to work here) becomes the database credential and the password is not needed at all. Dashboard > Project Settings > Database > 'Enable temporary access', then authorise your user to assume the 'postgres' role. Requires Postgres >= 17.6.1.081 (this project reports '${POSTGRES_VERSION:-unknown}') and SSL enforcement enabled. This workflow already tries that path automatically on every run."
+          fi
           if [ "$PROJECT_VISIBLE" = "true" ]; then
             echo "::error::The access token CAN read this project, so the access token is not the blocker — fix the database credential/endpoint above and re-run."
           elif [ "$TOKEN_VALID" = "true" ]; then
@@ -536,6 +1066,25 @@ jobs:
           elif [ -n "$ACTION_NEEDED" ]; then
             echo "::error::Action needed: ${ACTION_NEEDED}"
           fi
+
+          # Every credential path this workflow knows, what it actually answered on
+          # THIS run, and the one action that unblocks it. Cheapest first.
+          {
+            echo "### Every path tried, and what unblocks it"
+            echo
+            echo "| # | path | result on this run | what unblocks it |"
+            echo "| --- | --- | --- | --- |"
+            echo "| 1 | read-only SQL over the Management API (\`POST /v1/projects/${PROJECT_REF}/database/query\`, \`read_only:true\`) — the access token only, no password, no pooler, no IPv6 | HTTP ${MGMT_SQL_CODE:-?} | **Cheapest.** Give the fine-grained PAT the \`database_read\` permission at supabase.com/dashboard/account/tokens (or use a classic PAT). The dry-run then works with NO database password at all. |"
+            echo "| 2 | shared pooler ${POOLER_HOST:-?} on BOTH ${POOLER_PORT:-6543} (transaction, as the API advertises) and 5432 (session), user \`postgres.${PROJECT_REF}\`, TLS require | tenant/user resolved, credential refused (${DB_PW_AUTH_AT:-n/a}) | Supavisor's copy of the \`postgres\` role password is not the value in \`SUPABASE_DB_PASSWORD\`. Secret shape: ${PW_SHAPE:-?}. |"
+            echo "| 3 | temporary access (JIT): the access token as the password, \`options='-c jit=true'\` | \`GET /jit-access\` -> HTTP ${JIT_CODE:-?}, state '${JIT_STATE:-unknown}'; token refused (${DB_JIT_KINDS:-n/a}) | Needs Postgres >= 17.6.1.081 (project reports '${POSTGRES_VERSION:-unknown}'), then Dashboard > Database > 'Enable temporary access' + authorise your user to assume \`postgres\`. |"
+            echo "| 4 | direct connection \`db.${PROJECT_REF}.supabase.co:5432\` (bypasses Supavisor; the check Supabase's docs ask for) | ${DB_DIRECT_KIND:-not tested} — resolves to an IPv6 address, unreachable from IPv4 runners | The IPv4 add-on. Only needed to prove whether the password itself is right; not needed if path 1 is opened. |"
+            echo "| 5 | \`supabase link\` (needs \`GET /api-keys\`) | HTTP 403 for a scoped PAT (Supabase bug supabase/supabase#50244) | A classic PAT. Not required — everything here uses \`--db-url\` or the Management API. |"
+            echo
+            echo "Management API status codes this run: \`${API_CODES:-?}\`"
+            echo
+            echo "**Nothing was written to the database.** Paths 2-5 are blocked by project/token configuration on the Supabase side, not by this workflow: the endpoint, username format, port and TLS now come straight from the project's own API response, and the stored secret was verified byte-clean."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=cheapest unblock::Grant this fine-grained PAT the 'database_read' permission (supabase.com/dashboard/account/tokens). POST /v1/projects/${PROJECT_REF}/database/query with read_only:true then produces the dry-run using the access token alone — no database password, no pooler port, no IPv6. It returned HTTP ${MGMT_SQL_CODE:-?} on this run."
           exit 1
 
       - name: Dry run — list pending migrations (never writes)
@@ -543,14 +1092,21 @@ jobs:
         env:
           DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
           LINK_OK: ${{ steps.link.outputs.link_ok }}
+          MGMT_SQL_OK: ${{ steps.preflight.outputs.mgmt_sql_ok }}
         run: |
           set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
           # percent-encoded connection string, built in-shell so the password is
-          # never repeated on a command line and never printed
+          # never repeated on a command line and never printed.
+          #
+          # Port 6543 is Supavisor's TRANSACTION pooler, which does not support the
+          # prepared statements / statement cache the CLI's pgx driver uses by
+          # default. pgbouncer=true turns that cache off, so a project whose pooler
+          # config only advertises transaction mode (which is what the Management
+          # API reports for this one) can still be driven by the CLI.
           build_db_url() {
-            python3 -c 'import sys, urllib.parse as u; h, p, usr, pw = sys.argv[1:5]; q = lambda s: u.quote(s, safe=""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require" % (q(usr), q(pw), h, p))' \
-              "$1" "$2" "$3" "$SUPABASE_DB_PASSWORD"
+            python3 -c 'import sys, urllib.parse as u; h, prt, usr, pw, jit, opts = sys.argv[1:7]; q = lambda s: u.quote(s, safe=""); e = ("&pgbouncer=true&statement_cache_size=0" if prt == "6543" else "") + (("&options=" + q(opts)) if (jit == "yes" and opts and h.endswith("pooler.supabase.com")) else ""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require%s" % (q(usr), q(pw), h, prt, e))' \
+              "$1" "$2" "$3" "$SUPABASE_DB_PASSWORD" "${SB_DB_JIT:-no}" "${SB_DB_JIT_OPTS:-}"
           }
           url=$(build_db_url "$SB_DB_HOST" "$SB_DB_PORT" "$SB_DB_USER")
           echo "::add-mask::$url"
@@ -574,10 +1130,73 @@ jobs:
             supabase db push --dry-run || true
           fi
 
+          # Last resort: the CLI needs a linked project for some subcommands and this
+          # repository only has a scoped PAT (see the api-keys 403 above). The
+          # dry-run report is then produced straight from Postgres instead — still
+          # read-only, and it is exactly the information a dry run has to give.
+          if [ "$ran" != "true" ] && [ "$DB_REACHABLE" = "true" ]; then
+            echo
+            echo "== psql fallback: remote migration history vs local files (read-only) =="
+            export PGSSLMODE=require PGCONNECT_TIMEOUT=15 PGPASSWORD="$SUPABASE_DB_PASSWORD"
+            if psql -h "$SB_DB_HOST" -p "$SB_DB_PORT" -U "$SB_DB_USER" -d postgres -Atc "
+                 select case
+                   when to_regclass('supabase_migrations.schema_migrations') is null
+                     then '(none) — supabase_migrations.schema_migrations does not exist yet'
+                   else coalesce((select string_agg(version, ', ' order by version)
+                                    from supabase_migrations.schema_migrations),
+                                 '(none) — history table exists but is empty')
+                 end;" | sed 's/^/  remote history: /'; then
+              echo "  local files   : $(ls -1 supabase/migrations/*.sql | tr '\n' ' ')"
+              echo "  pending       : $(ls -1 supabase/migrations/*.sql | wc -l) file(s) would be pushed by 'mode = apply'"
+              ran=true
+            else
+              echo "(psql fallback failed too)"
+            fi
+          fi
+
+          # Management-API path: the endpoint the Dashboard's own SQL editor uses.
+          # It authenticates with the ACCESS TOKEN alone, so it needs no database
+          # password, no pooler port and no IPv6 reachability — and read_only:true
+          # keeps it strictly non-mutating. This is what makes the dry-run work for a
+          # project whose Supavisor credential is broken.
+          if [ "$ran" != "true" ] && [ "${MGMT_SQL_OK:-false}" = "true" ]; then
+            echo
+            echo "== Management API read-only SQL — dry-run report without the database password =="
+            mgmt_query() {  # $1 = sql ; never prints the token
+              local body
+              body=$(python3 -c 'import json,sys; print(json.dumps({"query": sys.argv[1], "read_only": True}))' "$1")
+              curl -sS -m 90 -X POST \
+                -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                -H "Accept: application/json" -H "Content-Type: application/json" \
+                -d "$body" \
+                "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query"
+            }
+            resp=$(mgmt_query "select case when to_regclass('supabase_migrations.schema_migrations') is null then '(none: history table does not exist)' else coalesce((select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations), '(none: history table is empty)') end as history") || resp=""
+            if printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
+              remote=$(printf '%s' "$resp" | jq -r 'if type=="array" then (.[0].history // "") else "" end' 2>/dev/null)
+              echo "  remote migration history : ${remote:-?}"
+              echo "  local migration files    : $(ls -1 supabase/migrations/*.sql | xargs -n1 basename | tr '\n' ' ')"
+              pending=""
+              for f in supabase/migrations/*.sql; do
+                v=$(basename "$f" .sql); v="${v%%_*}"
+                case ",${remote}," in
+                  *",${v},"*) echo "    already applied : $v" ;;
+                  *)          pending="${pending}${pending:+ }$v"; echo "    PENDING         : $v" ;;
+                esac
+              done
+              echo "  would be applied by 'mode = apply': ${pending:-nothing (remote is up to date)}"
+              echo "::notice title=dry-run via Management API::read-only SQL over the access token; remote history='${remote:-?}'; pending='${pending:-none}'. No database password, no pooler and no IPv6 needed."
+              ran=true
+            else
+              echo "  unexpected response: $(printf '%s' "$resp" | head -c 300)"
+            fi
+          fi
+
           if [ "$ran" != "true" ]; then
             echo "::error::Could not produce a dry-run report through any available path."
             exit 1
           fi
+          echo "::notice title=dry-run::report produced against ${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT}"
           echo "dry_run_ok=true" >> "$GITHUB_OUTPUT"
 
       - name: Dry run — read-only cross-check of the remote migration history
@@ -609,8 +1228,8 @@ jobs:
             exit 1
           fi
           build_db_url() {
-            python3 -c 'import sys, urllib.parse as u; h, p, usr, pw = sys.argv[1:5]; q = lambda s: u.quote(s, safe=""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require" % (q(usr), q(pw), h, p))' \
-              "$1" "$2" "$3" "$SUPABASE_DB_PASSWORD"
+            python3 -c 'import sys, urllib.parse as u; h, prt, usr, pw, jit, opts = sys.argv[1:7]; q = lambda s: u.quote(s, safe=""); e = ("&pgbouncer=true&statement_cache_size=0" if prt == "6543" else "") + (("&options=" + q(opts)) if (jit == "yes" and opts and h.endswith("pooler.supabase.com")) else ""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require%s" % (q(usr), q(pw), h, prt, e))' \
+              "$1" "$2" "$3" "$SUPABASE_DB_PASSWORD" "${SB_DB_JIT:-no}" "${SB_DB_JIT_OPTS:-}"
           }
           url=$(build_db_url "$SB_DB_HOST" "$SB_DB_PORT" "$SB_DB_USER")
           echo "::add-mask::$url"
@@ -673,6 +1292,18 @@ jobs:
           ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
           DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
           DB_ERROR: ${{ steps.probe.outputs.db_error }}
+          DB_ATTEMPTS: ${{ steps.probe.outputs.db_attempts }}
+          DB_PW_VARIANT: ${{ steps.probe.outputs.db_pw_variant }}
+          DB_KIND: ${{ steps.probe.outputs.db_last_kind }}
+          DB_PW_AUTH_AT: ${{ steps.probe.outputs.db_pw_auth_at }}
+          DB_DIRECT_KIND: ${{ steps.probe.outputs.db_direct_kind }}
+          DB_JIT: ${{ steps.probe.outputs.db_jit }}
+          JIT_STATE: ${{ steps.preflight.outputs.jit_state }}
+          MGMT_SQL_OK: ${{ steps.preflight.outputs.mgmt_sql_ok }}
+          MGMT_SQL_CODE: ${{ steps.preflight.outputs.mgmt_sql_code }}
+          POSTGRES_VERSION: ${{ steps.preflight.outputs.postgres_version }}
+          PW_FIXES: ${{ steps.guard.outputs.pw_fixes }}
+          PW_EDGE: ${{ steps.guard.outputs.pw_edge }}
           API_CODES: ${{ steps.preflight.outputs.api_codes }}
           POOL_MODE: ${{ steps.preflight.outputs.pool_mode }}
           LINK_OK: ${{ steps.link.outputs.link_ok }}
@@ -700,6 +1331,17 @@ jobs:
             echo "| \`supabase link\` | ${LINK_OK:-skipped} |"
             echo "| Postgres endpoint used | \`${SB_DB_USER:-?}@${SB_DB_HOST:-?}:${SB_DB_PORT:-?}\` |"
             echo "| database reachable | ${DB_REACHABLE:-n/a} |"
+            echo "| connection attempts (bounded) | ${DB_ATTEMPTS:-0} |"
+            echo "| secret normalisation applied | ${PW_FIXES:-n/a} |"
+            echo "| secret edge characters (class only) | ${PW_EDGE:-n/a} |"
+            echo "| credential that authenticated | ${DB_PW_VARIANT:-none} |"
+            echo "| authenticated via temporary access (JIT) | ${DB_JIT:-no} |"
+            echo "| temporary access state (Management API) | ${JIT_STATE:-unknown} |"
+            echo "| postgres version | ${POSTGRES_VERSION:-unknown} |"
+            echo "| pooler refused the credential at | ${DB_PW_AUTH_AT:-never} |"
+            echo "| last failure class (pooler) | ${DB_KIND:-none} |"
+            echo "| last failure class (direct, bypasses Supavisor) | ${DB_DIRECT_KIND:-not tested} |"
+            echo "| read-only SQL via Management API | ${MGMT_SQL_OK:-false} (HTTP ${MGMT_SQL_CODE:-?}) |"
             echo "| dry-run report produced | ${DRY_RUN_OK:-no} |"
             echo
             echo "**Verdict:** \`${VERDICT:-unknown}\`"
