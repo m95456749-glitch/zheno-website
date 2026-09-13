@@ -6,6 +6,9 @@ name: Supabase JIT readonly check (manual)
 # Does NOT authorize any role, does NOT run migrations, does NOT modify frontend/schema
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-readonly-check.yml"
   workflow_dispatch:
     inputs:
       project_ref:
