@@ -144,6 +144,7 @@ jobs:
           jit_state=$(printf '%s' "$body" | jq -r '(.state // (if .enabled == true then "enabled" elif .enabled == false then "disabled" else empty end) // empty)' 2>/dev/null || echo "")
           echo "    body: $(printf '%s' "$body" | jq -c 'if type=="object" then del(.users) else . end' 2>/dev/null | head -c 500)"
           echo "    state: ${jit_state:-unknown}"
+          echo "::notice title=initial jit state::HTTP $code state=${jit_state:-unknown} body=$(printf '%s' "$body" | jq -c 'if type=="object" then del(.users) else . end' 2>/dev/null | head -c 200)"
           if [ "$code" = "200" ]; then
             jit_read=true
           else
