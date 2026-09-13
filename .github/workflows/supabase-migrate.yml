@@ -20,6 +20,13 @@ name: Supabase migrate (manual)
 #      depends on (open Supabase bug supabase/supabase#50244, reported
 #      2026-09-10). All migration commands therefore run against an explicit
 #      percent-encoded Postgres URL (--db-url), which needs no link at all.
+#   4. The Postgres endpoint is READ from
+#      GET /v1/projects/{ref}/config/database/pooler (the PRIMARY entry, exactly
+#      like the CLI does when linking) instead of being composed from the region:
+#      aws-0-{region}.pooler.supabase.com is not universal and answering
+#      "FATAL: (ENOTFOUND) tenant/user postgres.{ref} not found" means the project
+#      lives on a different Supavisor cluster. db.{ref}.supabase.co is IPv6-only
+#      unless the project has the IPv4 add-on, so IPv4 runners cannot use it.
 
 on:
   # A pull request that touches this workflow or the SQL files runs the SAME job in
@@ -243,13 +250,41 @@ jobs:
           fi
 
           echo
-          echo "== 4/4  The endpoint 'supabase link' depends on =="
+          echo "== 4/5  The endpoint 'supabase link' depends on =="
           api_get "/v1/projects/${ref}/api-keys?reveal=false"
           akeys_code="$CODE"
           echo "::notice title=api /v1/projects/{ref}/api-keys::HTTP ${akeys_code}"
           link_api_ok=false
           case "$akeys_code" in 2*) link_api_ok=true ;; esac
           echo "GET /v1/projects/${ref}/api-keys -> HTTP ${akeys_code}"
+
+          echo
+          echo "== 5/5  The project's REAL pooler connection (read, never templated) =="
+          api_get "/v1/projects/${ref}/config/database/pooler"
+          pooler_code="$CODE"; pooler_body="$BODY"
+          echo "GET /v1/projects/${ref}/config/database/pooler -> HTTP ${pooler_code}"
+          echo "::notice title=api pooler-config::HTTP ${pooler_code}"
+          pooler_host=""; pooler_port=""; pooler_user=""; pool_mode=""
+          if [ "$pooler_code" = "200" ]; then
+            # array with one entry per database; the CLI uses the PRIMARY one
+            entry=$(printf '%s' "$pooler_body" | jq -c 'if type=="array" then (map(select((.database_type // "")=="PRIMARY"))[0] // .[0]) else . end' 2>/dev/null) || entry=""
+            if [ -n "$entry" ] && [ "$entry" != "null" ]; then
+              pooler_host=$(printf '%s' "$entry" | jq -r '.db_host // empty' 2>/dev/null) || pooler_host=""
+              pooler_port=$(printf '%s' "$entry" | jq -r '.db_port // empty' 2>/dev/null) || pooler_port=""
+              pooler_user=$(printf '%s' "$entry" | jq -r '.db_user // empty' 2>/dev/null) || pooler_user=""
+              pool_mode=$(printf '%s' "$entry" | jq -r '(.pool_mode // .db_pool_mode // empty)' 2>/dev/null) || pool_mode=""
+              echo "pooler PRIMARY: ${pooler_user:-?}@${pooler_host:-?}:${pooler_port:-?}  pool_mode=${pool_mode:-?}"
+              echo "::notice title=pooler PRIMARY::${pooler_user:-?}@${pooler_host:-?}:${pooler_port:-?} pool_mode=${pool_mode:-?}"
+              printf '%s' "$pooler_body" | jq -c 'if type=="array" then map({database_type, db_host, db_port, db_user, pool_mode}) else . end' 2>/dev/null | sed 's/^/  entries: /'
+            else
+              echo "  no usable entry in the response"
+            fi
+          else
+            printf '%s' "$pooler_body" | head -c 300; echo
+          fi
+          if [ -z "$pooler_host" ]; then
+            echo "::warning::The pooler host could not be read (HTTP ${pooler_code}). Pass it manually: Dashboard > Connect > Session pooler, then run this workflow with db_host/db_port."
+          fi
 
           # ---- verdict ------------------------------------------------------
           verdict=ok
@@ -306,6 +341,11 @@ jobs:
             echo "region=$region"
             echo "link_api_ok=$link_api_ok"
             echo "ref_exists=$ref_exists"
+            echo "pooler_host=$pooler_host"
+            echo "pooler_port=$pooler_port"
+            echo "pooler_user=$pooler_user"
+            echo "pool_mode=$pool_mode"
+            echo "api_codes=projects:${projects_code} project:${proj_code} api-keys:${akeys_code} pooler:${pooler_code} rest:${rest}"
             echo "verdict=$verdict"
             echo "manual_action=$action"
           } >> "$GITHUB_OUTPUT"
@@ -316,24 +356,30 @@ jobs:
           INPUT_DB_HOST: ${{ inputs.db_host }}
           INPUT_DB_PORT: ${{ inputs.db_port }}
           PREFLIGHT_REGION: ${{ steps.preflight.outputs.region }}
+          POOLER_HOST: ${{ steps.preflight.outputs.pooler_host }}
+          POOLER_PORT: ${{ steps.preflight.outputs.pooler_port }}
+          POOLER_USER: ${{ steps.preflight.outputs.pooler_user }}
+          POOL_MODE: ${{ steps.preflight.outputs.pool_mode }}
         run: |
           set -euo pipefail
           ref="$PROJECT_REF"
           if [ -n "$INPUT_DB_HOST" ]; then
-            host="$INPUT_DB_HOST"; port="${INPUT_DB_PORT:-5432}"; why="workflow input"
-          elif [ -n "$PREFLIGHT_REGION" ]; then
-            # session-mode pooler (5432); transaction mode (6543) cannot run migrations
-            host="aws-0-${PREFLIGHT_REGION}.pooler.supabase.com"; port="${INPUT_DB_PORT:-5432}"
-            why="session pooler, region resolved through the Management API"
+            host="$INPUT_DB_HOST"; port="${INPUT_DB_PORT:-5432}"; why="workflow input (Dashboard > Connect)"
+            case "$host" in
+              *pooler.supabase.com) user="postgres.${ref}" ;;
+              *)                    user="postgres" ;;
+            esac
+          elif [ -n "$POOLER_HOST" ]; then
+            # verbatim from GET /v1/projects/{ref}/config/database/pooler (PRIMARY entry)
+            host="$POOLER_HOST"; port="${POOLER_PORT:-5432}"
+            user="${POOLER_USER:-postgres.${ref}}"
+            why="Management API pooler config (PRIMARY, pool_mode=${POOL_MODE:-?})"
           else
-            host="db.${ref}.supabase.co"; port="${INPUT_DB_PORT:-5432}"
-            why="direct connection (region unknown)"
+            host="db.${ref}.supabase.co"; port="${INPUT_DB_PORT:-5432}"; user="postgres"
+            why="direct connection (no pooler config readable; needs IPv6 or the IPv4 add-on)"
           fi
-          case "$host" in
-            *pooler.supabase.com) user="postgres.${ref}" ;;
-            *)                    user="postgres" ;;
-          esac
           echo "endpoint: ${user}@${host}:${port}/postgres   (${why})"
+          echo "::notice title=chosen endpoint::${user}@${host}:${port} (${why})"
           {
             echo "SB_DB_HOST=$host"
             echo "SB_DB_PORT=$port"
@@ -361,12 +407,16 @@ jobs:
           }
 
           cands="${SB_DB_HOST}:${SB_DB_PORT}:${SB_DB_USER}"
+          # the direct connection is IPv6-only unless the project bought the IPv4
+          # add-on, and aws-N-{region} pooler hosts are NOT universal — they are
+          # only tried as a last resort when the API gave us no pooler config.
           case "$SB_DB_HOST" in
             *pooler.supabase.com)
               cands="$cands db.${PROJECT_REF}.supabase.co:5432:postgres" ;;
             *)
               if [ -n "$PREFLIGHT_REGION" ]; then
                 cands="$cands aws-0-${PREFLIGHT_REGION}.pooler.supabase.com:5432:postgres.${PROJECT_REF}"
+                cands="$cands aws-1-${PREFLIGHT_REGION}.pooler.supabase.com:6543:postgres.${PROJECT_REF}"
               fi ;;
           esac
 
@@ -595,6 +645,8 @@ jobs:
           ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
           DB_REACHABLE: ${{ steps.probe.outputs.db_reachable }}
           DB_ERROR: ${{ steps.probe.outputs.db_error }}
+          API_CODES: ${{ steps.preflight.outputs.api_codes }}
+          POOL_MODE: ${{ steps.preflight.outputs.pool_mode }}
           LINK_OK: ${{ steps.link.outputs.link_ok }}
           DRY_RUN_OK: ${{ steps.dryrun.outputs.dry_run_ok }}
         run: |
@@ -615,6 +667,8 @@ jobs:
             echo "| project status | ${PROJECT_STATUS:-unknown} |"
             echo "| region | ${REGION:-unknown} |"
             echo "| api-keys endpoint (needed by \`supabase link\`) | ${LINK_API_OK:-n/a} |"
+            echo "| Management API status codes | ${API_CODES:-n/a} |"
+            echo "| pool_mode from the API | ${POOL_MODE:-unknown} |"
             echo "| \`supabase link\` | ${LINK_OK:-skipped} |"
             echo "| Postgres endpoint used | \`${SB_DB_USER:-?}@${SB_DB_HOST:-?}:${SB_DB_PORT:-?}\` |"
             echo "| database reachable | ${DB_REACHABLE:-n/a} |"
