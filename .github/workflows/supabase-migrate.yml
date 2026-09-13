@@ -156,7 +156,11 @@ jobs:
       - name: Install Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # Pinned on purpose: `latest` makes setup-cli resolve the newest release
+          # through the unauthenticated GitHub API and dies with
+          # "Failed to resolve latest Supabase CLI release: rate limit exceeded"
+          # (seen in run 34755552801). Bump deliberately, never implicitly.
+          version: 2.117.0
 
       - name: Record CLI version and ensure supabase/config.toml exists
         run: |
