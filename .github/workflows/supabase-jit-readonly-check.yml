@@ -61,6 +61,12 @@ name: Supabase JIT read-only diagnostic
 #   404            resource not visible inside the token's scope
 
 on:
+  # Path-filtered: this only runs when THIS file changes, which is how the
+  # diagnostic validates itself. It issues GET requests only, and fork PRs never
+  # receive repository secrets, so the token cannot leak through this trigger.
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-readonly-check.yml"
   workflow_dispatch:
     inputs:
       project_ref:
