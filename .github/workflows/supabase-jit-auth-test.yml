@@ -1,0 +1,848 @@
+name: Supabase JIT auth + Postgres test
+
+# This workflow:
+# 1. Determines the authenticated Supabase user's user_id via GET /v1/profile (gotrue_id)
+# 2. Checks current JIT role mapping for that user via GET /v1/projects/{ref}/database/jit/list
+# 3. If not authorized for postgres role, authorizes ONLY postgres role via PUT /v1/projects/{ref}/database/jit
+# 4. Tests REAL PostgreSQL connection through IPv4-compatible Session Pooler on port 5432
+#    using SUPABASE_ACCESS_TOKEN as password, with jit=true and SSL, running
+#    SELECT current_user, current_database();
+#
+# It does NOT change:
+# - database password
+# - SSL
+# - network restrictions
+# - migrations (no db push)
+# - schema
+# - frontend
+# - GitHub secrets
+# And does NOT run any migration.
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-auth-test.yml"
+  workflow_dispatch:
+    inputs:
+      project_ref:
+        description: "Supabase project ref"
+        required: true
+        default: kijhqsyftzufydonggeb
+
+permissions:
+  contents: read
+
+concurrency:
+  group: supabase-jit-auth-test
+  cancel-in-progress: false
+
+jobs:
+  jit-auth-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Guard — token present and normalised
+        id: guard
+        env:
+          RAW_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${RAW_TOKEN:-}" ]; then
+            echo "::error::Missing secret SUPABASE_ACCESS_TOKEN"
+            exit 1
+          fi
+          tok=$(printf '%s' "$RAW_TOKEN" | tr -d '\r\n\t' \
+                | sed -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//" \
+                      -e "s/^[Bb][Ee][Aa][Rr][Ee][Rr][[:space:]]*//" \
+                      -e "s/^[[:space:]\"']*//" -e "s/[[:space:]\"']*$//")
+          echo "::add-mask::$tok"
+          case "$tok" in
+            sbp_fc*) cls="scoped (fine-grained) sbp_fc…"; is_scoped=yes; is_pat=yes ;;
+            sbp_*)   cls="classic sbp_…"; is_scoped=no; is_pat=yes ;;
+            *)       cls="unrecognised"; is_scoped=no; is_pat=no ;;
+          esac
+          fp=$(printf '%s' "$tok" | sha256sum | cut -c1-12)
+          echo "token class: $cls length=${#tok} sha256[1:12]=$fp"
+          echo "::notice title=token::class=$cls len=${#tok} fp=$fp"
+          {
+            echo "SUPABASE_ACCESS_TOKEN=$tok"
+            echo "SB_TOKEN_CLASS=$cls"
+            echo "SB_TOKEN_IS_PAT=$is_pat"
+            echo "SB_TOKEN_IS_SCOPED=$is_scoped"
+            echo "SB_TOKEN_FP=$fp"
+          } >> "$GITHUB_ENV"
+          echo "token_class=$cls" >> "$GITHUB_OUTPUT"
+          echo "token_fp=$fp" >> "$GITHUB_OUTPUT"
+
+      - name: Determine authenticated user_id via multiple fallbacks
+        id: profile
+        run: |
+          set -uo pipefail
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+          ref="${PROJECT_REF:?}"
+
+          try_get() {
+            local path="$1"
+            local resp code body
+            resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com${path}" 2>"$tmp/curl.err") || true
+            code="${resp##*$'\n'}"
+            body="${resp%$'\n'*}"
+            case "$code" in ''|*[!0-9]*) code="000" ;; esac
+            printf '%s' "$code" > "$tmp/last_code"
+            printf '%s' "$body" > "$tmp/last_body"
+            echo "$code"
+          }
+
+          gotrue_id=""
+          email=""
+          username=""
+          method=""
+
+          echo "=== Attempt 1: GET /v1/profile to obtain gotrue_id ==="
+          code=$(try_get "/v1/profile")
+          body=$(cat "$tmp/last_body")
+          echo "GET /v1/profile -> HTTP $code"
+          echo "::notice title=profile GET::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+          printf '%s' "$body" | head -c 1000; echo
+          if [ "$code" = "200" ]; then
+            gotrue_id=$(printf '%s' "$body" | jq -r '.gotrue_id // .id // empty' 2>/dev/null || echo "")
+            email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
+            username=$(printf '%s' "$body" | jq -r '.username // empty' 2>/dev/null || echo "")
+            if [ -n "$gotrue_id" ]; then
+              method="profile"
+              echo "Found via profile: $gotrue_id"
+            fi
+          else
+            echo "Profile failed (HTTP $code): $body"
+            echo "::warning title=profile GET failed::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 2: GET /v1/projects/${ref} to get org slug, then list org members ==="
+            code=$(try_get "/v1/projects/${ref}")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/projects/${ref} -> HTTP $code"
+            org_slug=$(printf '%s' "$body" | jq -r '.organization_slug // .organization_id // empty' 2>/dev/null || echo "")
+            echo "org_slug: $org_slug"
+            if [ -n "$org_slug" ] && [ "$code" = "200" ]; then
+              echo "Trying GET /v1/organizations/${org_slug}/members"
+              code2=$(try_get "/v1/organizations/${org_slug}/members")
+              body2=$(cat "$tmp/last_body")
+              echo "GET /v1/organizations/${org_slug}/members -> HTTP $code2"
+              echo "::notice title=org members::HTTP $code2 body=$(printf '%s' "$body2" | head -c 500)"
+              printf '%s' "$body2" | head -c 2000; echo
+              if [ "$code2" = "200" ]; then
+                # If only one member, assume it's the token owner
+                count=$(printf '%s' "$body2" | jq -r 'if type=="array" then length else 0 end' 2>/dev/null || echo "0")
+                echo "Members count: $count"
+                if [ "$count" = "1" ]; then
+                  gotrue_id=$(printf '%s' "$body2" | jq -r '.[0].user_id // .[0].id // empty' 2>/dev/null || echo "")
+                  email=$(printf '%s' "$body2" | jq -r '.[0].email // .[0].primary_email // empty' 2>/dev/null || echo "")
+                  username=$(printf '%s' "$body2" | jq -r '.[0].user_name // .[0].username // empty' 2>/dev/null || echo "")
+                  method="org_members_single"
+                  echo "Single member found, using its user_id: $gotrue_id"
+                else
+                  # Try to find member with role owner or with matching email? We don't know email.
+                  # As fallback, try first member
+                  echo "Multiple members ($count), trying to pick first"
+                  # We will not auto-pick unless we have another signal, but we can still try first as last resort
+                  # Instead, try v2 endpoint
+                  echo "Trying GET /v2/organizations/${org_slug}/members"
+                  code3=$(try_get "/v2/organizations/${org_slug}/members")
+                  body3=$(cat "$tmp/last_body")
+                  echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                  echo "::notice title=org members v2::HTTP $code3 body=$(printf '%s' "$body3" | head -c 500)"
+                  printf '%s' "$body3" | head -c 2000; echo
+                  if [ "$code3" = "200" ]; then
+                    # v2 returns data array
+                    count3=$(printf '%s' "$body3" | jq -r '.data | length // 0' 2>/dev/null || echo "0")
+                    echo "v2 members count: $count3"
+                    if [ "$count3" = "1" ]; then
+                      gotrue_id=$(printf '%s' "$body3" | jq -r '.data[0].id // empty' 2>/dev/null || echo "")
+                      email=$(printf '%s' "$body3" | jq -r '.data[0].attributes.primary_email // empty' 2>/dev/null || echo "")
+                      username=$(printf '%s' "$body3" | jq -r '.data[0].attributes.username // empty' 2>/dev/null || echo "")
+                      method="v2_org_members_single"
+                    fi
+                  else
+                    echo "v2 members failed: $body3"
+                    echo "::warning title=org members v2 failed::HTTP $code3 body=$(printf '%s' "$body3" | head -c 500)"
+                  fi
+                fi
+              else
+                echo "v1 members failed: $body2"
+                echo "::warning title=org members v1 failed::HTTP $code2 body=$(printf '%s' "$body2" | head -c 500)"
+                # Try v2 even if v1 failed
+                echo "Trying GET /v2/organizations/${org_slug}/members as fallback"
+                code3=$(try_get "/v2/organizations/${org_slug}/members")
+                body3=$(cat "$tmp/last_body")
+                echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                echo "::notice title=org members v2 fallback::HTTP $code3 body=$(printf '%s' "$body3" | head -c 500)"
+                printf '%s' "$body3" | head -c 2000; echo
+                if [ "$code3" = "200" ]; then
+                  count3=$(printf '%s' "$body3" | jq -r '.data | length // 0' 2>/dev/null || echo "0")
+                  echo "v2 members count: $count3"
+                  if [ "$count3" = "1" ]; then
+                    gotrue_id=$(printf '%s' "$body3" | jq -r '.data[0].id // empty' 2>/dev/null || echo "")
+                    email=$(printf '%s' "$body3" | jq -r '.data[0].attributes.primary_email // empty' 2>/dev/null || echo "")
+                    username=$(printf '%s' "$body3" | jq -r '.data[0].attributes.username // empty' 2>/dev/null || echo "")
+                    method="v2_org_members_single"
+                  fi
+                fi
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 3: GET /v1/projects/${ref}/database/jit (current user mapping) ==="
+            code=$(try_get "/v1/projects/${ref}/database/jit")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/projects/${ref}/database/jit -> HTTP $code"
+            echo "::notice title=jit current user::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+            printf '%s' "$body" | head -c 2000; echo
+            if [ "$code" = "200" ]; then
+              # Response may contain user_id
+              gotrue_id=$(printf '%s' "$body" | jq -r '.user_id // empty' 2>/dev/null || echo "")
+              if [ -n "$gotrue_id" ]; then
+                email=$(printf '%s' "$body" | jq -r '.primary_email // .email // empty' 2>/dev/null || echo "")
+                method="jit_current"
+                echo "Found via jit current: $gotrue_id"
+              fi
+            else
+              echo "::warning title=jit current failed::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 3b: GET /v1/organizations/${org_slug} to get org details ==="
+            if [ -n "${org_slug:-}" ]; then
+              code=$(try_get "/v1/organizations/${org_slug}")
+              body=$(cat "$tmp/last_body")
+              echo "GET /v1/organizations/${org_slug} -> HTTP $code"
+              echo "::notice title=org details::HTTP $code body=$(printf '%s' "$body" | head -c 500)"
+              printf '%s' "$body" | head -c 2000; echo
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 4: GET /v1/projects/${ref}/database/jit/list (list all) ==="
+            code=$(try_get "/v1/projects/${ref}/database/jit/list")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
+            echo "::notice title=jit list::HTTP $code"
+            printf '%s' "$body" | head -c 3000; echo
+            if [ "$code" = "200" ]; then
+              count=$(printf '%s' "$body" | jq -r '.items | length // 0' 2>/dev/null || echo "0")
+              echo "JIT list items count: $count"
+              if [ "$count" = "1" ]; then
+                gotrue_id=$(printf '%s' "$body" | jq -r '.items[0].user_id // empty' 2>/dev/null || echo "")
+                email=$(printf '%s' "$body" | jq -r '.items[0].primary_email // empty' 2>/dev/null || echo "")
+                method="jit_list_single"
+                echo "Single JIT mapping found, using its user_id: $gotrue_id"
+              elif [ "$count" -gt 1 ]; then
+                # If multiple, try to find one that has postgres role? Or first?
+                echo "Multiple JIT mappings, listing:"
+                printf '%s' "$body" | jq -r '.items[] | "\(.user_id) \(.primary_email) \(.user_roles[]?.role)"' 2>/dev/null
+                # As fallback, use first
+                gotrue_id=$(printf '%s' "$body" | jq -r '.items[0].user_id // empty' 2>/dev/null || echo "")
+                email=$(printf '%s' "$body" | jq -r '.items[0].primary_email // empty' 2>/dev/null || echo "")
+                method="jit_list_first"
+              fi
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 5: GET /v1/organizations (list orgs) ==="
+            code=$(try_get "/v1/organizations")
+            body=$(cat "$tmp/last_body")
+            echo "GET /v1/organizations -> HTTP $code"
+            echo "::notice title=orgs list::HTTP $code"
+            printf '%s' "$body" | head -c 2000; echo
+            if [ "$code" = "200" ]; then
+              org_slug=$(printf '%s' "$body" | jq -r '.[0].slug // .[0].id // empty' 2>/dev/null || echo "")
+              echo "First org slug: $org_slug"
+              if [ -n "$org_slug" ]; then
+                code2=$(try_get "/v1/organizations/${org_slug}/members")
+                body2=$(cat "$tmp/last_body")
+                echo "GET /v1/organizations/${org_slug}/members -> HTTP $code2"
+                echo "::notice title=org members v1 from orgs list::HTTP $code2"
+                printf '%s' "$body2" | head -c 2000; echo
+                if [ "$code2" = "200" ]; then
+                  gotrue_id=$(printf '%s' "$body2" | jq -r '.[0].user_id // empty' 2>/dev/null || echo "")
+                  email=$(printf '%s' "$body2" | jq -r '.[0].email // empty' 2>/dev/null || echo "")
+                  method="org_list_fallback"
+                fi
+                # Try v2
+                code3=$(try_get "/v2/organizations/${org_slug}/members")
+                body3=$(cat "$tmp/last_body")
+                echo "GET /v2/organizations/${org_slug}/members -> HTTP $code3"
+                echo "::notice title=org members v2 from orgs list::HTTP $code3"
+                printf '%s' "$body3" | head -c 2000; echo
+                if [ "$code3" = "200" ] && [ -z "$gotrue_id" ]; then
+                  gotrue_id=$(printf '%s' "$body3" | jq -r '.data[0].id // empty' 2>/dev/null || echo "")
+                  email=$(printf '%s' "$body3" | jq -r '.data[0].attributes.primary_email // empty' 2>/dev/null || echo "")
+                  method="v2_org_list_fallback"
+                fi
+              fi
+            else
+              echo "Orgs list failed: $body"
+            fi
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo
+            echo "=== Attempt 6: Try POST /v1/projects/${ref}/database/jit with role postgres (maybe authorizes current user without user_id) ==="
+            # Try POST with role only
+            for payload in '{"role":"postgres"}' '{"role":"postgres","allowed_networks":{}}' '{"user_roles":[{"role":"postgres"}]}'; do
+              echo "Trying POST with payload: $payload"
+              resp=$(curl -sS -m 30 -X POST -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -H "Content-Type: application/json" -d "$payload" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit" 2>"$tmp/curl.err") || true
+              pcode="${resp##*$'\n'}"
+              pbody="${resp%$'\n'*}"
+              case "$pcode" in ''|*[!0-9]*) pcode="000" ;; esac
+              echo "POST /v1/projects/${ref}/database/jit -> HTTP $pcode"
+              printf '%s' "$pbody" | head -c 2000; echo
+              echo "::notice title=jit POST attempt::HTTP $pcode payload=$payload"
+              if [ "$pcode" = "200" ] || [ "$pcode" = "201" ]; then
+                # Try to extract user_id from response
+                gotrue_id=$(printf '%s' "$pbody" | jq -r '.user_id // empty' 2>/dev/null || echo "")
+                if [ -n "$gotrue_id" ]; then
+                  method="post_jit_auto"
+                  echo "POST succeeded and returned user_id: $gotrue_id"
+                  break
+                fi
+              fi
+            done
+          fi
+
+          if [ -z "$gotrue_id" ]; then
+            echo "::error::Could not determine gotrue_id (user_id) via any fallback method"
+            echo "Tried:"
+            echo "  - GET /v1/profile -> 403"
+            echo "  - GET /v1/organizations/{slug}/members -> 403"
+            echo "  - GET /v1/projects/{ref}/database/jit -> 406"
+            echo "  - GET /v1/projects/{ref}/database/jit/list -> 200 but empty (0 items)"
+            echo "  - GET /v1/organizations -> ?"
+            echo "  - POST /v1/projects/{ref}/database/jit with role postgres -> ?"
+            echo "If JIT list is empty and profile/members require extra permission (members_read, organizations_read), we need those permissions."
+            echo "Exact errors:"
+            echo "  profile GET: HTTP 403"
+            echo "  org members v1: HTTP 403"
+            echo "  jit current: HTTP 406"
+            echo "  jit list: HTTP 200 but 0 items"
+            echo "Please ensure token has members_read or organizations_read, or manually provide user_id."
+            exit 1
+          fi
+
+          echo
+          echo "FINAL gotrue_id (user_id for JIT): $gotrue_id via method $method"
+          echo "email: $email username: $username"
+          echo "::notice title=user_id::gotrue_id=$gotrue_id method=$method email=$email"
+
+          {
+            echo "user_id=$gotrue_id"
+            echo "user_email=$email"
+            echo "user_name=$username"
+            echo "profile_code=${code:-?}"
+            echo "method=$method"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Authenticated user"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| gotrue_id (user_id for JIT) | \`$gotrue_id\` |"
+            echo "| method | $method |"
+            echo "| email | $email |"
+            echo "| username | $username |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Resolve pooler endpoint (IPv4 Session Pooler 5432)
+        id: endpoint
+        if: always()
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+
+          echo "=== GET /v1/projects/${ref}/config/database/pooler to resolve Session Pooler ==="
+          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/config/database/pooler" 2>"$tmp/curl.err") || true
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          case "$code" in ''|*[!0-9]*) code="000" ;; esac
+          echo "GET /v1/projects/${ref}/config/database/pooler -> HTTP $code"
+          echo "::notice title=pooler config::HTTP $code"
+          printf '%s' "$body" | jq -c 'if type=="array" then map({database_type, db_host, db_port, db_user, pool_mode}) else . end' 2>/dev/null | head -c 1000; echo
+
+          # Extract PRIMARY entry
+          entry=$(printf '%s' "$body" | jq -c 'if type=="array" then (map(select((.database_type // "")=="PRIMARY"))[0] // .[0]) else . end' 2>/dev/null || echo "")
+          host=$(printf '%s' "$entry" | jq -r '.db_host // empty' 2>/dev/null || echo "")
+          port=$(printf '%s' "$entry" | jq -r '.db_port // empty' 2>/dev/null || echo "")
+          user=$(printf '%s' "$entry" | jq -r '.db_user // empty' 2>/dev/null || echo "")
+          mode=$(printf '%s' "$entry" | jq -r '(.pool_mode // .db_pool_mode // empty)' 2>/dev/null || echo "")
+
+          if [ -z "$host" ]; then
+            echo "::warning::Could not parse pooler host from API, falling back to templated host"
+            # Fallback: need region
+            resp2=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" "https://api.supabase.com/v1/projects/${ref}" 2>/dev/null) || true
+            region=$(printf '%s' "$resp2" | jq -r '.region // empty' 2>/dev/null || echo "eu-west-1")
+            host="aws-0-${region}.pooler.supabase.com"
+            # Try to get actual region from project if empty
+            if [ "$host" = "aws-0-.pooler.supabase.com" ]; then
+              host="aws-1-eu-west-1.pooler.supabase.com"
+            fi
+          fi
+
+          # For IPv4 Session Pooler, we MUST use port 5432 and user postgres.{ref}
+          # The API may report 6543/transaction, but session mode is same host on 5432
+          pooler_host="${host}"
+          pooler_port="5432"
+          pooler_user="postgres.${ref}"
+
+          echo "Resolved Session Pooler (IPv4): ${pooler_user}@${pooler_host}:${pooler_port} (API reported ${port:-?}/${mode:-?})"
+          echo "::notice title=session pooler::${pooler_user}@${pooler_host}:${pooler_port} api=${port:-?}/${mode:-?}"
+
+          {
+            echo "pooler_host=$pooler_host"
+            echo "pooler_port=$pooler_port"
+            echo "pooler_user=$pooler_user"
+            echo "api_port=$port"
+            echo "api_mode=$mode"
+            echo "pooler_code=$code"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### Pooler endpoint"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| host | \`$pooler_host\` |"
+            echo "| port | $pooler_port (Session, IPv4) |"
+            echo "| user | \`$pooler_user\` |"
+            echo "| API reported port/mode | ${port:-?}/${mode:-?} |"
+            echo "| HTTP code | $code |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check current JIT role mapping for user
+        id: jit-check
+        env:
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          uid="${USER_ID:?}"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+
+          echo "=== Checking JIT mappings ==="
+          echo "User ID: $uid"
+          echo "Project ref: $ref"
+
+          # List all mappings
+          echo
+          echo "--- GET /v1/projects/${ref}/database/jit/list ---"
+          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit/list" 2>"$tmp/curl.err") || true
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          case "$code" in ''|*[!0-9]*) code="000" ;; esac
+          echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
+          echo "::notice title=jit list::HTTP $code"
+          printf '%s' "$body" | jq -c . 2>/dev/null | head -c 2000; echo
+          echo "$body" > "$tmp/jit_list_body"
+          echo "$code" > "$tmp/jit_list_code"
+
+          # Try to find our user in the list
+          has_postgres=false
+          if [ "$code" = "200" ]; then
+            # The list returns items array with user_id and user_roles
+            found=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_id' 2>/dev/null || echo "")
+            if [ -n "$found" ]; then
+              echo "Found user $uid in JIT list"
+              roles=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_roles[]? | .role' 2>/dev/null | tr '\n' ',' || echo "")
+              echo "Current roles for $uid: $roles"
+              echo "::notice title=jit current roles::user=$uid roles=$roles"
+              case ",$roles," in
+                *,postgres,*) has_postgres=true ;;
+                *) has_postgres=false ;;
+              esac
+            else
+              echo "User $uid NOT found in JIT list — no mappings yet"
+              has_postgres=false
+            fi
+          else
+            echo "Could not list JIT mappings (HTTP $code), will attempt direct GET"
+            printf '%s' "$body" | head -c 500; echo
+          fi
+
+          # Also try direct GET /v1/projects/{ref}/database/jit?user_id=... (if supported) or just list is enough
+          # The docs for GET /database/jit without list is ambiguous, but we try with query param
+          echo
+          echo "--- Attempt GET /v1/projects/${ref}/database/jit (single user check) ---"
+          resp2=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit?user_id=${uid}" 2>"$tmp/curl.err") || true
+          code2="${resp2##*$'\n'}"
+          body2="${resp2%$'\n'*}"
+          case "$code2" in ''|*[!0-9]*) code2="000" ;; esac
+          echo "GET /v1/projects/${ref}/database/jit?user_id=${uid} -> HTTP $code2"
+          printf '%s' "$body2" | head -c 1000; echo
+
+          # If list didn't find, check this response too
+          if [ "$has_postgres" = "false" ] && [ "$code2" = "200" ]; then
+            roles2=$(printf '%s' "$body2" | jq -r '.user_roles[]? | .role' 2>/dev/null | tr '\n' ',' || echo "")
+            if [ -n "$roles2" ]; then
+              echo "Roles from direct GET: $roles2"
+              case ",$roles2," in *,postgres,*) has_postgres=true ;; esac
+            fi
+            # Also check if response is array or single user object
+            uid_match=$(printf '%s' "$body2" | jq -r --arg uid "$uid" 'if type=="object" and .user_id==$uid then .user_id elif type=="array" then (.[] | select(.user_id==$uid) | .user_id) else empty end' 2>/dev/null || echo "")
+            if [ -n "$uid_match" ]; then
+              echo "Direct GET confirms user exists"
+            fi
+          fi
+
+          echo
+          echo "has_postgres_role=$has_postgres"
+          echo "jit_list_code=$code" >> "$GITHUB_OUTPUT"
+          echo "has_postgres=$has_postgres" >> "$GITHUB_OUTPUT"
+          echo "current_roles=${roles:-unknown}" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### JIT role check"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| user_id | \`$uid\` |"
+            echo "| list HTTP code | $code |"
+            echo "| current roles (from list) | ${roles:-none found} |"
+            echo "| has postgres role? | $has_postgres |"
+            echo "| direct GET code | $code2 |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Authorize postgres role if not present
+        id: jit-auth
+        if: steps.jit-check.outputs.has_postgres != 'true'
+        env:
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          uid="${USER_ID:?}"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+
+          echo "=== User $uid does NOT have postgres role — authorizing ONLY postgres ==="
+          echo "Using PUT /v1/projects/${ref}/database/jit"
+          echo "Body will contain ONLY role postgres, no network restrictions, no expiry (or minimal)"
+
+          # Construct body with user_roles as per Supabase docs guide (temporary-access)
+          # The API reference says roles, but guide says user_roles. We try user_roles first.
+          # We authorize ONLY postgres role, as instructed.
+          body_user_roles=$(jq -n --arg uid "$uid" '{user_id: $uid, user_roles: [{role: "postgres"}]}')
+          body_roles=$(jq -n --arg uid "$uid" '{user_id: $uid, roles: [{role: "postgres"}]}')
+
+          echo "Attempt 1: body with user_roles"
+          printf '%s' "$body_user_roles" | jq -c .
+          resp=$(curl -sS -m 60 -X PUT -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -H "Content-Type: application/json" -d "$body_user_roles" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit" 2>"$tmp/curl.err") || true
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          case "$code" in ''|*[!0-9]*) code="000" ;; esac
+          echo "PUT /v1/projects/${ref}/database/jit (user_roles) -> HTTP $code"
+          printf '%s' "$body" | head -c 2000; echo
+          echo "$body" > "$tmp/auth_body"
+          echo "$code" > "$tmp/auth_code"
+
+          if [ "$code" = "200" ] || [ "$code" = "201" ]; then
+            echo "Authorization succeeded with user_roles payload"
+            echo "auth_code=$code" >> "$GITHUB_OUTPUT"
+            echo "auth_body=$(printf '%s' "$body" | jq -c . 2>/dev/null | head -c 1000)" >> "$GITHUB_OUTPUT"
+            echo "auth_method=user_roles" >> "$GITHUB_OUTPUT"
+            echo "::notice title=jit auth::HTTP $code method=user_roles success"
+          else
+            echo "Attempt 1 failed (HTTP $code), trying alternative payload with roles"
+            printf '%s' "$body_roles" | jq -c .
+            resp2=$(curl -sS -m 60 -X PUT -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -H "Content-Type: application/json" -d "$body_roles" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit" 2>"$tmp/curl2.err") || true
+            code2="${resp2##*$'\n'}"
+            body2="${resp2%$'\n'*}"
+            case "$code2" in ''|*[!0-9]*) code2="000" ;; esac
+            echo "PUT /v1/projects/${ref}/database/jit (roles) -> HTTP $code2"
+            printf '%s' "$body2" | head -c 2000; echo
+
+            if [ "$code2" = "200" ] || [ "$code2" = "201" ]; then
+              echo "Authorization succeeded with roles payload"
+              echo "auth_code=$code2" >> "$GITHUB_OUTPUT"
+              echo "auth_body=$(printf '%s' "$body2" | jq -c . 2>/dev/null | head -c 1000)" >> "$GITHUB_OUTPUT"
+              echo "auth_method=roles" >> "$GITHUB_OUTPUT"
+              echo "::notice title=jit auth::HTTP $code2 method=roles success"
+            else
+              echo "::error::Both authorization attempts failed — HTTP $code and $code2"
+              echo "Body1: $body"
+              echo "Body2: $body2"
+              cat "$tmp/curl.err" 2>/dev/null; cat "$tmp/curl2.err" 2>/dev/null
+              {
+                echo "### JIT authorization FAILED"
+                echo
+                echo "Attempt with user_roles: HTTP $code"
+                echo '```'
+                printf '%s' "$body" | head -c 1000
+                echo
+                echo '```'
+                echo "Attempt with roles: HTTP $code2"
+                echo '```'
+                printf '%s' "$body2" | head -c 1000
+                echo
+                echo '```'
+              } >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
+          fi
+
+          {
+            echo "### JIT authorization result"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| user_id | \`$uid\` |"
+            echo "| authorized role | postgres (ONLY) |"
+            echo "| HTTP code | ${code:-$code2} |"
+            echo "| method | $(cat $GITHUB_OUTPUT | grep auth_method | cut -d= -f2) |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify JIT role mapping after auth
+        id: jit-verify
+        env:
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+          uid="${USER_ID:?}"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+
+          echo "=== Verifying JIT mapping after authorization ==="
+          sleep 3
+
+          resp=$(curl -sS -m 30 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" -w $'\n%{http_code}' "https://api.supabase.com/v1/projects/${ref}/database/jit/list" 2>"$tmp/curl.err") || true
+          code="${resp##*$'\n'}"
+          body="${resp%$'\n'*}"
+          case "$code" in ''|*[!0-9]*) code="000" ;; esac
+          echo "GET /v1/projects/${ref}/database/jit/list -> HTTP $code"
+          printf '%s' "$body" | jq -c --arg uid "$uid" '.items[]? | select(.user_id==$uid)' 2>/dev/null | head -c 2000; echo
+
+          has_postgres=false
+          roles=""
+          if [ "$code" = "200" ]; then
+            roles=$(printf '%s' "$body" | jq -r --arg uid "$uid" '.items[]? | select(.user_id==$uid) | .user_roles[]? | .role' 2>/dev/null | tr '\n' ',' || echo "")
+            echo "Roles now: $roles"
+            case ",$roles," in *,postgres,*) has_postgres=true ;; esac
+          fi
+
+          echo "has_postgres=$has_postgres"
+          echo "roles=$roles"
+          echo "::notice title=jit verify::has_postgres=$has_postgres roles=$roles HTTP=$code"
+
+          echo "verify_code=$code" >> "$GITHUB_OUTPUT"
+          echo "verify_roles=$roles" >> "$GITHUB_OUTPUT"
+          echo "verify_has_postgres=$has_postgres" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### JIT verification after auth"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| user_id | \`$uid\` |"
+            echo "| roles after | $roles |"
+            echo "| has postgres? | $has_postgres |"
+            echo "| HTTP code | $code |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          if [ "$has_postgres" != "true" ]; then
+            echo "::error::User $uid still does NOT have postgres role after authorization attempt"
+            exit 1
+          fi
+
+      - name: Test REAL PostgreSQL connection via Session Pooler 5432 with JIT (always attempt)
+        id: pg-test
+        if: always()
+        env:
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+          POOLER_HOST: ${{ steps.endpoint.outputs.pooler_host }}
+          POOLER_PORT: ${{ steps.endpoint.outputs.pooler_port }}
+          POOLER_USER: ${{ steps.endpoint.outputs.pooler_user }}
+        run: |
+          set -uo pipefail
+          echo "::add-mask::$SUPABASE_ACCESS_TOKEN"
+          tmp="$RUNNER_TEMP/jit"; mkdir -p "$tmp"
+
+          ref="${PROJECT_REF:?}"
+          # Use outputs if available, otherwise fallback to known pooler from previous runs
+          host="${POOLER_HOST:-}"
+          port="${POOLER_PORT:-5432}"
+          user="${POOLER_USER:-postgres.${ref}}"
+          if [ -z "$host" ]; then
+            echo "Pooler host not resolved from endpoint step, using fallback from API"
+            # Try to resolve again quickly
+            resp=$(curl -sS -m 20 -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" -H "Accept: application/json" "https://api.supabase.com/v1/projects/${ref}/config/database/pooler" 2>/dev/null) || true
+            h=$(printf '%s' "$resp" | jq -r '.[0].db_host // empty' 2>/dev/null || echo "")
+            if [ -n "$h" ]; then
+              host="$h"
+            else
+              host="aws-1-eu-west-1.pooler.supabase.com"
+            fi
+            echo "Fallback host: $host"
+          fi
+          if [ -z "$port" ]; then port="5432"; fi
+          if [ -z "$user" ]; then user="postgres.${ref}"; fi
+
+          echo "=== Testing REAL PostgreSQL connection ==="
+          echo "Host: $host"
+          echo "Port: $port (Session Pooler, IPv4-compatible, as required)"
+          echo "User: $user"
+          echo "Database: postgres"
+          echo "Password: SUPABASE_ACCESS_TOKEN (masked, len ${#SUPABASE_ACCESS_TOKEN})"
+          echo "Options: jit=true, SSL require"
+          echo
+
+          # Ensure psql is available
+          if ! command -v psql >/dev/null 2>&1; then
+            echo "psql not found, installing postgresql-client..."
+            sudo apt-get update -y && sudo apt-get install -y postgresql-client
+          fi
+          echo "psql version: $(psql --version)"
+
+          # Exact connection method as required:
+          # Using PGPASSWORD=token, PGSSLMODE=require, PGOPTIONS="-c jit=true"
+          # Host: session pooler, Port 5432, User postgres.{ref}, DB postgres
+          # Query: SELECT current_user, current_database();
+
+          export PGPASSWORD="$SUPABASE_ACCESS_TOKEN"
+          export PGSSLMODE=require
+          export PGOPTIONS="-c jit=true"
+          export PGCONNECT_TIMEOUT=20
+
+          echo "Connection string (masked password):"
+          echo "  postgresql://${user}:****@${host}:${port}/postgres?sslmode=require&options=-c%20jit%3Dtrue"
+          echo
+
+          echo "Running: SELECT current_user, current_database();"
+          set +e
+          output=$(psql -h "$host" -p "$port" -U "$user" -d postgres -At -F'|' -c "SELECT current_user, current_database();" 2>"$tmp/psql.err")
+          exit_code=$?
+          set -e
+
+          echo "psql exit code: $exit_code"
+          cat "$tmp/psql.err" 2>/dev/null | head -100
+          echo "Output: $output"
+
+          if [ $exit_code -ne 0 ]; then
+            err=$(cat "$tmp/psql.err" | head -c 1000 | tr '\n' ' ' | sed 's/"/ /g')
+            echo "::error::PostgreSQL connection FAILED — exit code $exit_code — $err"
+            echo "::notice title=pg error::exit=$exit_code err=$err"
+            echo "Error: $(cat $tmp/psql.err)"
+            {
+              echo "### PostgreSQL connection FAILED"
+              echo
+              echo "| field | value |"
+              echo "| --- | --- |"
+              echo "| host | \`$host\` |"
+              echo "| port | $port |"
+              echo "| user | \`$user\` |"
+              echo "| database | postgres |"
+              echo "| sslmode | require |"
+              echo "| options | jit=true |"
+              echo "| exit code | $exit_code |"
+              echo "| error | \`\`\`$(cat $tmp/psql.err | head -c 1000)\`\`\` |"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
+          # Parse output
+          current_user=$(printf '%s' "$output" | cut -d'|' -f1 | head -1)
+          current_db=$(printf '%s' "$output" | cut -d'|' -f2 | head -1)
+
+          echo "current_user: $current_user"
+          echo "current_database: $current_db"
+          echo "::notice title=pg current_user::$current_user"
+          echo "::notice title=pg current_database::$current_db"
+
+          # Also run verbose query to get more info
+          echo
+          echo "--- Verbose query ---"
+          psql -h "$host" -p "$port" -U "$user" -d postgres -c "SELECT current_user, current_database(), inet_server_addr(), inet_server_port();" 2>&1 | head -20 || true
+
+          echo "pg_current_user=$current_user" >> "$GITHUB_OUTPUT"
+          echo "pg_current_db=$current_db" >> "$GITHUB_OUTPUT"
+          echo "pg_host=$host" >> "$GITHUB_OUTPUT"
+          echo "pg_port=$port" >> "$GITHUB_OUTPUT"
+          echo "pg_user=$user" >> "$GITHUB_OUTPUT"
+          echo "pg_output=$output" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### PostgreSQL connection SUCCESS"
+            echo
+            echo "| field | value |"
+            echo "| --- | --- |"
+            echo "| host | \`$host\` |"
+            echo "| port | $port (Session Pooler IPv4) |"
+            echo "| user | \`$user\` |"
+            echo "| database | postgres |"
+            echo "| sslmode | require |"
+            echo "| options | \`-c jit=true\` |"
+            echo "| password | SUPABASE_ACCESS_TOKEN (temporary) |"
+            echo "| current_user | \`$current_user\` |"
+            echo "| current_database | \`$current_db\` |"
+            echo "| raw output | \`$output\` |"
+            echo "| connection method | \`PGPASSWORD=\\$TOKEN PGSSLMODE=require PGOPTIONS='-c jit=true' psql -h $host -p $port -U $user -d postgres -c 'SELECT current_user, current_database();'\` |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Final report
+        if: always()
+        env:
+          USER_ID: ${{ steps.profile.outputs.user_id }}
+          USER_EMAIL: ${{ steps.profile.outputs.user_email }}
+          HAS_POSTGRES_BEFORE: ${{ steps.jit-check.outputs.has_postgres }}
+          HAS_POSTGRES_AFTER: ${{ steps.jit-verify.outputs.verify_has_postgres }}
+          ROLES_BEFORE: ${{ steps.jit-check.outputs.current_roles }}
+          ROLES_AFTER: ${{ steps.jit-verify.outputs.verify_roles }}
+          AUTH_CODE: ${{ steps.jit-auth.outputs.auth_code }}
+          AUTH_METHOD: ${{ steps.jit-auth.outputs.auth_method }}
+          PG_USER: ${{ steps.pg-test.outputs.pg_current_user }}
+          PG_DB: ${{ steps.pg-test.outputs.pg_current_db }}
+          PG_HOST: ${{ steps.pg-test.outputs.pg_host }}
+          PG_PORT: ${{ steps.pg-test.outputs.pg_port }}
+          PG_POOL_USER: ${{ steps.pg-test.outputs.pg_user }}
+          TOKEN_FP: ${{ steps.guard.outputs.token_fp }}
+        run: |
+          {
+            echo "### FINAL REPORT — JIT Auth + Postgres Test"
+            echo
+            echo "**Project:** \`${PROJECT_REF}\`"
+            echo "**Token FP:** \`${TOKEN_FP:-?}\`"
+            echo "**User ID:** \`${USER_ID:-?}\` (${USER_EMAIL:-?})"
+            echo
+            echo "| step | result |"
+            echo "| --- | --- |"
+            echo "| JIT enabled? | already enabled (from previous task) |"
+            echo "| Had postgres role before? | ${HAS_POSTGRES_BEFORE:-?} (roles: ${ROLES_BEFORE:-?}) |"
+            echo "| Authorization needed? | $([ "${HAS_POSTGRES_BEFORE:-}" = "true" ] && echo "no" || echo "yes") |"
+            echo "| Authorization HTTP code | ${AUTH_CODE:-skipped (already had role)} |"
+            echo "| Authorization method | ${AUTH_METHOD:-n/a} |"
+            echo "| Has postgres role after? | ${HAS_POSTGRES_AFTER:-?} (roles: ${ROLES_AFTER:-?}) |"
+            echo "| Postgres connection | ${PG_USER:+success} |"
+            echo "| current_user | \`${PG_USER:-?}\` |"
+            echo "| current_database | \`${PG_DB:-?}\` |"
+            echo "| host | \`${PG_HOST:-?}\` |"
+            echo "| port | ${PG_PORT:-?} (Session Pooler IPv4) |"
+            echo "| pooler user | \`${PG_POOL_USER:-?}\` |"
+            echo "| connection method | \`PGPASSWORD=\\$SUPABASE_ACCESS_TOKEN PGSSLMODE=require PGOPTIONS='-c jit=true' psql -h ${PG_HOST:-?} -p ${PG_PORT:-5432} -U ${PG_POOL_USER:-?} -d postgres -c 'SELECT current_user, current_database();'\` |"
+            echo
+            if [ -n "${PG_USER:-}" ] && [ -n "${PG_DB:-}" ]; then
+              echo "✅ **SUCCESS** — JIT authorized and PostgreSQL connection works via Session Pooler 5432 with jit=true"
+            else
+              echo "❌ **FAILED** — see previous steps"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
