@@ -22,6 +22,13 @@ name: Supabase migrate (manual)
 #      percent-encoded Postgres URL (--db-url), which needs no link at all.
 
 on:
+  # A pull request that touches this workflow or the SQL files runs the SAME job in
+  # dry-run mode only: `inputs.mode` does not exist for pull_request events and every
+  # mutating step is additionally gated on github.event_name == 'workflow_dispatch'.
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-migrate.yml"
+      - "supabase/**"
   workflow_dispatch:
     inputs:
       project_ref:
@@ -57,7 +64,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      PROJECT_REF: ${{ inputs.project_ref }}
+      PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
       # Only a private repository's log may show project / organization names.
       SHOW_NAMES: ${{ github.event.repository.private }}
     steps:
@@ -480,7 +487,7 @@ jobs:
           echo "local files : $(ls -1 supabase/migrations/*.sql | wc -l)"
 
       - name: Apply migrations (only when mode = apply)
-        if: inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
           SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PROJECT_STATUS: ${{ steps.preflight.outputs.project_status }}
@@ -500,7 +507,7 @@ jobs:
           supabase db push --db-url "$url" --include-all --yes
 
       - name: Verify — run supabase/verify.sql (apply only)
-        if: inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PGHOST: ${{ steps.endpoint.outputs.db_host }}
@@ -514,7 +521,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f supabase/verify.sql
 
       - name: Verify — assert expected seed counts (apply only)
-        if: inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
+        if: github.event_name == 'workflow_dispatch' && inputs.mode == 'apply' && steps.probe.outputs.db_reachable == 'true'
         env:
           PGPASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
           PGHOST: ${{ steps.endpoint.outputs.db_host }}
@@ -548,7 +555,7 @@ jobs:
       - name: Result summary
         if: always()
         env:
-          MODE: ${{ inputs.mode }}
+          MODE: ${{ github.event.inputs.mode || github.event_name }}
           TOKEN_CLASS: ${{ steps.guard.outputs.token_class }}
           TOKEN_VALID: ${{ steps.preflight.outputs.token_valid }}
           PROJECT_VISIBLE: ${{ steps.preflight.outputs.project_visible }}
