@@ -196,6 +196,12 @@ jobs:
           echo "probe_file=$out"      >> "$GITHUB_OUTPUT"
           echo "tmpdir=$tmp"          >> "$GITHUB_OUTPUT"
 
+          # Compact label=HTTP pairs, so the whole probe result is visible in the
+          # run's annotation list without opening the step summary. Labels and
+          # status codes only — no bodies, no identifiers, no token material.
+          codes=$(awk -F'\t' '{printf "%s=%s ", $1, $4}' "$out")
+          echo "::notice title=probe results (label=HTTP)::${codes}"
+
       - name: Analyse — infer effective permissions and resource scope
         id: analyse
         env:
@@ -245,6 +251,7 @@ jobs:
             orgget_verdict="HTTP ${org_code}"
           fi
           echo "ORG GET: $orgget_verdict"
+          echo "::notice title=GET /v1/organizations/{slug}::${orgget_verdict}"
 
           # ---- GET /v1/profile -------------------------------------------------
           prof_body=$(body_of profile)
@@ -255,6 +262,7 @@ jobs:
             *) prof_verdict="HTTP $(code_of profile) body=${prof_body}" ;;
           esac
           echo "PROFILE: $prof_verdict"
+          echo "::notice title=GET /v1/profile::$(printf '%s' "$prof_verdict" | tr -d '\r\n' | head -c 300)"
 
           # ---- database_jit_read: the permission that actually matters ---------
           jitself_code=$(code_of jit_self)
@@ -286,6 +294,7 @@ jobs:
             fmt_verdict="organization_slug unavailable (GET /v1/projects/{ref} did not return it)."
           fi
           echo "IDENTIFIER: $fmt_verdict"
+          echo "::notice title=organization identifier::${fmt_verdict}"
 
           {
             echo "org_verdict=$org_verdict"
