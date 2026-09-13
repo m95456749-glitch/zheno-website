@@ -123,6 +123,9 @@ jobs:
           echo "  (to check which token is stored, run locally:"
           echo "   printf '%s' \"\$MY_TOKEN\" | sha256sum | cut -c1-12 )"
 
+          # Annotations are readable through the API without downloading the job log.
+          echo "::notice title=SUPABASE_ACCESS_TOKEN::class=${cls} | length=${#tok} | sha256[1:12]=${fp}"
+
           {
             echo "SUPABASE_ACCESS_TOKEN=$tok"
             echo "SB_TOKEN_CLASS=$cls"
@@ -181,6 +184,9 @@ jobs:
           echo "== 1/4  Does project ref '$ref' exist? (public probe, no credentials used) =="
           rest=$(curl -s -o /dev/null -m 20 -w '%{http_code}' "https://${ref}.supabase.co/rest/v1/" 2>/dev/null) || rest="000"
           echo "https://${ref}.supabase.co/rest/v1/ -> HTTP ${rest}"
+          echo "::notice title=probe rest/v1::https://${ref}.supabase.co/rest/v1/ -> HTTP ${rest}"
+          rest_headers=$(curl -s -D - -o /dev/null -m 20 "https://${ref}.supabase.co/rest/v1/" 2>/dev/null | tr -d '\r' | grep -iE '^(server|x-|cf-|via)' | head -8 | tr '\n' '; ')
+          [ -n "$rest_headers" ] && echo "response headers: ${rest_headers}"
           ref_exists=yes
           if [ "$rest" = "000" ]; then
             ref_exists=no
@@ -208,6 +214,7 @@ jobs:
             [ -s "$tmp/curl.err" ] && sed 's/^/  curl: /' "$tmp/curl.err"
             printf '%s' "$projects_body" | head -c 400; echo
           fi
+          echo "::notice title=api /v1/projects::HTTP ${projects_code}"
 
           api_get "/v1/organizations"
           echo "GET /v1/organizations -> HTTP ${CODE}"
@@ -219,6 +226,7 @@ jobs:
           echo "== 3/4  This project, as seen by this token =="
           api_get "/v1/projects/${ref}"
           proj_code="$CODE"; proj_body="$BODY"
+          echo "::notice title=api /v1/projects/{ref}::HTTP ${proj_code}"
           project_visible=false; region=""; pstatus=""; pname=""
           if [ "$proj_code" = "200" ]; then
             project_visible=true
@@ -238,6 +246,7 @@ jobs:
           echo "== 4/4  The endpoint 'supabase link' depends on =="
           api_get "/v1/projects/${ref}/api-keys?reveal=false"
           akeys_code="$CODE"
+          echo "::notice title=api /v1/projects/{ref}/api-keys::HTTP ${akeys_code}"
           link_api_ok=false
           case "$akeys_code" in 2*) link_api_ok=true ;; esac
           echo "GET /v1/projects/${ref}/api-keys -> HTTP ${akeys_code}"
@@ -245,7 +254,7 @@ jobs:
           # ---- verdict ------------------------------------------------------
           verdict=ok
           action="None — token, project and API access all look healthy."
-          if [ "$token_valid" != "true" ]; then
+          if [ "$token_valid" != "true" ] && [ "$project_visible" != "true" ]; then
             if [ "$SB_TOKEN_IS_PAT" != "yes" ]; then
               verdict=wrong-token-type
               action="Replace the GitHub secret SUPABASE_ACCESS_TOKEN with a personal access token created at https://supabase.com/dashboard/account/tokens (it must start with sbp_). The stored value is a ${SB_TOKEN_CLASS}, which the Supabase CLI / Management API cannot use."
@@ -259,6 +268,9 @@ jobs:
               verdict=token-rejected
               action="The token was rejected (HTTP ${projects_code}): expired, revoked, or copied incompletely. Create a new one at https://supabase.com/dashboard/account/tokens and update the secret. Stored fingerprint sha256:${SB_TOKEN_FP}."
             fi
+          elif [ "$project_visible" != "true" ] && [ "$projects_code" = "403" ]; then
+            verdict=token-scoped-too-narrow
+            action="The token is accepted but every project call is 403: it is a scoped/fine-grained PAT without 'Project Settings: Read' (or it belongs to another Supabase account). In the SAME account that owns project ${ref}, create a CLASSIC personal access token at https://supabase.com/dashboard/account/tokens (leave permissions at full access) and store it as the GitHub secret SUPABASE_ACCESS_TOKEN."
           elif [ "$project_visible" != "true" ]; then
             verdict=project-not-visible
             action="The token works but this account cannot see project ${ref}. While signed in to the SAME account that created the token, open https://supabase.com/dashboard/project/${ref}/settings/general — if that 404s, the ref is wrong or belongs to another account; copy the ref from that URL into the workflow input."
@@ -277,8 +289,16 @@ jobs:
             fi
           fi
 
+          if [ "$token_valid" != "true" ] && [ "$project_visible" = "true" ]; then
+            echo "::notice title=token scope::GET /v1/projects is denied (HTTP ${projects_code}) but GET /v1/projects/${ref} works — enough to resolve the region; 'supabase link' will still fail."
+            if [ "$verdict" = "ok" ]; then
+              action="Optional: this token cannot list projects (HTTP ${projects_code}). A CLASSIC personal access token from https://supabase.com/dashboard/account/tokens also makes 'supabase link' work again."
+            fi
+          fi
+
           echo
           echo "verdict: $verdict"
+          echo "::notice title=preflight verdict::${verdict} | projects=${projects_code} project=${proj_code} api-keys=${akeys_code} rest=${rest} | status=${pstatus:-?} region=${region:-?}"
           {
             echo "token_valid=$token_valid"
             echo "project_visible=$project_visible"
@@ -369,15 +389,23 @@ jobs:
             fi
             msg=$(head -3 "$errfile" 2>/dev/null | tr '\n' ' ')
             echo "  failed: ${msg}"
-            case "$msg" in
+            echo "::notice title=psql ${u}@${h}:${p}::${msg}"
+            low=$(printf '%s' "$msg" | tr '[:upper:]' '[:lower:]')
+            case "$low" in
               *"password authentication failed"*)
                 db_error="SUPABASE_DB_PASSWORD is not the database password of this project (Dashboard > Project Settings > Database > Database password)." ;;
-              *"could not translate host name"*)
-                db_error="Host ${h} does not resolve — wrong project ref or wrong region." ;;
-              *"Connection refused"*|*"timed out"*|*"timeout"*)
+              *"tenant or user not found"*)
+                db_error="The pooler rejected the user '${u}' — the project ref is wrong for this pooler host/region, or the project is paused." ;;
+              *"could not translate host name"*|*"name or service not known"*|*"nodename nor servname"*)
+                db_error="Host ${h} does not resolve — wrong project ref, wrong region, or the project is paused/deleted." ;;
+              *"network is unreachable"*|*"no route to host"*)
+                db_error="Host ${h} is not reachable over IPv4 from the runner (Supabase direct connections can be IPv6-only). Pass the Session-pooler host from Dashboard > Connect as db_host with db_port 5432." ;;
+              *"connection refused"*|*"timed out"*|*"timeout"*)
                 db_error="Host ${h} refused the connection or timed out — the project may be paused, or IPv4 direct access is off (then pass the pooler host via the db_host input)." ;;
+              *"no pg_hba.conf entry"*)
+                db_error="The server rejected the TLS connection (no pg_hba.conf entry) — use the Session-pooler host from Dashboard > Connect with sslmode=require." ;;
               *)
-                if [ -z "$db_error" ]; then db_error="psql could not connect (see message above)."; fi ;;
+                db_error="psql could not connect to ${h}:${p} — ${msg}" ;;
             esac
           done
 
@@ -413,9 +441,10 @@ jobs:
           ACTION_NEEDED: ${{ steps.preflight.outputs.manual_action }}
           DB_ERROR: ${{ steps.probe.outputs.db_error }}
           TOKEN_VALID: ${{ steps.preflight.outputs.token_valid }}
+          VERDICT: ${{ steps.preflight.outputs.verdict }}
         run: |
           set -uo pipefail
-          echo "::error::No working path to project ${PROJECT_REF}: the access token is not accepted AND the database is not reachable."
+          echo "::error::No working path to project ${PROJECT_REF} (verdict: ${VERDICT}): the access token is not accepted AND the database is not reachable."
           if [ -n "$DB_ERROR" ]; then echo "::error::Database: ${DB_ERROR}"; fi
           if [ "$TOKEN_VALID" = "true" ]; then
             echo "::error::The token itself IS accepted, so what is left is the database connection: check SUPABASE_DB_PASSWORD (Dashboard > Project Settings > Database > Database password), make sure the project is not paused, and/or pass the exact Session-pooler host shown in Dashboard > Connect as the db_host input with db_port 5432."
