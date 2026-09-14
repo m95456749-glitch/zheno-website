@@ -188,23 +188,43 @@ jobs:
           # in apps/docs/spec/api_v1_openapi.json. rhost must NOT be a CIDR and
           # must NOT be a hostname.
           IPV4_RE='^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$'
+          is_public_ipv4() {
+            local c="$1"
+            printf '%s' "$c" | grep -Eq "$IPV4_RE" || return 1
+            case "$c" in
+              0.*|10.*|127.*|169.254.*|192.168.*|224.*|255.*) return 1 ;;
+            esac
+            return 0
+          }
+          UA='Mozilla/5.0 (compatible; GitHub-Actions; zheno-jit-ci)'
+          # cdn-cgi/trace endpoints echo the client IP as an `ip=` line and are
+          # served by Cloudflare (api.supabase.com itself sits behind CF — the one
+          # domain this workflow is PROVEN to reach from this runner pool).
+          trace_eps="https://api.supabase.com/cdn-cgi/trace https://1.1.1.1/cdn-cgi/trace http://1.1.1.1/cdn-cgi/trace"
+          echo_eps="https://api.ipify.org http://checkip.amazonaws.com https://ipinfo.io/ip https://ifconfig.me/ip https://myexternalip.com/raw https://ipv4.icanhazip.com https://ifconfig.co/ip https://ipv4.eberry.net/ip"
 
           candidate="${RHOST_INPUT}"
           if [ -n "$candidate" ]; then
             echo "using explicit rhost input"
           else
             echo "auto-detecting this runner's public egress IPv4…"
-            for svc in "https://api.ipify.org" "https://ifconfig.co/ip" "https://ipv4.icanhazip.com"; do
-              candidate=$(curl -sS -m 15 -4 "$svc" 2>/dev/null | tr -d '\r\n[:space:]' || true)
-              if printf '%s' "$candidate" | grep -Eq "$IPV4_RE"; then
-                echo "resolved via $svc"
-                break
-              fi
-              candidate=""
+            for round in 1 2; do
+              [ "$round" = "2" ] && sleep 5
+              for svc in $trace_eps; do
+                cand=$(curl -fsS -m 12 -4 -A "$UA" "$svc" 2>/dev/null | sed -n 's/^ip=\([0-9.]*\)$/\1/p' | head -n1 || true)
+                if is_public_ipv4 "$cand"; then echo "resolved via $svc (trace)"; candidate="$cand"; break; fi
+              done
+              [ -n "$candidate" ] && break
+              for svc in $echo_eps; do
+                cand=$(curl -fsS -m 12 -4 -A "$UA" "$svc" 2>/dev/null | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1 || true)
+                if is_public_ipv4 "$cand"; then echo "resolved via $svc (echo)"; candidate="$cand"; break; fi
+              done
+              [ -n "$candidate" ] && break
+              echo "round $round: no service returned a valid public IPv4; retrying…"
             done
           fi
 
-          if ! printf '%s' "$candidate" | grep -Eq "$IPV4_RE"; then
+          if ! is_public_ipv4 "$candidate"; then
             echo "::error::could not resolve a valid literal IPv4 for rhost (got '${candidate:-<empty>}'). Pass the rhost input explicitly."
             exit 1
           fi
