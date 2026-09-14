@@ -184,26 +184,71 @@ jobs:
         if: env.CONFIRM == 'true'
         run: |
           set -uo pipefail
+          # GitHub Actions invokes `bash -e {0}` for run: steps, so
+          # `set -uo pipefail` alone still leaves -e ACTIVE. That is exactly why
+          # this step — which is meant to be informational only — killed run
+          # 34841778856 with exit code 7 (curl: "couldn't connect to host"):
+          # the first failing probe aborted the script before `rc=$?` could even
+          # record it, and every later step (rhost resolution, pre-flight, JIT
+          # authorize, psql, dry-run) was skipped. Turn -e OFF for the whole
+          # step and always exit 0, the same way the psql step below does.
+          set +e
           echo "== addresses =="
-          ip -brief addr 2>/dev/null | head -20 || true
+          ip -brief addr 2>/dev/null | head -20
           echo "== default routes =="
-          ip route 2>/dev/null | head -5 || true
-          ip -6 route 2>/dev/null | grep -m2 default || true
+          ip route 2>/dev/null | head -5
+          ip -6 route 2>/dev/null | grep -m2 default
           echo "== DNS =="
-          for h in api.supabase.com api.github.com api.ipify.org 1.1.1.1; do
+          for h in api.supabase.com api.github.com api.ipify.org "$DB_HOST" 1.1.1.1; do
             a=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
             aaaa=$(getent ahostsv6 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
             echo "dns $h A=[${a:-none}] AAAA=[${aaaa:-none}]"
           done
-          echo "== probes (rc = curl exit code) =="
-          for t in https://api.supabase.com/auth/v1/health https://api.github.com/meta https://api.ipify.org; do
+          echo "== HTTP probes (rc = curl exit code: 6=DNS 7=connect 28=timeout 35=TLS) =="
+          for t in https://api.supabase.com/auth/v1/health https://api.github.com/meta https://api.ipify.org https://1.1.1.1/cdn-cgi/trace; do
             for m in v4 v6 any; do
               case $m in v4) f="-4";; v6) f="-6";; *) f="";; esac
-              out=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' $f "$t" 2>/tmp/perr); rc=$?
-              echo "probe $t [$m] rc=$rc http=${out:-n/a} err=$(head -c 90 /tmp/perr 2>/dev/null | tr '\n' ' ')"
+              out=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' $f "$t" 2>/tmp/perr)
+              rc=$?
+              echo "probe $t [$m] rc=$rc http=${out:-n/a} err=$(head -c 120 /tmp/perr 2>/dev/null | tr '\n' ' ')"
             done
           done
           rm -f /tmp/perr
+          echo "== Postgres pooler TCP reachability (the real psql / db push target) =="
+          python3 - "$DB_HOST" "$DB_PORT" <<'PYEOF'
+          import socket, sys, time
+          host, port = sys.argv[1], sys.argv[2]
+          for fam, name in ((socket.AF_INET, "v4"), (socket.AF_INET6, "v6")):
+              try:
+                  infos = socket.getaddrinfo(host, port, fam, socket.SOCK_STREAM)
+              except OSError as e:
+                  print("tcp %s:%s [%s] dns_error=%s" % (host, port, name, e))
+                  continue
+              if not infos:
+                  print("tcp %s:%s [%s] no_address" % (host, port, name))
+                  continue
+              for info in infos[:2]:
+                  af, st, proto, _canon, sa = info
+                  t0 = time.time()
+                  try:
+                      s = socket.socket(af, st, proto)
+                      s.settimeout(8)
+                      s.connect(sa)
+                      s.close()
+                      print("tcp %s:%s [%s] CONNECT_OK peer=%s ms=%d" % (host, port, name, sa[0], (time.time() - t0) * 1000))
+                      break
+                  except OSError as e:
+                      print("tcp %s:%s [%s] peer=%s CONNECT_FAIL=%s:%s ms=%d" % (host, port, name, sa[0], type(e).__name__, e, (time.time() - t0) * 1000))
+          for extra in ("6543",):
+              try:
+                  s = socket.create_connection((host, int(extra)), timeout=8)
+                  s.close()
+                  print("tcp %s:%s [any] CONNECT_OK (transaction pooler, informational)" % (host, extra))
+              except OSError as e:
+                  print("tcp %s:%s [any] CONNECT_FAIL=%s:%s (transaction pooler, informational)" % (host, extra, type(e).__name__, e))
+          PYEOF
+          echo "== end of diagnostics (this step never fails the job) =="
+          exit 0
       - name: Resolve rhost (IPv4/IPv6 literal, per AuthorizeJitAccessBody)
         id: rhost
         run: |
