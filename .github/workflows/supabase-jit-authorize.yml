@@ -180,52 +180,101 @@ jobs:
           fi
           psql --version
 
+      - name: Egress diagnostics (informational, non-fatal)
+        if: env.CONFIRM == 'true'
+        run: |
+          set -uo pipefail
+          echo "== addresses =="
+          ip -brief addr 2>/dev/null | head -20 || true
+          echo "== default routes =="
+          ip route 2>/dev/null | head -5 || true
+          ip -6 route 2>/dev/null | grep -m2 default || true
+          echo "== DNS =="
+          for h in api.supabase.com api.github.com api.ipify.org 1.1.1.1; do
+            a=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
+            aaaa=$(getent ahostsv6 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
+            echo "dns $h A=[${a:-none}] AAAA=[${aaaa:-none}]"
+          done
+          echo "== probes (rc = curl exit code) =="
+          for t in https://api.supabase.com/auth/v1/health https://api.github.com/meta https://api.ipify.org; do
+            for m in v4 v6 any; do
+              case $m in v4) f="-4";; v6) f="-6";; *) f="";; esac
+              out=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' $f "$t" 2>/tmp/perr); rc=$?
+              echo "probe $t [$m] rc=$rc http=${out:-n/a} err=$(head -c 90 /tmp/perr 2>/dev/null | tr '\n' ' ')"
+            done
+          done
+          rm -f /tmp/perr
       - name: Resolve rhost (IPv4/IPv6 literal, per AuthorizeJitAccessBody)
         id: rhost
         run: |
           set -uo pipefail
           # Strict literal-IPv4 pattern taken verbatim from AuthorizeJitAccessBody
           # in apps/docs/spec/api_v1_openapi.json. rhost must NOT be a CIDR and
-          # must NOT be a hostname.
-          IPV4_RE='^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$'
-          is_public_ipv4() {
+          # must NOT be a hostname. The contract also accepts a literal IPv6.
+          # Same octet rules as AuthorizeJitAccessBody's schema, expressed in POSIX
+          # ERE (grep -E does NOT support PCRE-style (?:…) groups — using them
+          # makes every candidate silently fail validation).
+          OCTET='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])'
+          IPV4_RE="^(${OCTET}\.){3}${OCTET}$"
+          is_ipv4_public() {
             local c="$1"
             printf '%s' "$c" | grep -Eq "$IPV4_RE" || return 1
-            case "$c" in
-              0.*|10.*|127.*|169.254.*|192.168.*|224.*|255.*) return 1 ;;
-            esac
+            case "$c" in 0.*|10.*|127.*|169.254.*|192.168.*|224.*|255.*) return 1 ;; esac
             return 0
           }
+          is_ipv6_global() {
+            python3 - "$1" <<'PYEOF'
+          import socket, sys
+          s = sys.argv[1]
+          try:
+              socket.inet_pton(socket.AF_INET6, s)
+          except OSError:
+              sys.exit(1)
+          sys.exit(1 if s.lower().startswith(("::1", "fe80", "fc", "fd", "ff")) else 0)
+          PYEOF
+          }
           UA='Mozilla/5.0 (compatible; GitHub-Actions; zheno-jit-ci)'
-          # cdn-cgi/trace endpoints echo the client IP as an `ip=` line and are
-          # served by Cloudflare (api.supabase.com itself sits behind CF — the one
-          # domain this workflow is PROVEN to reach from this runner pool).
-          trace_eps="https://api.supabase.com/cdn-cgi/trace https://1.1.1.1/cdn-cgi/trace http://1.1.1.1/cdn-cgi/trace"
-          echo_eps="https://api.ipify.org http://checkip.amazonaws.com https://ipinfo.io/ip https://ifconfig.me/ip https://myexternalip.com/raw https://ipv4.icanhazip.com https://ifconfig.co/ip https://ipv4.eberry.net/ip"
+          # cdn-cgi/trace echoes the client IP as an `ip=` line; api.supabase.com
+          # is the one domain this workflow is known to reach from this runner pool.
+          trace_eps="https://api.supabase.com/cdn-cgi/trace https://1.1.1.1/cdn-cgi/trace http://1.1.1.1/cdn-cgi/trace https://www.cloudflare.com/cdn-cgi/trace"
+          echo_eps="https://api.ipify.org http://checkip.amazonaws.com https://ipinfo.io/ip https://ifconfig.me/ip https://myexternalip.com/raw https://ipv4.icanhazip.com https://ifconfig.co/ip https://api64.ipify.org"
+
+          try_fetch() {  # $1=svc; candidate printed on stdout (empty on failure), details on stderr
+            local svc="$1" body cand f last_err=""
+            for f in "-4" "-6" ""; do
+              case "$svc" in *ipv4*) [ "$f" = "-6" ] && continue ;; esac
+              case "$svc" in *ipv6*) [ "$f" = "-4" ] && continue ;; esac
+              body=$(curl -sS -m 12 -A "$UA" $f "$svc" 2>/tmp/rerr | tr -d '\r' || true)
+              last_err=$(head -c 90 /tmp/rerr 2>/dev/null | tr '\n' ' ')
+              if printf '%s' "$svc" | grep -q 'cdn-cgi/trace'; then
+                cand=$(printf '%s' "$body" | sed -n 's/^ip=\([0-9a-fA-F:.]*\)$/\1/p' | head -n1)
+              else
+                cand=$(printf '%s' "$body" | grep -Eo '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9a-fA-F:]*:[0-9a-fA-F:.]+$' | head -n1)
+              fi
+              if is_ipv4_public "$cand"; then echo "  [$(date +%T)] $svc (mode=${f:-any}) -> IPv4 $cand" >&2; printf '%s' "$cand"; return 0; fi
+              if is_ipv6_global "$cand"; then echo "  [$(date +%T)] $svc (mode=${f:-any}) -> IPv6 $cand" >&2; printf '%s' "$cand"; return 0; fi
+            done
+            echo "  [$(date +%T)] $svc -> unresolved${last_err:+ err=${last_err}}" >&2
+            return 1
+          }
 
           candidate="${RHOST_INPUT}"
           if [ -n "$candidate" ]; then
             echo "using explicit rhost input"
+            is_ipv4_public "$candidate" || is_ipv6_global "$candidate" || { echo "::error::explicit rhost is not a valid literal IPv4/IPv6"; exit 1; }
           else
-            echo "auto-detecting this runner's public egress IPv4…"
+            echo "auto-detecting this runner's public egress IP (IPv4 preferred; IPv6 accepted)…"
             for round in 1 2; do
               [ "$round" = "2" ] && sleep 5
-              for svc in $trace_eps; do
-                cand=$(curl -fsS -m 12 -4 -A "$UA" "$svc" 2>/dev/null | sed -n 's/^ip=\([0-9.]*\)$/\1/p' | head -n1 || true)
-                if is_public_ipv4 "$cand"; then echo "resolved via $svc (trace)"; candidate="$cand"; break; fi
+              for svc in $trace_eps $echo_eps; do
+                if cand=$(try_fetch "$svc") && [ -n "$cand" ]; then candidate="$cand"; break 2; fi
               done
-              [ -n "$candidate" ] && break
-              for svc in $echo_eps; do
-                cand=$(curl -fsS -m 12 -4 -A "$UA" "$svc" 2>/dev/null | grep -Eo '([0-9]{1,3}\.){3}[0-9]{1,3}' | head -n1 || true)
-                if is_public_ipv4 "$cand"; then echo "resolved via $svc (echo)"; candidate="$cand"; break; fi
-              done
-              [ -n "$candidate" ] && break
-              echo "round $round: no service returned a valid public IPv4; retrying…"
+              echo "round $round: no endpoint yielded a usable egress literal yet"
             done
           fi
 
-          if ! is_public_ipv4 "$candidate"; then
-            echo "::error::could not resolve a valid literal IPv4 for rhost (got '${candidate:-<empty>}'). Pass the rhost input explicitly."
+          if [ -z "$candidate" ]; then
+            echo "::error::could not resolve a valid literal IPv4/IPv6 for rhost (got '<empty>'). See the Egress diagnostics step. Pass the rhost input explicitly (or relax runner egress rules)."
             exit 1
           fi
           echo "rhost=$candidate"
@@ -330,8 +379,10 @@ jobs:
           # (1740787200). The Temporary-access guide page shows milliseconds —
           # that page is stale; the spec and the Dashboard mutation use seconds.
           exp=$(( $(date +%s) + EXPIRES_HOURS * 3600 ))
-          payload=$(jq -cn --arg u "$UID_" --arg r "$role" --argjson e "$exp" --arg c "${RHOST}/32" \
-                    '{user_id:$u, roles:[{role:$r, expires_at:$e, allowed_networks:{allowed_cidrs:[{cidr:$c}]}}]}')
+          # IPv4 → allowed_cidrs /32; IPv6 literal → allowed_cidrs_v6 /128
+          if printf '%s' "${RHOST:?}" | grep -q ':'; then mask=128; key=allowed_cidrs_v6; else mask=32; key=allowed_cidrs; fi
+          payload=$(jq -cn --arg u "$UID_" --arg r "$role" --argjson e "$exp" --arg k "$key" --arg c "${RHOST}/${mask}" \
+                    '{user_id:$u, roles:[{role:$r, expires_at:$e, allowed_networks:{($k):[{cidr:$c}]}}]}')
           echo "PUT /v1/projects/${ref}/database/jit  payload=$payload"
           resp=$(curl -sS -m 45 -X PUT \
                    -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
