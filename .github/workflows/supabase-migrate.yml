@@ -55,6 +55,17 @@ name: Supabase migrate (manual)
 #      fingerprint and the CHARACTER CLASS of its first/last character
 #      (quote / space / tab / letter / digit / other-symbol) are printed, which
 #      is enough to spot a paste artifact without exposing the value.
+#
+# Operator policy (2026-09-14):
+#   * The connection path is the DATABASE PASSWORD over the shared SESSION
+#     pooler (IPv4) on port 5432, user postgres.<ref>, sslmode=require — in that
+#     order, before the API-advertised transaction port.
+#   * The probe verifies with `SELECT current_user, current_database();` and
+#     reports both values.
+#   * The JIT temporary-access fallback is DISABLED (this project's
+#     /database/jit endpoints answer an undocumented HTTP 406 for every token
+#     class); set ALLOW_JIT_FALLBACK=yes to re-enable it.
+#   * pull_request runs remain dry-run ONLY; mode=apply needs workflow_dispatch.
 
 on:
   # A pull request that touches this workflow or the SQL files runs the SAME job in
@@ -603,14 +614,20 @@ jobs:
           if [ -n "$POOLER_HOST" ]; then
             puser="${POOLER_USER:-postgres.${ref}}"
             pport="${POOLER_PORT:-5432}"
-            # 1. exactly what the API advertised — never second-guess it
+            # 1. the shared SESSION pooler (IPv4) on port 5432 FIRST — the
+            #    operator-specified migration target. Transaction mode (6543) does
+            #    not support the prepared statements migrations and the CLI rely
+            #    on, so the API-advertised port is no longer tried first.
+            if [ -z "$INPUT_DB_PORT" ]; then
+              add "$POOLER_HOST" 5432 "$puser" "pooler-session/5432"
+            fi
+            # 2. exactly what the API advertised — kept in the list as a fallback,
+            #    never second-guessed, just demoted behind session mode.
             add "$POOLER_HOST" "${INPUT_DB_PORT:-$pport}" "$puser" "api-pooler/${POOL_MODE:-?}"
-            # 2. the other mode on the SAME host: the shared pooler serves session
-            #    mode on 5432 and transaction mode on 6543, and migrations prefer
-            #    session mode, so it is worth one extra attempt.
+            # 3. if the API advertised session mode itself, transaction mode on the
+            #    SAME host still gets one fallback attempt.
             if [ -z "$INPUT_DB_PORT" ]; then
               case "$pport" in
-                6543) add "$POOLER_HOST" 5432 "$puser" "pooler-session/5432" ;;
                 5432) add "$POOLER_HOST" 6543 "$puser" "pooler-transaction/6543" ;;
               esac
             fi
@@ -673,11 +690,14 @@ jobs:
           export PGSSLMODE=require PGCONNECT_TIMEOUT=15
           errfile="$RUNNER_TEMP/psql.err"
 
+          outfile="$RUNNER_TEMP/psql.out"
           try() {  # host port user password [options] — credential travels via env, never argv
+            # Verifies connectivity AND runs the operator's check query. Role and
+            # database names are not secrets and are surfaced on success.
             if [ -n "${5:-}" ]; then
-              PGPASSWORD="$4" PGOPTIONS="$5" psql -h "$1" -p "$2" -U "$3" -d postgres -Atc 'select 1' >/dev/null 2>"$errfile"
+              PGPASSWORD="$4" PGOPTIONS="$5" psql -h "$1" -p "$2" -U "$3" -d postgres -At -F'|' -c 'SELECT current_user, current_database();' >"$outfile" 2>"$errfile"
             else
-              PGPASSWORD="$4" psql -h "$1" -p "$2" -U "$3" -d postgres -Atc 'select 1' >/dev/null 2>"$errfile"
+              PGPASSWORD="$4" psql -h "$1" -p "$2" -U "$3" -d postgres -At -F'|' -c 'SELECT current_user, current_database();' >"$outfile" 2>"$errfile"
             fi
           }
 
@@ -772,7 +792,12 @@ jobs:
           # Shared-pooler connections additionally need options='-c jit=true';
           # direct connections do not.
           jit_index=-1
-          if [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [ "${SB_TOKEN_IS_PAT:-no}" = "yes" ]; then
+          # JIT fallback intentionally DISABLED (operator directive, 2026-09-14):
+          # this project's /database/jit Management-API endpoints return an
+          # undocumented HTTP 406 for BOTH fine-grained and classic PATs, and the
+          # database-password path above is the required supported path. Set
+          # ALLOW_JIT_FALLBACK=yes to re-enable the old last-resort behaviour.
+          if [ "${ALLOW_JIT_FALLBACK:-no}" = "yes" ] && [ -n "${SUPABASE_ACCESS_TOKEN:-}" ] && [ "${SB_TOKEN_IS_PAT:-no}" = "yes" ]; then
             add_variant "jit/access-token" "$SUPABASE_ACCESS_TOKEN"
             jit_index=$(( ${#vlabels[@]} - 1 ))
             if [ "${vlabels[$jit_index]:-}" != "jit/access-token" ]; then jit_index=-1; fi
@@ -780,7 +805,7 @@ jobs:
           if [ "$jit_index" -ge 0 ]; then
             echo "temporary access (JIT) credential registered as variant [${jit_index}] — it will be tried only if every password credential is refused."
           else
-            echo "temporary access (JIT) credential NOT available (the stored token is not a personal access token)."
+            echo "temporary access (JIT) fallback DISABLED — the database password is the only credential in scope for this run."
           fi
 
           # ---- attempt loop ------------------------------------------------------
@@ -797,7 +822,10 @@ jobs:
             attempts=$((attempts+1))
             echo "probing ${u}@${h}:${p} (${lbl}) with credential [${vi}] ${vlabels[$vi]}${opts:+ options='${opts}'} …"
             if try "$h" "$p" "$u" "${vvals[$vi]}" "$opts"; then
-              echo "  -> connected and authenticated OK"
+              ident=$(head -1 "$outfile" 2>/dev/null | tr -d '\r')
+              cu="${ident%%|*}"; cd_="${ident#*|}"
+              echo "  -> connected and authenticated OK — current_user='${cu}' current_database='${cd_}'"
+              echo "::notice title=psql OK ${u}@${h}:${p}::current_user=${cu} current_database=${cd_}"
               return 0
             fi
             classify
@@ -1057,7 +1085,7 @@ jobs:
             else
               echo "::error::The direct connection could not confirm this (class '${DB_DIRECT_KIND:-not-tested}'), so a stale Supavisor credential cache after the recent rotation is still possible — re-run ONCE after a few minutes before touching the password. Do not rotate again: each rotation re-opens that window and repeated failures can trip the auth circuit breaker."
             fi
-            echo "::error::Recommended fix, and the one Supabase documents for CI: enable TEMPORARY ACCESS so the access token (already proven to work here) becomes the database credential and the password is not needed at all. Dashboard > Project Settings > Database > 'Enable temporary access', then authorise your user to assume the 'postgres' role. Requires Postgres >= 17.6.1.081 (this project reports '${POSTGRES_VERSION:-unknown}') and SSL enforcement enabled. This workflow already tries that path automatically on every run."
+            echo "::error::Recommended fix: verify the value in the SUPABASE_DB_PASSWORD GitHub secret against Dashboard > Project Settings > Database > Database password (reset it there if unsure, then paste the SAME value into the secret). Do not rotate blindly — each rotation re-opens the pooler-cache window and repeated failures can trip the auth circuit breaker. (The JIT temporary-access fallback is deliberately disabled in this workflow per operator directive: this project's /database/jit Management-API endpoints return an undocumented HTTP 406 for every token class. JIT requires Postgres >= 17.6.1.081 — project reports '${POSTGRES_VERSION:-unknown}') "
           fi
           if [ "$PROJECT_VISIBLE" = "true" ]; then
             echo "::error::The access token CAN read this project, so the access token is not the blocker — fix the database credential/endpoint above and re-run."
