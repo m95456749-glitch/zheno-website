@@ -41,8 +41,13 @@ name: Supabase JIT authorize (gated)
 # both use `roles`.
 #
 # ── Security properties ────────────────────────────────────────────────────────
-# * workflow_dispatch ONLY. It can never be triggered by a pull_request, so no PR
-#   can cause a JIT grant.
+# * workflow_dispatch, plus a path-filtered pull_request trigger for this file
+#   only. The pull_request trigger does NOT execute unless the PR title carries
+#   the literal marker [run-jit-auth-test], and the job is additionally gated on
+#   a same-repository PR (fork PRs receive no repository secrets anyway, and the
+#   guard step fails closed when the token secret is missing). So no incidental
+#   PR can cause a JIT grant. This mirrors supabase-jit-enable.yml, which the
+#   repo already merged (PR #45).
 # * DRY RUN BY DEFAULT. `confirm` defaults to "false": the workflow prints the
 #   exact request it would send and exits 0 without issuing any write.
 # * The grant is IP-BOUND. `rhost` is the runner's own public egress IPv4, so the
@@ -52,11 +57,17 @@ name: Supabase JIT authorize (gated)
 #   GitHub-hosted runner's egress IP is per-job and would change otherwise.
 # * The token is masked and never printed. It is passed to psql via PGPASSWORD,
 #   never on a command line.
-# * No migration is run. No schema, password, SSL or network setting is changed.
+# * No migration is applied. `run_dry_run` only reports what
+#   `supabase db push --dry-run` WOULD apply, and it must run in the same job
+#   as the grant because the JIT mapping is IP-bound. No schema, password,
+#   SSL or network setting is changed.
 # * Optional `revoke_after_test` deletes the mapping again when you only want a
 #   one-shot verification.
 
 on:
+  pull_request:
+    paths:
+      - ".github/workflows/supabase-jit-authorize.yml"
   workflow_dispatch:
     inputs:
       project_ref:
@@ -91,6 +102,10 @@ on:
         description: "After authorizing, verify with a real psql connection"
         required: true
         default: "true"
+      run_dry_run:
+        description: "If the psql check succeeds, run 'supabase db push --dry-run' in THIS job (read-only; applies nothing; must be same-job because the grant is IP-bound)"
+        required: false
+        default: "true"
       revoke_after_test:
         description: "Delete the JIT mapping again once the test finishes"
         required: true
@@ -105,18 +120,24 @@ concurrency:
 
 jobs:
   authorize:
+    # pull_request runs only for same-repository PRs; a PR from a fork never has
+    # the secrets and is skipped outright.
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       PROJECT_REF: ${{ github.event.inputs.project_ref || 'kijhqsyftzufydonggeb' }}
       ROLE: ${{ github.event.inputs.role || 'postgres' }}
-      CONFIRM: ${{ github.event.inputs.confirm || 'false' }}
+      CONFIRM: ${{ github.event.inputs.confirm || (contains(github.event.pull_request.title, '[run-jit-auth-test]') && 'true' || 'false') }}
       RHOST_INPUT: ${{ github.event.inputs.rhost || '' }}
-      EXPIRES_HOURS: ${{ github.event.inputs.expires_hours || '0' }}
+      # For PR runs (no inputs): 1-hour bound via the PUT step, and the mapping is
+      # revoked at the end of the job — the grant only ever exists for this test.
+      EXPIRES_HOURS: ${{ github.event.inputs.expires_hours || '1' }}
       DB_HOST: ${{ github.event.inputs.db_host || 'aws-1-eu-west-1.pooler.supabase.com' }}
       DB_PORT: ${{ github.event.inputs.db_port || '5432' }}
       RUN_PSQL: ${{ github.event.inputs.run_psql_test || 'true' }}
-      REVOKE: ${{ github.event.inputs.revoke_after_test || 'false' }}
+      RUN_DRYRUN: ${{ github.event.inputs.run_dry_run || 'true' }}
+      REVOKE: ${{ github.event.inputs.revoke_after_test || 'true' }}
       API: https://api.supabase.com
     steps:
       - name: Checkout
@@ -159,32 +180,146 @@ jobs:
           fi
           psql --version
 
+      - name: Egress diagnostics (informational, non-fatal)
+        if: env.CONFIRM == 'true'
+        run: |
+          set -uo pipefail
+          # GitHub Actions invokes `bash -e {0}` for run: steps, so
+          # `set -uo pipefail` alone still leaves -e ACTIVE. That is exactly why
+          # this step — which is meant to be informational only — killed run
+          # 34841778856 with exit code 7 (curl: "couldn't connect to host"):
+          # the first failing probe aborted the script before `rc=$?` could even
+          # record it, and every later step (rhost resolution, pre-flight, JIT
+          # authorize, psql, dry-run) was skipped. Turn -e OFF for the whole
+          # step and always exit 0, the same way the psql step below does.
+          set +e
+          echo "== addresses =="
+          ip -brief addr 2>/dev/null | head -20
+          echo "== default routes =="
+          ip route 2>/dev/null | head -5
+          ip -6 route 2>/dev/null | grep -m2 default
+          echo "== DNS =="
+          for h in api.supabase.com api.github.com api.ipify.org "$DB_HOST" 1.1.1.1; do
+            a=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
+            aaaa=$(getent ahostsv6 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
+            echo "dns $h A=[${a:-none}] AAAA=[${aaaa:-none}]"
+          done
+          echo "== HTTP probes (rc = curl exit code: 6=DNS 7=connect 28=timeout 35=TLS) =="
+          for t in https://api.supabase.com/auth/v1/health https://api.github.com/meta https://api.ipify.org https://1.1.1.1/cdn-cgi/trace; do
+            for m in v4 v6 any; do
+              case $m in v4) f="-4";; v6) f="-6";; *) f="";; esac
+              out=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' $f "$t" 2>/tmp/perr)
+              rc=$?
+              echo "probe $t [$m] rc=$rc http=${out:-n/a} err=$(head -c 120 /tmp/perr 2>/dev/null | tr '\n' ' ')"
+            done
+          done
+          rm -f /tmp/perr
+          echo "== Postgres pooler TCP reachability (the real psql / db push target) =="
+          python3 - "$DB_HOST" "$DB_PORT" <<'PYEOF'
+          import socket, sys, time
+          host, port = sys.argv[1], sys.argv[2]
+          for fam, name in ((socket.AF_INET, "v4"), (socket.AF_INET6, "v6")):
+              try:
+                  infos = socket.getaddrinfo(host, port, fam, socket.SOCK_STREAM)
+              except OSError as e:
+                  print("tcp %s:%s [%s] dns_error=%s" % (host, port, name, e))
+                  continue
+              if not infos:
+                  print("tcp %s:%s [%s] no_address" % (host, port, name))
+                  continue
+              for info in infos[:2]:
+                  af, st, proto, _canon, sa = info
+                  t0 = time.time()
+                  try:
+                      s = socket.socket(af, st, proto)
+                      s.settimeout(8)
+                      s.connect(sa)
+                      s.close()
+                      print("tcp %s:%s [%s] CONNECT_OK peer=%s ms=%d" % (host, port, name, sa[0], (time.time() - t0) * 1000))
+                      break
+                  except OSError as e:
+                      print("tcp %s:%s [%s] peer=%s CONNECT_FAIL=%s:%s ms=%d" % (host, port, name, sa[0], type(e).__name__, e, (time.time() - t0) * 1000))
+          for extra in ("6543",):
+              try:
+                  s = socket.create_connection((host, int(extra)), timeout=8)
+                  s.close()
+                  print("tcp %s:%s [any] CONNECT_OK (transaction pooler, informational)" % (host, extra))
+              except OSError as e:
+                  print("tcp %s:%s [any] CONNECT_FAIL=%s:%s (transaction pooler, informational)" % (host, extra, type(e).__name__, e))
+          PYEOF
+          echo "== end of diagnostics (this step never fails the job) =="
+          exit 0
       - name: Resolve rhost (IPv4/IPv6 literal, per AuthorizeJitAccessBody)
         id: rhost
         run: |
           set -uo pipefail
           # Strict literal-IPv4 pattern taken verbatim from AuthorizeJitAccessBody
           # in apps/docs/spec/api_v1_openapi.json. rhost must NOT be a CIDR and
-          # must NOT be a hostname.
-          IPV4_RE='^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])$'
+          # must NOT be a hostname. The contract also accepts a literal IPv6.
+          # Same octet rules as AuthorizeJitAccessBody's schema, expressed in POSIX
+          # ERE (grep -E does NOT support PCRE-style (?:…) groups — using them
+          # makes every candidate silently fail validation).
+          OCTET='(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])'
+          IPV4_RE="^(${OCTET}\.){3}${OCTET}$"
+          is_ipv4_public() {
+            local c="$1"
+            printf '%s' "$c" | grep -Eq "$IPV4_RE" || return 1
+            case "$c" in 0.*|10.*|127.*|169.254.*|192.168.*|224.*|255.*) return 1 ;; esac
+            return 0
+          }
+          is_ipv6_global() {
+            python3 - "$1" <<'PYEOF'
+          import socket, sys
+          s = sys.argv[1]
+          try:
+              socket.inet_pton(socket.AF_INET6, s)
+          except OSError:
+              sys.exit(1)
+          sys.exit(1 if s.lower().startswith(("::1", "fe80", "fc", "fd", "ff")) else 0)
+          PYEOF
+          }
+          UA='Mozilla/5.0 (compatible; GitHub-Actions; zheno-jit-ci)'
+          # cdn-cgi/trace echoes the client IP as an `ip=` line; api.supabase.com
+          # is the one domain this workflow is known to reach from this runner pool.
+          trace_eps="https://api.supabase.com/cdn-cgi/trace https://1.1.1.1/cdn-cgi/trace http://1.1.1.1/cdn-cgi/trace https://www.cloudflare.com/cdn-cgi/trace"
+          echo_eps="https://api.ipify.org http://checkip.amazonaws.com https://ipinfo.io/ip https://ifconfig.me/ip https://myexternalip.com/raw https://ipv4.icanhazip.com https://ifconfig.co/ip https://api64.ipify.org"
+
+          try_fetch() {  # $1=svc; candidate printed on stdout (empty on failure), details on stderr
+            local svc="$1" body cand f last_err=""
+            for f in "-4" "-6" ""; do
+              case "$svc" in *ipv4*) [ "$f" = "-6" ] && continue ;; esac
+              case "$svc" in *ipv6*) [ "$f" = "-4" ] && continue ;; esac
+              body=$(curl -sS -m 12 -A "$UA" $f "$svc" 2>/tmp/rerr | tr -d '\r' || true)
+              last_err=$(head -c 90 /tmp/rerr 2>/dev/null | tr '\n' ' ')
+              if printf '%s' "$svc" | grep -q 'cdn-cgi/trace'; then
+                cand=$(printf '%s' "$body" | sed -n 's/^ip=\([0-9a-fA-F:.]*\)$/\1/p' | head -n1)
+              else
+                cand=$(printf '%s' "$body" | grep -Eo '^([0-9]{1,3}\.){3}[0-9]{1,3}$|^[0-9a-fA-F:]*:[0-9a-fA-F:.]+$' | head -n1)
+              fi
+              if is_ipv4_public "$cand"; then echo "  [$(date +%T)] $svc (mode=${f:-any}) -> IPv4 $cand" >&2; printf '%s' "$cand"; return 0; fi
+              if is_ipv6_global "$cand"; then echo "  [$(date +%T)] $svc (mode=${f:-any}) -> IPv6 $cand" >&2; printf '%s' "$cand"; return 0; fi
+            done
+            echo "  [$(date +%T)] $svc -> unresolved${last_err:+ err=${last_err}}" >&2
+            return 1
+          }
 
           candidate="${RHOST_INPUT}"
           if [ -n "$candidate" ]; then
             echo "using explicit rhost input"
+            is_ipv4_public "$candidate" || is_ipv6_global "$candidate" || { echo "::error::explicit rhost is not a valid literal IPv4/IPv6"; exit 1; }
           else
-            echo "auto-detecting this runner's public egress IPv4…"
-            for svc in "https://api.ipify.org" "https://ifconfig.co/ip" "https://ipv4.icanhazip.com"; do
-              candidate=$(curl -sS -m 15 -4 "$svc" 2>/dev/null | tr -d '\r\n[:space:]' || true)
-              if printf '%s' "$candidate" | grep -Eq "$IPV4_RE"; then
-                echo "resolved via $svc"
-                break
-              fi
-              candidate=""
+            echo "auto-detecting this runner's public egress IP (IPv4 preferred; IPv6 accepted)…"
+            for round in 1 2; do
+              [ "$round" = "2" ] && sleep 5
+              for svc in $trace_eps $echo_eps; do
+                if cand=$(try_fetch "$svc") && [ -n "$cand" ]; then candidate="$cand"; break 2; fi
+              done
+              echo "round $round: no endpoint yielded a usable egress literal yet"
             done
           fi
 
-          if ! printf '%s' "$candidate" | grep -Eq "$IPV4_RE"; then
-            echo "::error::could not resolve a valid literal IPv4 for rhost (got '${candidate:-<empty>}'). Pass the rhost input explicitly."
+          if [ -z "$candidate" ]; then
+            echo "::error::could not resolve a valid literal IPv4/IPv6 for rhost (got '<empty>'). See the Egress diagnostics step. Pass the rhost input explicitly (or relax runner egress rules)."
             exit 1
           fi
           echo "rhost=$candidate"
@@ -289,8 +424,10 @@ jobs:
           # (1740787200). The Temporary-access guide page shows milliseconds —
           # that page is stale; the spec and the Dashboard mutation use seconds.
           exp=$(( $(date +%s) + EXPIRES_HOURS * 3600 ))
-          payload=$(jq -cn --arg u "$UID_" --arg r "$role" --argjson e "$exp" --arg c "${RHOST}/32" \
-                    '{user_id:$u, roles:[{role:$r, expires_at:$e, allowed_networks:{allowed_cidrs:[{cidr:$c}]}}]}')
+          # IPv4 → allowed_cidrs /32; IPv6 literal → allowed_cidrs_v6 /128
+          if printf '%s' "${RHOST:?}" | grep -q ':'; then mask=128; key=allowed_cidrs_v6; else mask=32; key=allowed_cidrs; fi
+          payload=$(jq -cn --arg u "$UID_" --arg r "$role" --argjson e "$exp" --arg k "$key" --arg c "${RHOST}/${mask}" \
+                    '{user_id:$u, roles:[{role:$r, expires_at:$e, allowed_networks:{($k):[{cidr:$c}]}}]}')
           echo "PUT /v1/projects/${ref}/database/jit  payload=$payload"
           resp=$(curl -sS -m 45 -X PUT \
                    -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
@@ -350,6 +487,65 @@ jobs:
             exit "$rc"
           fi
 
+      - name: Install Supabase CLI (dry-run only)
+        if: env.CONFIRM == 'true' && env.RUN_DRYRUN == 'true' && steps.psql.outcome == 'success'
+        uses: supabase/setup-cli@v1
+        with:
+          # Pinned for the same reason as supabase-migrate.yml: 'latest' resolves
+          # through the unauthenticated GitHub API and dies on rate limits.
+          version: 2.117.0
+
+      - name: Migration dry-run — verify files, then 'supabase db push --dry-run' (read-only)
+        # Runs in THIS job on purpose: the JIT grant is bound to this runner's
+        # egress IP, so a second workflow run (different job, different IP) could
+        # not reuse it. Strictly --dry-run: it reports, it never applies.
+        id: dryrun
+        if: env.CONFIRM == 'true' && env.RUN_DRYRUN == 'true' && steps.psql.outcome == 'success'
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?}"
+
+          echo "== 1/2 Verify the repository migrations (read-only; nothing modified) =="
+          files=$(ls -1 supabase/migrations/*.sql)
+          printf '%s\n' "$files"
+          expected="$(printf 'supabase/migrations/20260912000000_initial_schema.sql\nsupabase/migrations/20260912000001_seed_catalog.sql')"
+          if [ "$files" != "$expected" ]; then
+            echo "::error::supabase/migrations does not contain exactly the two expected files"
+            exit 1
+          fi
+          sha256sum supabase/migrations/*.sql
+          echo "supabase CLI: $(supabase --version 2>&1 | head -1)"
+          if [ ! -f supabase/config.toml ]; then
+            # Runner-side placeholder so the CLI has a project config; the repo
+            # and the SQL files themselves are NOT touched. Same command as
+            # supabase-migrate.yml uses ("no SQL file was touched").
+            supabase init --force >/dev/null 2>&1 || true
+          fi
+
+          echo
+          echo "== 2/2 supabase db push --dry-run (reports only; applies NOTHING) =="
+          pguser="postgres.${ref}"
+          # Percent-encoded db URL built in-shell: the password is the masked PAT
+          # (temporary access / JIT credential) — never argv, never printed;
+          # options carries the required jit=true GUC for Supavisor.
+          url=$(python3 -c 'import sys, urllib.parse as u; h,p,usr,pw=sys.argv[1:5]; q=lambda s: u.quote(s, safe=""); print("postgresql://%s:%s@%s:%s/postgres?sslmode=require&options=%s" % (q(usr), q(pw), h, p, q("-c jit=true")))' "$DB_HOST" "$DB_PORT" "$pguser" "$SUPABASE_ACCESS_TOKEN")
+          echo "::add-mask::$url"
+          echo "target: ${pguser}@${DB_HOST}:${DB_PORT}/postgres (temporary-access/JIT credential)"
+
+          echo "-- supabase migration list (local vs remote history; read-only) --"
+          supabase migration list --db-url "$url" 2>&1 || echo "(migration list failed)"
+          echo
+          echo "-- supabase db push --dry-run --db-url --"
+          if supabase db push --dry-run --db-url "$url" 2>&1; then
+            echo "dryrun_ok=true" >> "$GITHUB_OUTPUT"
+            echo "::notice title=Migration dry-run OK::supabase db push --dry-run completed — nothing was applied"
+          else
+            rc=$?
+            echo "dryrun_ok=false" >> "$GITHUB_OUTPUT"
+            echo "::error title=Migration dry-run FAILED::supabase db push --dry-run exited ${rc} — nothing was applied"
+            exit "$rc"
+          fi
+
       - name: Revoke mapping (only if requested)
         if: env.CONFIRM == 'true' && env.REVOKE == 'true' && always()
         env:
@@ -370,6 +566,7 @@ jobs:
           EXPIRES_OUT: ${{ steps.auth.outputs.expires_at }}
           PSQL_RESULT: ${{ steps.psql.outputs.result }}
           PSQL_IDENTITIES: ${{ steps.psql.outputs.identities }}
+          DRYRUN_OK: ${{ steps.dryrun.outputs.dryrun_ok }}
         run: |
           set -uo pipefail
           if [ "${CONFIRM}" = "true" ]; then mode="EXECUTED"; else mode="DRY RUN (no write request issued)"; fi
@@ -387,6 +584,7 @@ jobs:
             echo "| expires_at applied | \`${EXPIRES_OUT:-n/a}\` |"
             echo "| psql result | \`${PSQL_RESULT:-not run}\` |"
             echo "| psql identities | \`${PSQL_IDENTITIES:-n/a}\` |"
+            echo "| supabase db push --dry-run | \`${DRYRUN_OK:-not run}\` (nothing is ever applied) |"
             echo ""
             echo "Endpoint contract used: \`POST /v1/projects/{ref}/database/jit\` with"
             echo "\`{\"role\": \"…\", \"rhost\": \"<ipv4|ipv6 literal>\"}\`, gated by"
