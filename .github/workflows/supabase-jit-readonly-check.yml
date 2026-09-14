@@ -56,8 +56,19 @@ name: Supabase JIT read-only diagnostic
 #                  is not in the token's resource scope
 #   403 "requires a user-scoped access token"
 #                  endpoint is not reachable by any fine-grained PAT
-#   406            permission gate PASSED; the call failed for a semantic reason
-#                  (for GET /database/jit: no JIT mapping exists for this user)
+#   406            permission gate PASSED; the call failed for a semantic reason.
+#                  NOT documented on any /database/jit verb in the OpenAPI spec.
+#                  Run 34852689233 showed POST /database/jit (spec-exact
+#                  {role,rhost}) fail with 406 {"message":"Failed to get user's
+#                  JIT access for project"}. This revision captures the GET's
+#                  406 body + response headers verbatim: if the message is
+#                  identical, both verbs die in the same caller-identity lookup
+#                  — i.e. the scoped PAT (sbp_fc…) is not resolved to a Supabase
+#                  user (same family as supabase/supabase#50244, where a scoped
+#                  PAT fails on a user-context endpoint and a classic PAT
+#                  succeeds). The earlier reading "406 = gate passed, no mapping
+#                  exists yet" was an unverified assumption and is what this
+#                  forensic exists to confirm or falsify.
 #   404            resource not visible inside the token's scope
 
 on:
@@ -142,9 +153,11 @@ jobs:
           }
 
           # GET-only helper. Full body -> $tmp/body_<label>; display copy -> TSV.
+          # Response headers -> $tmp/headers_<label> (sanitised before display).
           get() {
             local label="$1" path="$2" perm="$3" resp code body disp
             resp=$(curl -sS -m 60 \
+                     -D "$tmp/headers_${label}" \
                      -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
                      -H "Accept: application/json" \
                      -w $'\n%{http_code}' \
@@ -266,26 +279,64 @@ jobs:
           echo "PROFILE: $prof_verdict"
           echo "::notice title=GET /v1/profile::$(printf '%s' "$prof_verdict" | tr -d '\r\n' | head -c 300)"
 
-          # ---- database_jit_read: the permission that actually matters ---------
+          # ---- database_jit_read + the 406 forensic ---------------------------
+          # Run 34852689233 (jit-authorize, 95091fe): POST /database/jit with a
+          # spec-exact {role, rhost} body returned HTTP 406
+          # {"message":"Failed to get user's JIT access for project"} — a status
+          # the OpenAPI spec does NOT document on any /database/jit verb. If the
+          # GET (same permission gate, same "resolve the caller" code path)
+          # returns the SAME message, then both verbs die in the caller-identity
+          # lookup: the scoped fine-grained PAT is not resolved to a Supabase
+          # user. Same family as supabase/supabase#50244 (scoped PAT fails where
+          # classic PAT succeeds, on user-context endpoints).
+          POST_406_MSG="Failed to get user's JIT access for project"
           jitself_code=$(code_of jit_self)
+          jitself_body=$(body_of jit_self)
+          jitself_msg=$(jq -r '.message // empty' "$TMPDIR_DIAG/body_jit_self" 2>/dev/null || echo "")
           if [ "$jitself_code" = "403" ]; then
             jit_verdict="database_jit_read NOT effective — POST /database/jit would be denied."
             jit_post_ok="no"
+            jit406_identity="no"
+            jit406_verdict="GET returned 403; the identity hypothesis cannot be tested."
           else
-            jit_verdict="database_jit_read IS effective: GET /database/jit returned HTTP ${jitself_code}, which is NOT 403, so the permission gate passed (406 = gate passed, no mapping exists for this user yet). POST /v1/projects/{ref}/database/jit is therefore callable with {role, rhost} and returns the caller's user_id."
-            jit_post_ok="yes"
+            jit_verdict="database_jit_read IS effective: GET /database/jit returned HTTP ${jitself_code}, which is NOT 403, so the fine-grained permission gate passed."
+            jit_post_ok="gate-passed"
+            if [ "$jitself_code" = "406" ] && [ "$jitself_msg" = "$POST_406_MSG" ]; then
+              jit406_identity="yes"
+              jit406_verdict="GET /database/jit -> 406 with EXACTLY the same message the POST returned in run 34852689233 ('${POST_406_MSG}'). Both verbs fail in the same server-side lookup of the CALLER'S JIT access. The permission gate passes (406 != 403), the body contract is satisfied (spec-exact {role,rhost}), and the project-level JIT service answers (jit-access, jit/list). Therefore the failure is caller-identity resolution: this scoped fine-grained PAT (sbp_fc…) is not resolved to a Supabase user by the JIT endpoints. 406 is undocumented on every /database/jit verb. Cf. supabase/supabase#50244."
+            elif [ "$jitself_code" = "406" ]; then
+              jit406_identity="no"
+              jit406_verdict="GET /database/jit -> 406 but the body message ('${jitself_msg:-<none>}') DIFFERS from the POST failure message — identity resolution is NOT proven; inspect the body notice."
+            else
+              jit406_identity="no"
+              jit406_verdict="GET /database/jit -> HTTP ${jitself_code} (not 406 this time). Body: ${jitself_body}"
+            fi
           fi
           echo "DATABASE JIT READ: $jit_verdict"
           echo "::notice title=database_jit_read::${jit_verdict}"
+          echo "JIT 406 FORENSIC: $jit406_verdict"
+          echo "::notice title=jit 406 forensic (GET vs POST message)::$(printf '%s' "$jit406_verdict" | tr -d '\r\n' | head -c 600)"
+          echo "::notice title=jit_self body (sanitised)::$(printf '%s' "$jitself_body" | head -c 300)"
+          jitself_hdrs=$(tr -d '\r' < "$TMPDIR_DIAG/headers_jit_self" 2>/dev/null \
+                         | grep -vi 'set-cookie\|authorization\|token' \
+                         | tr '\n' ';' | head -c 400 || true)
+          echo "::notice title=jit_self response headers::${jitself_hdrs:-<none>}"
 
           jitlist_code=$(code_of jit_list)
+          jitlist_items=$(jq -r 'if type=="object" and (.items|type)=="array" then (.items|length) elif type=="array" then length else -1 end' \
+                            "$TMPDIR_DIAG/body_jit_list" 2>/dev/null || echo "-1")
           if [ "$jitlist_code" = "200" ]; then
-            jitw_verdict="database_jit_write IS effective (GET /database/jit/list is gated by database_jit_write and returned 200). PUT and DELETE on /database/jit are callable."
+            jitw_verdict="database_jit_write IS effective (GET /database/jit/list is gated by database_jit_write and returned 200). PUT and DELETE on /database/jit are callable. Existing mappings: ${jitlist_items} — the project-scoped JIT service itself is answering, so a project-wide JIT outage is ruled out."
           else
             jitw_verdict="GET /database/jit/list returned HTTP ${jitlist_code}; database_jit_write may be missing."
           fi
           echo "DATABASE JIT WRITE: $jitw_verdict"
           echo "::notice title=database_jit_write::${jitw_verdict}"
+          echo "::notice title=jit_list body (sanitised)::$(body_of jit_list | head -c 300)"
+
+          jitcfg_body=$(jq -c '{state, appliedSuccessfully} // empty' "$TMPDIR_DIAG/body_jit_config" 2>/dev/null || echo "")
+          echo "::notice title=jit-access config::$(body_of jit_config | head -c 200)"
+          echo "::notice title=profile body (sanitised)::$(body_of profile | head -c 200)"
 
           # ---- organization identifier format ----------------------------------
           if [ -n "$ORG_SLUG" ] && [ "$ORG_SLUG" = "$ORG_ID" ]; then
@@ -305,6 +356,8 @@ jobs:
             echo "prof_verdict=$prof_verdict"
             echo "jit_verdict=$jit_verdict"
             echo "jit_post_ok=$jit_post_ok"
+            echo "jit406_verdict=$jit406_verdict"
+            echo "jit406_identity=$jit406_identity"
             echo "jitw_verdict=$jitw_verdict"
             echo "fmt_verdict=$fmt_verdict"
           } >> "$GITHUB_OUTPUT"
@@ -318,6 +371,8 @@ jobs:
           ORGGET_VERDICT: ${{ steps.analyse.outputs.orgget_verdict }}
           PROF_VERDICT: ${{ steps.analyse.outputs.prof_verdict }}
           JIT_VERDICT: ${{ steps.analyse.outputs.jit_verdict }}
+          JIT406_VERDICT: ${{ steps.analyse.outputs.jit406_verdict }}
+          JIT406_IDENTITY: ${{ steps.analyse.outputs.jit406_identity }}
           JITW_VERDICT: ${{ steps.analyse.outputs.jitw_verdict }}
           FMT_VERDICT: ${{ steps.analyse.outputs.fmt_verdict }}
         run: |
@@ -356,16 +411,31 @@ jobs:
             echo "- **GET /v1/organizations/{slug}:** ${ORGGET_VERDICT}"
             echo "- **GET /v1/profile:** ${PROF_VERDICT}"
             echo "- **Database JIT read:** ${JIT_VERDICT}"
+            echo "- **JIT 406 forensic (GET body vs POST body):** ${JIT406_VERDICT}"
             echo "- **Database JIT write:** ${JITW_VERDICT}"
             echo "- **Organization identifier:** ${FMT_VERDICT}"
             echo ""
             echo "### Conclusion"
             echo ""
-            echo "JIT authorization does not need \`members_read\`, \`organizations_read\`,"
-            echo "\`organization_admin_read\` or \`/v1/profile\`. \`POST /v1/projects/{ref}/database/jit\`"
-            echo "takes \`{role, rhost}\`, is gated by \`database_jit_read\`, resolves the user from"
-            echo "the bearer token, and returns \`user_id\`. Run the"
-            echo "**Supabase JIT authorize (gated)** workflow to use it."
+            if [ "${JIT406_IDENTITY:-no}" = "yes" ]; then
+              echo "**Verdict A — caller identity/user resolution.** GET and POST"
+              echo "\`/database/jit\` fail with the SAME undocumented 406 message"
+              echo "\`Failed to get user's JIT access for project\`: both die in the"
+              echo "server-side lookup of the CALLER's JIT access. The permission gate"
+              echo "passes (406 ≠ 403), the POST body is spec-exact (\`{role, rhost}\`),"
+              echo "the project-level JIT service answers (\`/jit-access\`, \`/database/jit/list\`),"
+              echo "and \`/v1/profile\` is 403 by design for every fine-grained PAT. This"
+              echo "scoped PAT (\`sbp_fc…\`) is not resolvable to a Supabase user by these"
+              echo "endpoints — the same scoped-vs-classic family as supabase/supabase#50244."
+              echo "The Management API exposes no PAT-management endpoint, so the token"
+              echo "cannot be fixed by any API call; the temporary-access guide itself uses"
+              echo "a classic user-scoped \`sbp_…\` token (dashboard/account/tokens)."
+            else
+              echo "The GET /database/jit 406 body did NOT match the POST failure message"
+              echo "(or the probe pattern changed) — identity resolution is NOT proven as"
+              echo "the cause. Inspect the \`jit_self body\` and \`jit 406 forensic\` notices"
+              echo "above before concluding."
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
           echo "::notice title=DIAGNOSTIC COMPLETE::read-only; no POST/PUT/PATCH/DELETE was issued"
