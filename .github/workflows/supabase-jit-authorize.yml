@@ -183,27 +183,62 @@ jobs:
       - name: Egress diagnostics (informational, non-fatal)
         if: env.CONFIRM == 'true'
         run: |
+          # INFORMATIONAL ONLY — this step must never fail the job.
+          # Run 34841778856 (5eaace4) proved it could: GitHub's default bash
+          # runs with -e, and `set -uo pipefail` does NOT clear errexit, so
+          # the first unguarded substitution — a curl that could not connect
+          # (exit 7) — aborted the step before any probe result was printed
+          # and every later step was skipped. Hence: explicit `set +e`,
+          # `|| true` guards on command substitutions whose rc is not needed,
+          # rc captured separately where it is, and a final `exit 0`.
+          set +e
           set -uo pipefail
           echo "== addresses =="
           ip -brief addr 2>/dev/null | head -20 || true
           echo "== default routes =="
           ip route 2>/dev/null | head -5 || true
           ip -6 route 2>/dev/null | grep -m2 default || true
-          echo "== DNS =="
-          for h in api.supabase.com api.github.com api.ipify.org 1.1.1.1; do
-            a=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
-            aaaa=$(getent ahostsv6 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -2 | tr '\n' ' ')
+          echo "== DNS (management API + the real Postgres targets) =="
+          for h in api.supabase.com api.github.com api.ipify.org 1.1.1.1 \
+                   "${DB_HOST}" "db.${PROJECT_REF}.supabase.co"; do
+            a=$(getent ahostsv4 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -4 | tr '\n' ' ' || true)
+            aaaa=$(getent ahostsv6 "$h" 2>/dev/null | awk '{print $1}' | sort -u | head -4 | tr '\n' ' ' || true)
             echo "dns $h A=[${a:-none}] AAAA=[${aaaa:-none}]"
           done
-          echo "== probes (rc = curl exit code) =="
+          echo "== HTTP probes (rc = curl exit: 6=DNS 7=connect 28=timeout 35=TLS) =="
           for t in https://api.supabase.com/auth/v1/health https://api.github.com/meta https://api.ipify.org; do
             for m in v4 v6 any; do
               case $m in v4) f="-4";; v6) f="-6";; *) f="";; esac
-              out=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' $f "$t" 2>/tmp/perr); rc=$?
-              echo "probe $t [$m] rc=$rc http=${out:-n/a} err=$(head -c 90 /tmp/perr 2>/dev/null | tr '\n' ' ')"
+              out=$(curl -sS -o /dev/null -m 10 -w '%{http_code}' $f "$t" 2>/tmp/perr)
+              rc=$?
+              err=$(head -c 120 /tmp/perr 2>/dev/null | tr '\n' ' ' || true)
+              echo "probe $t [$m] rc=$rc http=${out:-n/a} err=${err:-none}"
             done
           done
-          rm -f /tmp/perr
+          echo "== TCP connect probes — the REAL Postgres targets =="
+          # ${DB_HOST}:5432 is the session pooler the psql + dry-run steps use
+          # (temporary access does not work over the :6543 transaction pooler);
+          # db.${PROJECT_REF}.supabase.co:5432 (direct) is probed for contrast.
+          for hp in "${DB_HOST}:5432" "${DB_HOST}:6543" "db.${PROJECT_REF}.supabase.co:5432"; do
+            h="${hp%%:*}"; p="${hp##*:}"
+            t0=$(date +%s%N 2>/dev/null || echo 0)
+            timeout 12 bash -c "exec 3<>/dev/tcp/${h}/${p}" 2>/tmp/tcperr
+            rc=$?
+            t1=$(date +%s%N 2>/dev/null || echo 0)
+            err=$(head -c 120 /tmp/tcperr 2>/dev/null | tr '\n' ' ' || true)
+            echo "tcp ${hp} rc=${rc} (0=open 1=refused/unreachable 124=timeout) $(( (t1 - t0) / 1000000 ))ms err=${err:-none}"
+          done
+          echo "== rhost-resolution endpoint spot check (rc + first bytes of body) =="
+          for t in https://api.supabase.com/cdn-cgi/trace https://1.1.1.1/cdn-cgi/trace \
+                   https://api.ipify.org https://checkip.amazonaws.com https://ifconfig.co/ip https://api64.ipify.org; do
+            body=$(curl -sS -m 10 -A 'Mozilla/5.0 (compatible; GitHub-Actions; zheno-jit-ci)' "$t" 2>/tmp/eerr | tr -d '\r')
+            rc=$?
+            snippet=$(printf '%s' "$body" | head -c 100 | tr '\n' '|' || true)
+            eerrsnip=$(head -c 120 /tmp/eerr 2>/dev/null | tr '\n' ' ' || true)
+            echo "echo-svc $t rc=$rc body[:100]=[${snippet:-<empty>}] err=${eerrsnip:-none}"
+          done
+          rm -f /tmp/perr /tmp/tcperr /tmp/eerr
+          exit 0
       - name: Resolve rhost (IPv4/IPv6 literal, per AuthorizeJitAccessBody)
         id: rhost
         run: |
