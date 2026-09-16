@@ -1115,39 +1115,185 @@ jobs:
           echo
 
           ran=false
+          LAST_PENDING=""
+
+          # ---- remote migration history: read-only and SQLSTATE 42P01-safe ---------
+          # A FRESH Supabase database has no supabase_migrations.schema_migrations
+          # table until the first migration is applied. That is the EXPECTED state
+          # before the first migration, not an error, and it must never fail the dry
+          # run or hide the real report behind a generic "could not produce" error.
+          #
+          # Why the previous single-statement guard could not work:
+          #     select case when to_regclass('supabase_migrations.schema_migrations')
+          #                     is null then '(none)'
+          #                 else (select string_agg(version, ...) from
+          #                         supabase_migrations.schema_migrations) end;
+          # PostgreSQL resolves EVERY relation named ANYWHERE in a statement during
+          # parse analysis, long before any CASE branch is evaluated — so the missing
+          # table still raised SQLSTATE 42P01 ("relation ... does not exist") and the
+          # migration-history preflight died on exactly the fresh database it was
+          # written to describe.
+          #
+          # The fix asks about EXISTENCE first — to_regclass() takes a string and
+          # returns NULL instead of raising — and reads the rows only in a SECOND
+          # statement, once the table is known to exist. VERBOSITY=verbose puts the
+          # SQLSTATE into the message, so 42P01 is matched exactly and a missing
+          # history table is reported as an EMPTY remote history.
+          #
+          # Nothing here creates a schema, a table or a row and nothing applies a
+          # migration: every statement is a SELECT. `supabase db push` is also
+          # deliberately NOT invoked against a database whose history table is
+          # missing, because the CLI is free to create that table there and a dry run
+          # must create nothing. The dry-run/apply gates below are untouched — apply
+          # still requires workflow_dispatch + mode=apply + a confirmed connection.
+          HISTORY_STATE=unknown          # missing | empty | applied | unknown
+          HISTORY_VERSIONS=""            # comma-separated, no spaces (for matching)
+          hist_err="$RUNNER_TEMP/history.err"
+          cli_out="$RUNNER_TEMP/cli.out"
+
+          psql_ro() {  # $1 = sql — read-only; credential travels via env, never argv
+            PGSSLMODE=require PGCONNECT_TIMEOUT=15 PGPASSWORD="$SUPABASE_DB_PASSWORD" \
+              psql -h "$SB_DB_HOST" -p "$SB_DB_PORT" -U "$SB_DB_USER" -d postgres \
+                   -X -At -v VERBOSITY=verbose -v ON_ERROR_STOP=1 -qc "$1"
+          }
+
+          history_is_missing_error() {  # $1 = captured psql/CLI output
+            grep -qE '42P01|3F000|relation "supabase_migrations\.schema_migrations" does not exist' "$1" 2>/dev/null
+          }
+
+          read_remote_history() {  # sets HISTORY_STATE / HISTORY_VERSIONS; never writes
+            local missing versions
+            HISTORY_STATE=unknown; HISTORY_VERSIONS=""
+            # 1. existence only — cannot raise 42P01 by construction
+            if ! missing=$(psql_ro "select to_regclass('supabase_migrations.schema_migrations') is null" 2>"$hist_err"); then
+              if history_is_missing_error "$hist_err"; then
+                HISTORY_STATE=missing
+                echo "  remote history : MISSING -> EMPTY (SQLSTATE $(grep -oE '42P01|3F000' "$hist_err" | head -1))"
+                return 0
+              fi
+              echo "  remote history : could not be read — $(head -1 "$hist_err" 2>/dev/null)"
+              return 1
+            fi
+            if [ "$missing" = "t" ]; then
+              HISTORY_STATE=missing
+              echo "  remote history : EMPTY — supabase_migrations.schema_migrations does not exist yet (fresh database)"
+              return 0
+            fi
+            # 2. rows — read only now that the table is known to exist
+            if ! versions=$(psql_ro "select coalesce(string_agg(version, ',' order by version), '') from supabase_migrations.schema_migrations" 2>"$hist_err"); then
+              if history_is_missing_error "$hist_err"; then  # dropped between the two statements
+                HISTORY_STATE=missing
+                echo "  remote history : MISSING -> EMPTY (SQLSTATE 42P01 while reading rows)"
+                return 0
+              fi
+              echo "  remote history : could not be read — $(head -1 "$hist_err" 2>/dev/null)"
+              return 1
+            fi
+            HISTORY_VERSIONS="$versions"
+            if [ -n "$HISTORY_VERSIONS" ]; then
+              HISTORY_STATE=applied
+              echo "  remote history : $(printf '%s' "$HISTORY_VERSIONS" | sed 's/,/, /g')"
+            else
+              HISTORY_STATE=empty
+              echo "  remote history : EMPTY — history table exists but holds no rows"
+            fi
+            return 0
+          }
+
+          report_local_vs_remote() {  # $1 = applied versions, comma-separated (may be empty)
+            local remote="$1" f v
+            LAST_PENDING=""
+            echo "  local migration files : $(ls -1 supabase/migrations/*.sql | wc -l)"
+            for f in supabase/migrations/*.sql; do
+              v=$(basename "$f" .sql); v="${v%%_*}"
+              case ",${remote}," in
+                *",${v},"*) echo "    already applied : $v" ;;
+                *)          LAST_PENDING="${LAST_PENDING}${LAST_PENDING:+ }$v"; echo "    PENDING         : $v" ;;
+              esac
+            done
+            echo "  would be applied by 'mode = apply': ${LAST_PENDING:-nothing (remote is up to date)}"
+          }
+
+          fresh_database_report() {  # read-only report for a database with no history yet
+            echo "== fresh database: no remote migration history yet — read-only report =="
+            echo "  remote history : EMPTY — supabase_migrations.schema_migrations does not exist (SQLSTATE 42P01 is expected before the first migration)"
+            report_local_vs_remote ""
+            echo "  skipped        : 'supabase db push' — it may create supabase_migrations.schema_migrations, and a dry run creates nothing"
+            echo "  created        : nothing — no schema, no table, no row, no migration applied"
+            echo "::notice title=dry-run on a fresh database::supabase_migrations.schema_migrations does not exist; SQLSTATE 42P01 treated as EMPTY remote history. Pending='${LAST_PENDING:-none}'. Nothing was created and no migration was applied."
+            HISTORY_STATE=missing
+            ran=true
+          }
+
+          run_cli() {  # $1 = label, rest = command; captures output and classifies 42P01
+            local label="$1" rc=0
+            shift
+            echo "== ${label} =="
+            "$@" >"$cli_out" 2>&1 || rc=$?
+            sed 's/^/  /' "$cli_out"
+            if [ "$rc" -eq 0 ]; then return 0; fi
+            if history_is_missing_error "$cli_out"; then
+              echo "  -> SQLSTATE 42P01 / missing supabase_migrations.schema_migrations: the remote history is EMPTY (fresh database). Expected before the first migration — not a failure."
+              return 2
+            fi
+            echo "  -> (${label} failed)"
+            return 1
+          }
+
           if [ "$DB_REACHABLE" = "true" ]; then
-            echo "== supabase migration list (local files vs remote history) =="
-            if supabase migration list --db-url "$url"; then ran=true; else echo "(migration list --db-url failed)"; fi
+            echo "== remote migration history preflight (read-only, 42P01-safe) =="
+            if read_remote_history; then :; fi
             echo
-            echo "== supabase db push --dry-run =="
-            if supabase db push --dry-run --db-url "$url"; then ran=true; else echo "(db push --dry-run --db-url failed)"; fi
+            if [ "$HISTORY_STATE" = "missing" ]; then
+              fresh_database_report
+            else
+              rc=0
+              run_cli "supabase migration list (local files vs remote history)" supabase migration list --db-url "$url" || rc=$?
+              if [ "$rc" -eq 2 ]; then
+                echo
+                fresh_database_report
+              elif [ "$rc" -eq 0 ]; then
+                ran=true
+                echo
+                rc=0
+                run_cli "supabase db push --dry-run" supabase db push --dry-run --db-url "$url" || rc=$?
+                if [ "$rc" -eq 2 ]; then
+                  echo
+                  fresh_database_report
+                fi
+              fi
+            fi
           fi
 
           if [ "$ran" != "true" ] && [ "$LINK_OK" = "true" ]; then
             echo
-            echo "== falling back to the linked project =="
-            if supabase migration list --linked; then ran=true; fi
-            supabase db push --dry-run || true
+            rc=0
+            run_cli "falling back to the linked project — supabase migration list --linked" supabase migration list --linked || rc=$?
+            if [ "$rc" -eq 2 ]; then
+              # The linked project has no migration-history table yet: report from the
+              # local files alone and do NOT run `db push`, which would create it.
+              echo
+              fresh_database_report
+            elif [ "$rc" -eq 0 ]; then
+              ran=true
+              echo "== supabase db push --dry-run (linked project) =="
+              supabase db push --dry-run || true
+            fi
           fi
 
-          # Last resort: the CLI needs a linked project for some subcommands and this
-          # repository only has a scoped PAT (see the api-keys 403 above). The
-          # dry-run report is then produced straight from Postgres instead — still
-          # read-only, and it is exactly the information a dry run has to give.
+          # Read-only last resort: the CLI needs a linked project for some subcommands
+          # and this repository only has a scoped PAT (see the api-keys 403 above), so
+          # the report is produced straight from Postgres instead — still strictly
+          # read-only, and exactly the information a dry run has to give.
           if [ "$ran" != "true" ] && [ "$DB_REACHABLE" = "true" ]; then
             echo
             echo "== psql fallback: remote migration history vs local files (read-only) =="
-            export PGSSLMODE=require PGCONNECT_TIMEOUT=15 PGPASSWORD="$SUPABASE_DB_PASSWORD"
-            if psql -h "$SB_DB_HOST" -p "$SB_DB_PORT" -U "$SB_DB_USER" -d postgres -Atc "
-                 select case
-                   when to_regclass('supabase_migrations.schema_migrations') is null
-                     then '(none) — supabase_migrations.schema_migrations does not exist yet'
-                   else coalesce((select string_agg(version, ', ' order by version)
-                                    from supabase_migrations.schema_migrations),
-                                 '(none) — history table exists but is empty')
-                 end;" | sed 's/^/  remote history: /'; then
-              echo "  local files   : $(ls -1 supabase/migrations/*.sql | tr '\n' ' ')"
-              echo "  pending       : $(ls -1 supabase/migrations/*.sql | wc -l) file(s) would be pushed by 'mode = apply'"
+            if read_remote_history; then
+              report_local_vs_remote "$HISTORY_VERSIONS"
+              if [ "$HISTORY_STATE" = "missing" ]; then
+                echo "  note           : a missing supabase_migrations.schema_migrations (SQLSTATE 42P01) is the expected state of a fresh database and is reported as an EMPTY remote history — nothing was created to make this query succeed."
+                echo "::notice title=dry-run on a fresh database::remote history EMPTY (no supabase_migrations.schema_migrations); pending='${LAST_PENDING:-none}'. Read-only: nothing created, nothing applied."
+              fi
               ran=true
             else
               echo "(psql fallback failed too)"
@@ -1171,21 +1317,47 @@ jobs:
                 -d "$body" \
                 "https://api.supabase.com/v1/projects/${PROJECT_REF}/database/query"
             }
-            resp=$(mgmt_query "select case when to_regclass('supabase_migrations.schema_migrations') is null then '(none: history table does not exist)' else coalesce((select string_agg(version, ',' order by version) from supabase_migrations.schema_migrations), '(none: history table is empty)') end as history") || resp=""
-            if printf '%s' "$resp" | jq -e . >/dev/null 2>&1; then
-              remote=$(printf '%s' "$resp" | jq -r 'if type=="array" then (.[0].history // "") else "" end' 2>/dev/null)
-              echo "  remote migration history : ${remote:-?}"
-              echo "  local migration files    : $(ls -1 supabase/migrations/*.sql | xargs -n1 basename | tr '\n' ' ')"
-              pending=""
-              for f in supabase/migrations/*.sql; do
-                v=$(basename "$f" .sql); v="${v%%_*}"
-                case ",${remote}," in
-                  *",${v},"*) echo "    already applied : $v" ;;
-                  *)          pending="${pending}${pending:+ }$v"; echo "    PENDING         : $v" ;;
-                esac
-              done
-              echo "  would be applied by 'mode = apply': ${pending:-nothing (remote is up to date)}"
-              echo "::notice title=dry-run via Management API::read-only SQL over the access token; remote history='${remote:-?}'; pending='${pending:-none}'. No database password, no pooler and no IPv6 needed."
+            mgmt_scalar() {  # $1 = json, $2 = column ; prints the first row's column
+              printf '%s' "$1" | jq -r --arg c "$2" 'if type=="array" and length>0 then ((.[0][$c] // "") | tostring) else "" end' 2>/dev/null
+            }
+            # Existence FIRST, rows SECOND — both read_only:true. A single-statement
+            # CASE cannot guard this: PostgreSQL resolves the relation at parse time
+            # and answers SQLSTATE 42P01 on a fresh database.
+            resp=$(mgmt_query "select to_regclass('supabase_migrations.schema_migrations') is null as missing") || resp=""
+            remote=""
+            HISTORY_STATE=unknown
+            # A successful /database/query answer is a JSON ARRAY of rows; an error is
+            # a JSON object (or plain text). Accepting only an array is what stops an
+            # error body from being mistaken for an empty migration history.
+            if printf '%s' "$resp" | jq -e 'type=="array"' >/dev/null 2>&1; then
+              if [ "$(mgmt_scalar "$resp" missing)" = "true" ]; then
+                echo "  remote migration history : EMPTY — supabase_migrations.schema_migrations does not exist (fresh database; SQLSTATE 42P01 is expected here)"
+                HISTORY_STATE=missing
+              else
+                rows=$(mgmt_query "select coalesce(string_agg(version, ',' order by version), '') as history from supabase_migrations.schema_migrations") || rows=""
+                if printf '%s' "$rows" | jq -e 'type=="array"' >/dev/null 2>&1; then
+                  remote=$(mgmt_scalar "$rows" history)
+                  echo "  remote migration history : ${remote:-EMPTY — history table exists but holds no rows}"
+                  if [ -n "$remote" ]; then HISTORY_STATE=applied; else HISTORY_STATE=empty; fi
+                elif printf '%s' "$rows" | grep -qE '42P01|does not exist'; then
+                  echo "  remote migration history : EMPTY — the API reported SQLSTATE 42P01 while reading the rows (fresh database)"
+                  HISTORY_STATE=missing
+                else
+                  echo "  unexpected response while reading the history rows: $(printf '%s' "$rows" | head -c 300)"
+                fi
+              fi
+              if [ "$HISTORY_STATE" != "unknown" ]; then
+                report_local_vs_remote "$remote"
+                echo "  created                  : nothing — read_only:true on both statements"
+                echo "::notice title=dry-run via Management API::read-only SQL over the access token; remote history='${remote:-none (fresh database)}'; pending='${LAST_PENDING:-none}'. No database password, no pooler and no IPv6 needed. Nothing was created."
+                ran=true
+              fi
+            elif printf '%s' "$resp" | grep -qE '42P01|does not exist'; then
+              # The API itself reported the missing relation — same classification.
+              echo "  remote migration history : EMPTY — the API reported SQLSTATE 42P01 / 'does not exist' (fresh database)"
+              HISTORY_STATE=missing
+              report_local_vs_remote ""
+              echo "::notice title=dry-run via Management API::SQLSTATE 42P01 treated as EMPTY remote history; pending='${LAST_PENDING:-none}'. Nothing was created."
               ran=true
             else
               echo "  unexpected response: $(printf '%s' "$resp" | head -c 300)"
@@ -1196,8 +1368,9 @@ jobs:
             echo "::error::Could not produce a dry-run report through any available path."
             exit 1
           fi
-          echo "::notice title=dry-run::report produced against ${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT}"
+          echo "::notice title=dry-run::report produced against ${SB_DB_USER}@${SB_DB_HOST}:${SB_DB_PORT} (remote migration history: ${HISTORY_STATE:-unknown})"
           echo "dry_run_ok=true" >> "$GITHUB_OUTPUT"
+          echo "remote_history_state=${HISTORY_STATE:-unknown}" >> "$GITHUB_OUTPUT"
 
       - name: Dry run — read-only cross-check of the remote migration history
         if: steps.probe.outputs.db_reachable == 'true'
@@ -1205,15 +1378,37 @@ jobs:
           set -uo pipefail
           echo "::add-mask::$SUPABASE_DB_PASSWORD"
           export PGSSLMODE=require PGCONNECT_TIMEOUT=15 PGPASSWORD="$SUPABASE_DB_PASSWORD"
-          psql -h "$SB_DB_HOST" -p "$SB_DB_PORT" -U "$SB_DB_USER" -d postgres -v ON_ERROR_STOP=1 -Atc "
-            select case
-              when to_regclass('supabase_migrations.schema_migrations') is null
-                then 'remote history: supabase_migrations.schema_migrations does not exist yet -> nothing applied'
-              else 'remote history: ' || coalesce(
-                     (select string_agg(version, ', ' order by version)
-                        from supabase_migrations.schema_migrations),
-                     'table exists but is empty -> nothing applied')
-            end;"
+          # Read-only and SQLSTATE 42P01-safe: existence is asked about FIRST
+          # (to_regclass takes a string and returns NULL instead of raising), and the
+          # rows are read only in a SECOND statement. A single-statement CASE cannot
+          # do this — PostgreSQL resolves every relation named anywhere in the
+          # statement at parse time, so on a fresh database, where
+          # supabase_migrations.schema_migrations does not exist yet, the previous
+          # query aborted this cross-check with SQLSTATE 42P01 instead of reporting an
+          # EMPTY remote history. No table is created here to make the query succeed.
+          xerr="$RUNNER_TEMP/xcheck.err"
+          psql_ro() {  # $1 = sql — read-only; credential travels via env, never argv
+            psql -h "$SB_DB_HOST" -p "$SB_DB_PORT" -U "$SB_DB_USER" -d postgres \
+                 -X -At -v VERBOSITY=verbose -v ON_ERROR_STOP=1 -qc "$1"
+          }
+          missing=""
+          if missing=$(psql_ro "select to_regclass('supabase_migrations.schema_migrations') is null" 2>"$xerr"); then
+            if [ "$missing" = "t" ]; then
+              echo "remote history: EMPTY — supabase_migrations.schema_migrations does not exist yet -> nothing applied (expected on a fresh database before the first migration; SQLSTATE 42P01 is not an error here)"
+            else
+              versions=""
+              versions=$(psql_ro "select coalesce(string_agg(version, ', ' order by version), '') from supabase_migrations.schema_migrations" 2>"$xerr") || versions=""
+              if [ -z "$versions" ] && grep -qE '42P01|3F000' "$xerr" 2>/dev/null; then
+                echo "remote history: EMPTY — the history table disappeared while being read (SQLSTATE 42P01) -> nothing applied"
+              else
+                echo "remote history: ${versions:-EMPTY — table exists but holds no rows -> nothing applied}"
+              fi
+            fi
+          elif grep -qE '42P01|3F000' "$xerr" 2>/dev/null; then
+            echo "remote history: EMPTY — SQLSTATE $(grep -oE '42P01|3F000' "$xerr" | head -1) -> nothing applied (fresh database)"
+          else
+            echo "remote history: could not be cross-checked — $(head -1 "$xerr" 2>/dev/null)"
+          fi
           echo "local files : $(ls -1 supabase/migrations/*.sql | wc -l)"
 
       - name: APPLY gate — a real PostgreSQL connection is mandatory for mode=apply
