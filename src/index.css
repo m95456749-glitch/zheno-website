@@ -462,21 +462,13 @@ body {
   box-shadow: 0 28px 56px -44px rgba(41, 35, 33, 0.35);
 }
 
-/* Quiet translucent sheet for the deep-wine band (recipes, QR):
-   the dark-surface counterpart of .panel-lux. Tinted ivory on the
-   brand burgundy instead of a bright white card. No backdrop
-   blur on purpose — these sheets sit over the drifting ambient
-   layer, and blurring it every frame is real GPU cost on phones. */
-.panel-wine {
-  background: rgba(250, 247, 242, 0.05);
-  border: 1px solid rgba(250, 247, 242, 0.11);
-  box-shadow: 0 26px 52px -42px rgba(0, 0, 0, 0.75);
-}
-
 /* Hairline seam between the stacked sub-sections of the lower
-   burgundy band (flavors → recipes → QR → closing). A real element,
+   light band (flavors → recipes → QR → closing). A real element,
    not a pseudo-slot: ::before is taken by .burgundy-ambient and
-   ::after by .grain on these same sections. */
+   ::after by .grain on dark sections. The lower half of the home
+   page is one continuous ivory surface, so the seam is a quiet
+   espresso hairline with a matte-gold midpoint — visible on the
+   light canvas, never a heavy divider. */
 .band-seam {
   position: absolute;
   inset-inline: 0;
@@ -486,9 +478,9 @@ body {
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(250, 247, 242, 0.12) 18%,
-    rgba(184, 154, 98, 0.42) 50%,
-    rgba(250, 247, 242, 0.12) 82%,
+    rgba(41, 35, 33, 0.1) 18%,
+    rgba(154, 128, 80, 0.45) 50%,
+    rgba(41, 35, 33, 0.1) 82%,
     transparent 100%
   );
 }
