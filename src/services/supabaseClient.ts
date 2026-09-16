@@ -65,6 +65,18 @@ let client: SupabaseClient | null = null;
 let warnedAboutUnknownKey = false;
 
 /**
+ * The endpoint must be https, because the admin's access token travels
+ * in the Authorization header. A plaintext endpoint would leak it on the
+ * wire, so it is refused exactly like a secret key. The only exception is
+ * a local Supabase stack (http://localhost or http://127.0.0.1), which
+ * never leaves the machine.
+ */
+function isSecureEndpoint(url: string): boolean {
+  if (/^https:\/\//i.test(url)) return true;
+  return /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i.test(url);
+}
+
+/**
  * The configured project URL ("" when Supabase is not configured).
  * Public information — safe to print/log.
  */
@@ -74,7 +86,7 @@ export function getSupabaseUrl(): string {
 
 /** True when both variables are present and the key is browser-safe. */
 export function isSupabaseConfigured(): boolean {
-  return RAW_URL !== '' && RAW_KEY !== '' && isPublishableKey(RAW_KEY);
+  return RAW_URL !== '' && RAW_KEY !== '' && isSecureEndpoint(RAW_URL) && isPublishableKey(RAW_KEY);
 }
 
 /**
@@ -85,7 +97,13 @@ export function isSupabaseConfigured(): boolean {
  */
 export function getSupabase(): SupabaseClient | null {
   if (!isSupabaseConfigured()) {
-    if (RAW_KEY !== '' && classifySupabaseKey(RAW_KEY) === 'secret') {
+    if (RAW_URL !== '' && !isSecureEndpoint(RAW_URL)) {
+      console.error(
+        '[zhino] Refusing to initialise Supabase: VITE_SUPABASE_URL must use https:// ' +
+          `(got a plaintext endpoint). The admin access token travels in a header, so an ` +
+          'http:// endpoint would expose it. Running in local (offline) mode.',
+      );
+    } else if (RAW_KEY !== '' && classifySupabaseKey(RAW_KEY) === 'secret') {
       // Never fall back silently on this one: it is a security bug in
       // the deployment configuration, not a missing feature.
       console.error(

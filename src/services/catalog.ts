@@ -180,21 +180,24 @@ export function getVisibleProducts(): Product[] {
 }
 
 /**
- * Lookup used by cart / checkout / product pages. Resolves
- * overlay edits and deletions; unknown ids resolve against the
- * base catalog (a deleted product resolves to undefined, exactly
- * like an unknown one — cart guards already handle that).
+ * Lookup used by cart / checkout / product pages.
+ *
+ * While a database snapshot exists it is the ONLY authority: a product
+ * the snapshot does not contain is not sellable (an admin deactivated
+ * it, RLS does not expose it to this session, or it is no longer in the
+ * database). Falling back to the static catalog here would let a
+ * deactivated product stay in a cart — and be ordered — with a price the
+ * database no longer agrees with. The cart loader already drops entries
+ * whose product/variant no longer resolves, so an existing cart line is
+ * removed exactly like a locally «removed» product.
+ *
+ * Before the first successful read (or in local mode) the base catalog +
+ * admin overlay is used, i.e. the original behaviour.
  */
 export function getProductById(id: string): Product | undefined {
   const remote = getRemoteCatalog();
-  if (remote) {
-    const found = remote.products.find((p) => p.id === id);
-    if (found) return found;
-    // Not visible to this session (e.g. an anonymous visitor and a
-    // product that was deactivated): fall back to the base catalog so
-    // an existing cart line keeps rendering exactly as it did before.
-    return getBaseProductById(id);
-  }
+  if (remote) return remote.products.find((p) => p.id === id);
+
   const overlay = store.get();
   if (overlay.removed.includes(id)) return undefined;
   return overlay.upserts[id] ?? getBaseProductById(id);
@@ -202,12 +205,14 @@ export function getProductById(id: string): Product | undefined {
 
 export function getVariantById(productId: string, variantId: string): ProductVariant | undefined {
   const remote = getRemoteCatalog();
-  const product = remote
-    ? remote.products.find((p) => p.id === productId)
-    : store.get().removed.includes(productId)
-      ? undefined
-      : (store.get().upserts[productId] ?? getBaseProductById(productId));
+  if (remote) {
+    const product = remote.products.find((p) => p.id === productId);
+    return product?.variants.find((v) => v.id === variantId);
+  }
 
+  const overlay = store.get();
+  if (overlay.removed.includes(productId)) return undefined;
+  const product = overlay.upserts[productId] ?? getBaseProductById(productId);
   if (product) {
     const variant = product.variants.find((v) => v.id === variantId);
     if (variant) return variant;

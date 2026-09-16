@@ -63,6 +63,7 @@ let appCode;
 let appCodeWithDb;
 let appCodeConnected;
 let appCodeSecretKey;
+let appCodeInsecureUrl;
 try {
   appCode = buildApp(BASE_DEFINES);
   ok(`app bundles for runtime test (${(appCode.length / 1024).toFixed(0)} KB)`);
@@ -84,6 +85,14 @@ try {
     ),
   };
   appCodeSecretKey = buildApp(secretKeyDefines);
+
+  // A plaintext endpoint would send the admin's JWT over http:// — it must
+  // be refused exactly like a secret key (https required; localhost exempt).
+  appCodeInsecureUrl = buildApp({
+    ...BASE_DEFINES,
+    'import.meta.env.VITE_SUPABASE_URL': '"http://insecure.example.com"',
+    'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': '"sb_publishable_smoke_test_key"',
+  });
   ok('app bundles with a secret key configured (refusal test)');
 
   const dbDefines = {
@@ -761,7 +770,13 @@ function expectNoErrors(label, errors) {
     const url = typeof input === 'string' ? input : input.url;
     const method = (init.method ?? (typeof input === 'string' ? 'GET' : input.method) ?? 'GET').toUpperCase();
     const body = typeof init.body === 'string' ? init.body : '';
-    calls.push({ method, url, body });
+    let headers = {};
+    try {
+      headers = Object.fromEntries(new globalThis.Headers(init.headers ?? {}).entries());
+    } catch {
+      /* header capture is best-effort */
+    }
+    calls.push({ method, url, body, headers });
 
     const json = (payload, status = 200) =>
       new globalThis.Response(JSON.stringify(payload), {
@@ -895,6 +910,52 @@ function expectNoErrors(label, errors) {
     else fail('connected admin — is_admin() was never called');
     expectContains('connected admin', text(), 'متصل به دیتابیس');
 
+    // ── credential hygiene: what actually travels to the database ──
+    const PUBLISHABLE = 'sb_publishable_smoke_test_key';
+    const bearerOf = (c) => (c.headers?.authorization ?? c.headers?.Authorization ?? '').replace(/^Bearer /i, '');
+    const apikeyOf = (c) => c.headers?.apikey ?? c.headers?.ApiKey ?? '';
+    const writes = calls.filter(
+      (c) => c.method !== 'GET' && !c.url.includes('/auth/v1/'),
+    );
+    const firstRead = calls.find((c) => c.url.includes('/rest/v1/products') && c.method === 'GET');
+    const privileged = writes.filter((c) => Boolean(bearerOf(c)));
+
+    if (writes.length > 0 && privileged.length === writes.length) {
+      ok('credential hygiene — every database write is authenticated (no anonymous write)');
+    } else {
+      fail(`credential hygiene — ${writes.length - privileged.length} write(s) went out unauthenticated: ${JSON.stringify(writes.map((c) => c.method + ' ' + c.url))}`);
+    }
+    if (privileged.every((c) => bearerOf(c).startsWith('ey'))) {
+      ok('credential hygiene — writes carry the signed-in user JWT (access token)');
+    } else {
+      fail('credential hygiene — a write did not use the user access token');
+    }
+    if (writes.every((c) => apikeyOf(c) === PUBLISHABLE || apikeyOf(c) === '')) {
+      ok('credential hygiene — apikey header is only the publishable key');
+    } else {
+      fail(`credential hygiene — unexpected apikey header: ${writes.map((c) => apikeyOf(c)).join(', ')}`);
+    }
+    // the user JWT must be the signed-in account, never a service key
+    const jwtRole = (() => {
+      try {
+        return JSON.parse(Buffer.from(bearerOf(privileged[0]).split('.')[1], 'base64url')).role;
+      } catch {
+        return null;
+      }
+    })();
+    if (jwtRole === 'authenticated') ok('credential hygiene — writes run as role=authenticated (RLS applies)');
+    else fail(`credential hygiene — unexpected write role: ${String(jwtRole)}`);
+    if (firstRead && bearerOf(firstRead) === PUBLISHABLE && apikeyOf(firstRead) === PUBLISHABLE) {
+      ok('credential hygiene — anonymous catalogue reads use the publishable key only');
+    } else {
+      fail(`credential hygiene — unexpected anonymous read credentials: ${firstRead ? JSON.stringify(firstRead.headers) : 'no read captured'}`);
+    }
+    if (!JSON.stringify(calls).includes('sb_secret') && !JSON.stringify(calls).includes('service_role')) {
+      ok('credential hygiene — no secret/service_role material in any request');
+    } else {
+      fail('credential hygiene — a secret/service_role value appeared in a request');
+    }
+
     // navigate to inventory through the panel's own navigation (SPA link)
     const inventoryLink = Array.from(document.querySelectorAll('a')).find((a) =>
       (a.getAttribute('href') ?? '').endsWith('/admin/inventory'),
@@ -964,5 +1025,352 @@ function expectNoErrors(label, errors) {
   else fail('secret-key build — a service_role/secret key was accepted silently');
 }
 
-console.log(failures === 0 ? '\nAll smoke checks passed.' : `\n${failures} check(s) failed.`);
+/* ── shared Supabase stub (Auth + PostgREST) for the security tests ── */
+function makeSupabaseStub({ isAdmin = true, activeById = {}, stock = 25, rows } = {}) {
+  const calls = [];
+  const jwt = [
+    Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
+    Buffer.from(
+      JSON.stringify({
+        sub: '00000000-0000-0000-0000-000000000001',
+        role: 'authenticated',
+        aud: 'authenticated',
+        email: 'admin@example.com',
+        app_metadata: isAdmin ? { role: 'admin' } : {},
+        exp: Math.floor(Date.now() / 1000) + 3600,
+      }),
+    ).toString('base64url'),
+    'signature',
+  ].join('.');
+
+  const products = rows ?? [
+    {
+      id: 'jelly-strawberry',
+      category: 'jelly',
+      flavor_id: 'strawberry-j',
+      name: 'پودر ژله توت فرنگی ژینو',
+      short_name: 'ژله توت فرنگی',
+      category_label: 'پودر ژله',
+      image_url: 'images/products/jelly-strawberry.jpg',
+      active: activeById['jelly-strawberry'] ?? true,
+      featured: true,
+      special: false,
+    },
+  ];
+
+  const fetchImpl = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const method = (init.method ?? 'GET').toUpperCase();
+    const body = typeof init.body === 'string' ? init.body : '';
+    let headers = {};
+    try {
+      headers = Object.fromEntries(new globalThis.Headers(init.headers ?? {}).entries());
+    } catch {
+      /* best effort */
+    }
+    calls.push({ method, url, body, headers });
+
+    const json = (payload, status = 200) =>
+      new globalThis.Response(JSON.stringify(payload), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+    if (url.includes('/auth/v1/token')) {
+      return json({
+        access_token: jwt,
+        token_type: 'bearer',
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        refresh_token: 'smoke-refresh-token',
+        user: {
+          id: '00000000-0000-0000-0000-000000000001',
+          aud: 'authenticated',
+          role: 'authenticated',
+          email: 'admin@example.com',
+          app_metadata: isAdmin ? { role: 'admin' } : {},
+          user_metadata: {},
+          created_at: new Date().toISOString(),
+        },
+      });
+    }
+    if (url.includes('/rest/v1/rpc/is_admin')) return json(isAdmin);
+    if (url.includes('/rest/v1/rpc/set_inventory_stock')) {
+      return json([{ variant_id: 'jelly-strawberry-250', current_stock: stock, active: true }]);
+    }
+    if (url.includes('/rest/v1/products') && method === 'PATCH') {
+      return new globalThis.Response(null, { status: 204 });
+    }
+    if (url.includes('/rest/v1/products')) return json(products);
+    if (url.includes('/rest/v1/product_variants')) {
+      return json([
+        {
+          id: 'jelly-strawberry-250',
+          product_id: 'jelly-strawberry',
+          weight: '۲۵۰ گرم',
+          weight_grams: 250,
+          price: 200000,
+          sku: 'ZJ-STR-250',
+        },
+      ]);
+    }
+    if (url.includes('/rest/v1/inventory')) {
+      return json([{ variant_id: 'jelly-strawberry-250', current_stock: stock, active: true }]);
+    }
+    return json([]);
+  };
+
+  return { fetchImpl, calls, jwt };
+}
+
+/** Render a route in a jsdom with a stubbed network + optional seed. */
+async function renderWithStub(path, { stub, appSource = appCodeConnected, seed } = {}) {
+  const errors = [];
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (e) => {
+    const msg = String(e?.message ?? e);
+    if (/Could not load|ENOTFOUND|EAI_AGAIN|network|Not implemented|navigation|Failed to fetch|fetch failed/i.test(msg)) return;
+    errors.push('jsdomError: ' + msg);
+  });
+  virtualConsole.on('error', (...args) => errors.push('console.error: ' + args.map(String).join(' ')));
+
+  const dom = new JSDOM(SHELL, {
+    url: `http://localhost${path}`,
+    runScripts: 'dangerously',
+    pretendToBeVisual: true,
+    virtualConsole,
+    beforeParse(window) {
+      window.scrollTo = () => undefined;
+      window.scrollBy = () => undefined;
+      window.fetch = stub.fetchImpl;
+      window.Headers = globalThis.Headers;
+      window.Request = globalThis.Request;
+      window.Response = globalThis.Response;
+      window.AbortController = globalThis.AbortController;
+      window.TextEncoder = globalThis.TextEncoder;
+      window.TextDecoder = globalThis.TextDecoder;
+    },
+  });
+
+  if (seed) seed(dom.window);
+
+  const { document } = dom.window;
+  const script = document.createElement('script');
+  script.textContent = appSource;
+  document.body.appendChild(script);
+
+  const text = () => document.getElementById('root')?.textContent ?? '';
+  const waitFor = async (predicate, timeoutMs = 12000) => {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      if (predicate()) return true;
+      await sleep(100);
+    }
+    return false;
+  };
+
+  return { dom, document, text, waitFor, errors };
+}
+
+// ════════════════════════════════════════════════════════════
+// SECURITY / REGRESSION SUITE (pre-merge review of the database
+// connection). Every check fails closed: an account without the
+// admin role must not reach the panel, the panel must not write
+// anonymously, and the storefront must never depend on the
+// database to render.
+// ════════════════════════════════════════════════════════════
+
+// ── 21. A non-admin account cannot open the panel ───────────
+// The database's is_admin() answers false: login must fail with a
+// message and no admin screen may appear.
+{
+  const stub = makeSupabaseStub({ isAdmin: false });
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/login', { stub });
+
+  const loginReady = await waitFor(() => document.querySelector('input[autocomplete="username"]'));
+  if (!loginReady) fail('authz — login form did not render');
+  else {
+    const setReactValue = (input, value) => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+    setReactValue(document.querySelector('input[autocomplete="username"]'), 'user@example.com');
+    setReactValue(document.querySelector('input[type="password"]'), 'pepper-1234');
+    document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+    const refused = await waitFor(() => text().includes('دسترسی مدیر ندارد'));
+    if (refused) ok('authz — a non-admin account is refused with an explicit message');
+    else fail('authz — non-admin login was not refused: ' + text().slice(0, 180));
+
+    if (!text().includes('سفارش‌های در انتظار') && !text().includes('افزودن محصول')) {
+      ok('authz — no admin screen was ever rendered for the non-admin account');
+    } else {
+      fail('authz — the admin panel opened for a non-admin account');
+    }
+    if (stub.calls.some((c) => c.url.includes('/auth/v1/logout'))) {
+      ok('authz — the refused session is signed out (no lingering token)');
+    } else {
+      fail('authz — the refused account was left signed in');
+    }
+    // is_admin() is itself a POST (PostgREST RPC) but it is read-only;
+    // what must not exist is any mutating call to a table or RPC.
+    const mutating = stub.calls.filter(
+      (c) =>
+        ['POST', 'PATCH', 'PUT', 'DELETE'].includes(c.method) &&
+        c.url.includes('/rest/v1/') &&
+        !c.url.includes('/rpc/is_admin'),
+    );
+    if (mutating.length === 0) {
+      ok('authz — no database write was attempted for the non-admin account');
+    } else {
+      fail(`authz — mutating call(s) attempted for a non-admin account: ${JSON.stringify(mutating.map((c) => c.method + ' ' + c.url))}`);
+    }
+  }
+  // Sign-out must also drop the admin-visible rows again: the catalogue is
+  // re-read with anonymous credentials, so deactivated products disappear
+  // from the storefront view.
+  const productReads = stub.calls.filter(
+    (c) => c.url.includes('/rest/v1/products') && c.method === 'GET',
+  ).length;
+  if (productReads >= 2) ok('authz — the catalogue is re-read anonymously after sign-out');
+  else fail(`authz — no anonymous re-read after sign-out (product reads: ${productReads})`);
+
+  if (errors.length === 0) ok('authz non-admin flow — no runtime errors');
+  else fail('authz non-admin flow runtime errors:\n    - ' + errors.join('\n    - '));
+  dom.window.close();
+}
+
+// ── 22. A persisted session without the admin role stays locked ──
+// A refresh token alone must not open the panel: the stored session is
+// restored, re-verified with is_admin() (which answers false) and the
+// visitor lands on the login page.
+{
+  const stub = makeSupabaseStub({ isAdmin: false });
+  const ref = 'smoke-test';
+  const seededSession = {
+    access_token: stub.jwt,
+    refresh_token: 'seeded-refresh-token',
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    expires_in: 3600,
+    token_type: 'bearer',
+    user: {
+      id: '00000000-0000-0000-0000-000000000001',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'user@example.com',
+      app_metadata: {},
+      user_metadata: {},
+      created_at: new Date().toISOString(),
+    },
+  };
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/products', {
+    stub,
+    seed: (window) => window.localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify(seededSession)),
+  });
+
+  const sawLogin = await waitFor(() => text().includes('ورود به پنل مدیریت'));
+  if (sawLogin) ok('authz — a stored non-admin session lands on the login page (fail closed)');
+  else fail('authz — a stored non-admin session did not reach the login page: ' + text().slice(0, 180));
+  if (stub.calls.some((c) => c.url.includes('/rest/v1/rpc/is_admin'))) {
+    ok('authz — the restored session was re-verified with is_admin() before anything was shown');
+  } else {
+    fail('authz — the restored session was never verified (silent trust of localStorage)');
+  }
+  if (!text().includes('افزودن محصول')) ok('authz — the product editor never rendered');
+  else fail('authz — the product editor rendered for a non-admin session');
+  if (errors.length === 0) ok('authz restore flow — no runtime errors');
+  else fail('authz restore flow runtime errors:\n    - ' + errors.join('\n    - '));
+  dom.window.close();
+}
+
+// ── 23. Unconfigured build must not touch the network ───────
+// No VITE_SUPABASE_* variables → not a single database request, on any
+// route. This is the guarantee that the deployed site is unchanged
+// until the operator opts in.
+{
+  const calls = [];
+  const spy = () => {
+    calls.push('called');
+    return Promise.resolve(new globalThis.Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const home = await render('/zheno-website/', { fetchStub: spy, settleMs: 300 });
+  const products = await render('/zheno-website/products', { fetchStub: spy });
+  const cart = await render('/zheno-website/cart', { fetchStub: spy });
+  if (calls.length === 0) ok('offline build — zero network requests across home/products/cart');
+  else fail(`offline build — ${calls.length} unexpected request(s)`);
+  expectContains('offline build home', home.text, 'ژینو');
+  expectContains('offline build products', products.text, 'ژله توت فرنگی');
+  expectContains('offline build cart', cart.text, 'سبد خرید');
+}
+
+// ── 24. Storefront integrity: the database is the only authority ──
+// The database holds ONE product; an existing cart line for a product
+// that is not in the database (deactivated there, or never existed) must
+// be dropped instead of being resurrected from the static catalog with a
+// price the database no longer agrees with.
+{
+  const stub = makeSupabaseStub({ isAdmin: true });
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/cart', {
+    stub,
+    appSource: appCodeWithDb,
+    seed: (window) =>
+      window.localStorage.setItem(
+        'zhino_cart',
+        JSON.stringify([{ productId: 'jelly-pomegranate', variantId: 'jelly-pomegranate-250', quantity: 2 }]),
+      ),
+  });
+
+  await waitFor(() => text().includes('سبد خرید'));
+  if (text().includes('سبد خرید شما خالی است')) ok('storefront integrity — a product absent from the database is dropped from the cart');
+  else fail('storefront integrity — a database-absent product survived in the cart: ' + text().slice(0, 200));
+  expectNotContains('storefront integrity', text(), 'ژله انار');
+  if (errors.length === 0) ok('storefront integrity — no runtime errors');
+  else fail('storefront integrity runtime errors:\n    - ' + errors.join('\n    - '));
+  dom.window.close();
+}
+
+// ── 25. Configured but unreachable database: panel fails closed ──
+// The admin route must show the login page, never a permanent
+// "checking session…" screen and never the panel itself.
+{
+  const { text, errors, dom } = await renderWithStub('/zheno-website/admin/products', {
+    appSource: appCodeConnected,
+    stub: { fetchImpl: () => Promise.reject(new Error('offline (smoke test)')) },
+  });
+  const deadline = Date.now() + 8000;
+  let sawLogin = text().includes('ورود به پنل مدیریت');
+  while (!sawLogin && Date.now() < deadline) {
+    await sleep(150);
+    sawLogin = text().includes('ورود به پنل مدیریت');
+  }
+  if (sawLogin) ok('degraded database — admin route fails closed to the login page');
+  else fail('degraded database — admin route did not reach the login page: ' + text().slice(0, 180));
+  if (!text().includes('افزودن محصول')) ok('degraded database — the panel never rendered');
+  else fail('degraded database — the panel rendered without a verified session');
+  const fatal = errors.filter((e) => !/offline \(smoke test\)|Failed to fetch|fetch failed|NetworkError/i.test(e));
+  if (fatal.length === 0) ok('degraded database — no fatal runtime errors');
+  else fail('degraded database runtime errors:\n    - ' + fatal.join('\n    - '));
+  dom.window.close();
+}
+
+// ── 26. A plaintext endpoint must be refused (token never over http://) ──
+{
+  const calls = [];
+  const spy = () => {
+    calls.push('called');
+    return Promise.resolve(new globalThis.Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const res = await render('/zheno-website/products', { appSource: appCodeInsecureUrl, fetchStub: spy });
+  if (calls.length === 0) ok('insecure endpoint — no request was made to a non-https URL');
+  else fail(`insecure endpoint — ${calls.length} request(s) went to a plaintext endpoint`);
+  if (res.errors.some((e) => /https/i.test(e))) ok('insecure endpoint — the refusal is logged explicitly');
+  else fail('insecure endpoint — the non-https URL was accepted silently');
+  expectContains('insecure endpoint build', res.text, 'ژله توت فرنگی');
+}
+
+renderStatusSummary();
+
+function renderStatusSummary() {
+  console.log(failures === 0 ? '\nAll smoke checks passed.' : `\n${failures} check(s) failed.`);
+}
 process.exit(failures === 0 ? 0 : 1);
