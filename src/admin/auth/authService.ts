@@ -1,25 +1,33 @@
 // ============================================================
 // ZHINO — admin authentication (integration seam)
 //
-// SECURITY POSTURE (phase 1, no backend yet):
-//   - There is NO real authentication. The demo provider below
-//     validates nothing and persists nothing: no hardcoded
-//     password, no credential in localStorage, session exists
-//     only in memory for the current tab.
-//   - The UI says so openly (login notice + «نمایشی» chips).
-//   - This module exists so that wiring a real backend later is
-//     a one-line switch, not a rebuild.
+// THREE PROVIDERS, ONE INTERFACE:
 //
-// To connect a real backend:
-//   1. point ApiAuthProvider at your /admin/auth endpoints
-//      (login returns a session object; logout best-effort),
-//   2. set VITE_ADMIN_AUTH_MODE=api together with
-//      VITE_API_BASE_URL.
+//   supabase (default when Supabase is configured) — REAL
+//     authentication: sign in with a Supabase Auth account, then the
+//     session is checked for the admin role via the database's
+//     is_admin() function. Every write that follows is additionally
+//     gated by Row Level Security. See ./supabaseAuth.ts.
+//
+//   demo — preview only, no authentication at all. It validates
+//     nothing and persists nothing (no hardcoded password, no
+//     credential in localStorage, session in memory for the current
+//     tab) and the UI says so openly. Used when Supabase is not
+//     configured, or when VITE_ADMIN_AUTH_MODE=demo is set
+//     explicitly.
+//
+//   api — the previous backend seam (POST /admin/auth/login), kept
+//     for a future custom backend: set VITE_ADMIN_AUTH_MODE=api
+//     together with VITE_API_BASE_URL.
+//
 // The admin UI, guard and layout consume only the
 // AdminAuthProvider interface — nothing else changes.
 // ============================================================
 
-export type AuthMode = 'demo' | 'api';
+import { SupabaseAuthProvider } from './supabaseAuth';
+import { isSupabaseConfigured } from '../../services/supabaseClient';
+
+export type AuthMode = 'demo' | 'api' | 'supabase';
 
 export interface AdminSession {
   mode: AuthMode;
@@ -33,9 +41,14 @@ export interface AdminAuthProvider {
   readonly mode: AuthMode;
   login(identifier: string, secret: string): Promise<AdminSession>;
   logout(): void | Promise<void>;
+  /** optional: restore a persisted session (Supabase provider) */
+  restore?(): Promise<AdminSession | null>;
+  /** optional: react to sign-in/sign-out events outside this tab */
+  subscribe?(onChange: (session: AdminSession | null) => void): () => void;
 }
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL ?? '').trim();
+const CONFIGURED_MODE = (import.meta.env.VITE_ADMIN_AUTH_MODE ?? '').trim();
 
 /**
  * Demo provider — preview only. Intentionally does NOT check the
@@ -107,11 +120,35 @@ class ApiAuthProvider implements AdminAuthProvider {
 
 let provider: AdminAuthProvider | null = null;
 
+/**
+ * Provider selection:
+ *   VITE_ADMIN_AUTH_MODE=supabase (or unset + Supabase configured)
+ *        → real Supabase Auth + is_admin() check
+ *   VITE_ADMIN_AUTH_MODE=api (+ VITE_API_BASE_URL)   → custom backend
+ *   VITE_ADMIN_AUTH_MODE=demo                        → preview only
+ * Anything that cannot be satisfied falls back to the demo provider,
+ * so the panel never becomes unreachable — but a configured
+ * VITE_ADMIN_AUTH_MODE=supabase without credentials is reported.
+ */
 export function getAuthProvider(): AdminAuthProvider {
   if (!provider) {
-    const mode = import.meta.env.VITE_ADMIN_AUTH_MODE ?? 'demo';
-    provider =
-      mode === 'api' && API_BASE ? new ApiAuthProvider() : new DemoAuthProvider();
+    if (CONFIGURED_MODE === 'demo') {
+      provider = new DemoAuthProvider();
+    } else if (CONFIGURED_MODE === 'api' && API_BASE) {
+      provider = new ApiAuthProvider();
+    } else if (CONFIGURED_MODE === 'api') {
+      provider = new DemoAuthProvider();
+    } else if (isSupabaseConfigured()) {
+      provider = new SupabaseAuthProvider();
+    } else {
+      if (CONFIGURED_MODE === 'supabase') {
+        console.warn(
+          '[zhino] VITE_ADMIN_AUTH_MODE=supabase but VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY ' +
+            'are missing — the login page stays in preview (demo) mode.',
+        );
+      }
+      provider = new DemoAuthProvider();
+    }
   }
   return provider;
 }

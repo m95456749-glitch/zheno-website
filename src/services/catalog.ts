@@ -1,21 +1,31 @@
 // ============================================================
 // ZHINO — catalog service (single source for product lookups)
 //
-// The static catalog (src/data/products.ts) is the base data and
-// is NEVER mutated. Admin edits live in a localStorage overlay
-// ("zhino_admin_catalog_v1") and are merged on read:
+// TWO SOURCES, ONE API — and the storefront never knows which one
+// is active:
 //
-//   effective catalog = base − removed, with per-product upserts
-//                       (edits to existing products or brand-new
-//                       products) applied on top.
+//   1. CONNECTED (Supabase configured — see src/services/
+//      supabaseClient.ts): products/variants/inventory are read
+//      from PostgreSQL and written back by the admin panel. The
+//      writes are normal PostgREST calls that Row Level Security
+//      only allows for a signed-in admin (`is_admin()` from the JWT
+//      app_metadata) — there is no public write path anywhere.
 //
-// The storefront consumes ONLY getVisibleProducts /
-// getProductById / getVariantById — so when a real backend
-// lands, this module is the single swap point: its functions
-// become API-backed and every storefront page follows.
+//   2. LOCAL (no Supabase configured, or the database is
+//      unreachable): the static catalog (src/data/products.ts) stays
+//      the base data and admin edits live in a localStorage overlay
+//      ("zhino_admin_catalog_v1"), exactly as before. This is also
+//      the offline fallback: a failed read keeps the previous
+//      snapshot instead of blanking the storefront.
 //
-// In this phase the overlay is per-browser (demo), which is
-// exactly what the admin UI discloses to the operator.
+// The storefront consumes ONLY getVisibleProducts / getProductById /
+// getVariantById (plus the React bindings), so both modes behave
+// identically from the outside.
+//
+// «حذف» in the admin panel NEVER deletes a row: products are
+// referenced by orders and `delete` would be destructive. It sets
+// `active = false`, which is what the storefront already treats as
+// "not for sale".
 // ============================================================
 
 import {
@@ -25,6 +35,21 @@ import {
 } from '../data/products';
 import type { Product, ProductVariant } from '../types';
 import { createLocalStore, useLocalStore } from './localStore';
+import {
+  getRemoteCatalog,
+  makeRemoteCatalog,
+  refreshRemoteCatalog,
+  runRemoteWrite,
+  updateRemoteCatalog,
+  useRemoteCatalog,
+  getCatalogSyncState,
+} from './catalogSync';
+import {
+  pushProductActive,
+  pushProductRow,
+  pushVariantRow,
+  pushVariantStock,
+} from './supabaseCatalog';
 
 /** admin flags per product */
 export interface CatalogMeta {
@@ -98,6 +123,18 @@ function sanitize(raw: unknown): CatalogOverlay | null {
 
 const store = createLocalStore<CatalogOverlay>('zhino_admin_catalog_v1', EMPTY_OVERLAY, sanitize);
 
+/* ── mode ──────────────────────────────────────────────────── */
+
+/** true while the admin panel writes to the PostgreSQL database */
+export function isDatabaseConnected(): boolean {
+  return getCatalogSyncState().source === 'remote';
+}
+
+/** Re-read the catalog from the database (no-op in local mode). */
+export function reloadCatalogFromDatabase(): Promise<void> {
+  return refreshRemoteCatalog();
+}
+
 /* ── merge (cached per overlay version — stable refs for React) ── */
 
 let cachedOverlay: CatalogOverlay | null = null;
@@ -125,6 +162,8 @@ function mergedList(overlay: CatalogOverlay): Product[] {
  * products so the operator can re-activate them).
  */
 export function getEffectiveCatalog(): Product[] {
+  const remote = getRemoteCatalog();
+  if (remote) return remote.products;
   return mergedList(store.get());
 }
 
@@ -134,6 +173,8 @@ export function getEffectiveCatalog(): Product[] {
  * admin changes something.
  */
 export function getVisibleProducts(): Product[] {
+  const remote = getRemoteCatalog();
+  if (remote) return remote.products.filter((p) => remote.active[p.id] !== false);
   const overlay = store.get();
   return mergedList(overlay).filter((p) => overlay.meta[p.id]?.active !== false);
 }
@@ -145,15 +186,28 @@ export function getVisibleProducts(): Product[] {
  * like an unknown one — cart guards already handle that).
  */
 export function getProductById(id: string): Product | undefined {
+  const remote = getRemoteCatalog();
+  if (remote) {
+    const found = remote.products.find((p) => p.id === id);
+    if (found) return found;
+    // Not visible to this session (e.g. an anonymous visitor and a
+    // product that was deactivated): fall back to the base catalog so
+    // an existing cart line keeps rendering exactly as it did before.
+    return getBaseProductById(id);
+  }
   const overlay = store.get();
   if (overlay.removed.includes(id)) return undefined;
   return overlay.upserts[id] ?? getBaseProductById(id);
 }
 
 export function getVariantById(productId: string, variantId: string): ProductVariant | undefined {
-  const overlay = store.get();
-  if (overlay.removed.includes(productId)) return undefined;
-  const product = overlay.upserts[productId] ?? getBaseProductById(productId);
+  const remote = getRemoteCatalog();
+  const product = remote
+    ? remote.products.find((p) => p.id === productId)
+    : store.get().removed.includes(productId)
+      ? undefined
+      : (store.get().upserts[productId] ?? getBaseProductById(productId));
+
   if (product) {
     const variant = product.variants.find((v) => v.id === variantId);
     if (variant) return variant;
@@ -163,6 +217,8 @@ export function getVariantById(productId: string, variantId: string): ProductVar
 
 /** admin flags for a product (defaults: active) */
 export function getCatalogMeta(id: string): CatalogMeta {
+  const remote = getRemoteCatalog();
+  if (remote) return { active: remote.active[id] !== false };
   const meta = store.get().meta[id];
   return meta ? { ...meta } : { active: true };
 }
@@ -171,6 +227,24 @@ export function getCatalogMeta(id: string): CatalogMeta {
 
 /** Create or update a product (+ its active flag). */
 export function upsertProduct(product: Product, active: boolean): void {
+  if (isDatabaseConnected()) {
+    updateRemoteCatalog((current) => {
+      const products = current.products.slice();
+      const index = products.findIndex((p) => p.id === product.id);
+      if (index >= 0) products[index] = product;
+      else products.push(product);
+      return makeRemoteCatalog(products, { ...current.active, [product.id]: active });
+    });
+    runRemoteWrite('ذخیره محصول', async () => {
+      await pushProductRow(product, active);
+      for (const variant of product.variants) {
+        await pushVariantRow(variant);
+        await pushVariantStock(variant.id, variant.stock);
+      }
+    });
+    return;
+  }
+
   const overlay = store.get();
   store.set({
     upserts: { ...overlay.upserts, [product.id]: product },
@@ -182,8 +256,23 @@ export function upsertProduct(product: Product, active: boolean): void {
   });
 }
 
-/** Remove a product from the storefront (overlay tombstone). */
+/**
+ * Remove a product from the storefront.
+ *
+ * Connected mode: this sets `active = false` in the database. Nothing
+ * is deleted — orders and order_items reference product rows, and a
+ * destructive delete would both fail (ON DELETE RESTRICT) and lose
+ * history. Local mode keeps the overlay tombstone it always had.
+ */
 export function removeProduct(id: string): void {
+  if (isDatabaseConnected()) {
+    updateRemoteCatalog((current) => makeRemoteCatalog(current.products, { ...current.active, [id]: false }));
+    runRemoteWrite('پنهان‌کردن محصول', async () => {
+      await pushProductActive(id, false);
+    });
+    return;
+  }
+
   const overlay = store.get();
   store.set({
     ...overlay,
@@ -193,6 +282,14 @@ export function removeProduct(id: string): void {
 
 /** Toggle a product's active flag without touching its data. */
 export function setProductActive(id: string, active: boolean): void {
+  if (isDatabaseConnected()) {
+    updateRemoteCatalog((current) => makeRemoteCatalog(current.products, { ...current.active, [id]: active }));
+    runRemoteWrite('تغییر وضعیت نمایش', async () => {
+      await pushProductActive(id, active);
+    });
+    return;
+  }
+
   const overlay = store.get();
   store.set({
     ...overlay,
@@ -208,6 +305,24 @@ export function setProductActive(id: string, active: boolean): void {
 export function setVariantStock(productId: string, variantId: string, stock: number): void {
   const product = getProductById(productId);
   if (!product || stock < 0) return;
+
+  if (isDatabaseConnected()) {
+    const next: Product = {
+      ...product,
+      variants: product.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
+    };
+    updateRemoteCatalog((current) =>
+      makeRemoteCatalog(
+        current.products.map((p) => (p.id === productId ? next : p)),
+        current.active,
+      ),
+    );
+    runRemoteWrite('ذخیره موجودی', async () => {
+      await pushVariantStock(variantId, stock);
+    });
+    return;
+  }
+
   const next: Product = {
     ...product,
     variants: product.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
@@ -215,9 +330,14 @@ export function setVariantStock(productId: string, variantId: string, stock: num
   upsertProduct(next, getCatalogMeta(productId).active);
 }
 
-/** Discard every admin catalog change (back to the base data). */
+/**
+ * Discard every admin catalog change.
+ * Connected mode: drops any leftover local overlay and re-reads the
+ * database — it never writes a "reset" to PostgreSQL.
+ */
 export function resetCatalog(): void {
   store.reset();
+  if (isDatabaseConnected()) void refreshRemoteCatalog();
 }
 
 /* ── React binding ─────────────────────────────────────────── */
@@ -225,5 +345,6 @@ export function resetCatalog(): void {
 /** Effective catalog as a hook (admin pages). */
 export function useCatalog(): Product[] {
   const overlay = useLocalStore(store);
-  return mergedList(overlay);
+  const remote = useRemoteCatalog();
+  return remote ? remote.products : mergedList(overlay);
 }

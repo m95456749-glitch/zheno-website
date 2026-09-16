@@ -33,6 +33,16 @@ jobs:
         run: npm ci
 
       - name: Typecheck and build
+        # Supabase connection for the admin panel. These are repository
+        # VARIABLES (not secrets) on purpose: both values are public — the
+        # project URL and the publishable/anon key — and the browser is
+        # meant to ship them. Data access is decided by Row Level Security
+        # in the database, never by the key. Leave the variables unset and
+        # the build keeps its original offline (static catalog) behaviour.
+        # NEVER add a service_role/secret key here.
+        env:
+          VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
+          VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
         run: npm run build
 
       - name: Setup Pages

@@ -9,6 +9,7 @@ import App from './App';
 import { CartProvider } from './context/CartContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getSiteBase } from './utils/siteBase';
+import { startCatalogSync } from './services/catalogSync';
 import './index.css';
 import './admin/admin.css';
 
@@ -17,6 +18,17 @@ import './admin/admin.css';
 // hardcoded basename here is what rendered a blank page wherever the
 // mount point disagreed with it.
 const basename = getSiteBase();
+
+// Connect the catalog to Supabase when VITE_SUPABASE_URL +
+// VITE_SUPABASE_PUBLISHABLE_KEY are set. Fire-and-forget: the app
+// renders from the local/base data immediately and swaps in the
+// database rows as soon as they arrive; with no configuration (or no
+// network) nothing changes and the storefront keeps working.
+try {
+  startCatalogSync();
+} catch (err) {
+  console.warn('[zhino] catalog sync not started:', err);
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

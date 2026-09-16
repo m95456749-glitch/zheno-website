@@ -13,6 +13,8 @@ import { FLAVORS, getFlavor } from '../../data/products';
 import type { FlavorId, Product, ProductCategory } from '../../types';
 import {
   getCatalogMeta,
+  isDatabaseConnected,
+  reloadCatalogFromDatabase,
   removeProduct,
   resetCatalog,
   setProductActive,
@@ -57,6 +59,8 @@ const EMPTY_FORM: ProductFormState = {
 export default function AdminProductsPage() {
   const catalog = useCatalog();
   const lowThreshold = getSettings().lowStockThreshold;
+  // true when the panel writes to the real PostgreSQL database
+  const connected = isDatabaseConnected();
 
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
@@ -97,7 +101,13 @@ export default function AdminProductsPage() {
   };
 
   const doDelete = (product: Product) => {
-    if (window.confirm(`محصول «${product.shortName}» حذف شود؟`)) {
+    // Connected mode hides the product instead of deleting its row:
+    // orders reference products, and the storefront already treats
+    // «غیرفعال» as "not for sale". Nothing is ever destroyed.
+    const question = connected
+      ? `محصول «${product.shortName}» از فروشگاه پنهان شود؟ (داده‌ها حذف نمی‌شوند؛ فقط غیرفعال می‌شود)`
+      : `محصول «${product.shortName}» حذف شود؟`;
+    if (window.confirm(question)) {
       removeProduct(product.id);
       flashSaved();
     }
@@ -296,19 +306,25 @@ export default function AdminProductsPage() {
       {/* quiet secondary action */}
       <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
         <p className="max-w-xl text-[0.7rem] leading-6 text-mocha">
-          تغییرات روی همان داده‌های فروشگاه اعمال می‌شوند (در این نسخه نمایشی: همین مرورگر).
+          {connected
+            ? 'تغییرات مستقیماً روی دیتابیس Supabase ذخیره می‌شوند و بلافاصله در فروشگاه دیده می‌شوند.'
+            : 'تغییرات روی همان داده‌های فروشگاه اعمال می‌شوند (در این نسخه نمایشی: همین مرورگر).'}
         </p>
         <button
           type="button"
           onClick={() => {
-            if (window.confirm('همه تغییرات محصولات به داده‌های اولیه فروشگاه بازگردد؟')) {
-              resetCatalog();
+            const question = connected
+              ? 'داده‌های محصولات از دیتابیس دوباره خوانده شود؟'
+              : 'همه تغییرات محصولات به داده‌های اولیه فروشگاه بازگردد؟';
+            if (window.confirm(question)) {
+              if (connected) void reloadCatalogFromDatabase();
+              else resetCatalog();
               flashSaved();
             }
           }}
           className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline"
         >
-          بازنشانی داده‌های اولیه
+          {connected ? 'بازخوانی از دیتابیس' : 'بازنشانی داده‌های اولیه'}
         </button>
       </div>
 
