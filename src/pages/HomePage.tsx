@@ -3,13 +3,14 @@
 // A short premium hero (burgundy backdrop + the real
 // finished-dessert photo slideshow) flows
 // straight into ALL 22 products — the real content of the
-// page. Below the grid the page settles into ONE deep-wine
-// band — flavor index (#flavors) → recipes → QR → closing —
-// separated by hairline seams instead of gaps, so the lower
-// site reads as a single premium surface that eases into the
-// footer. Every surface there is a tint of the same
-// burgundy/ivory pair used everywhere else: no white cards and
-// no second, lighter red.
+// page. Below the grid the page settles into ONE continuous
+// light band — flavor index (#flavors) → recipes → QR →
+// closing — on the same ivory canvas as the products,
+// separated by quiet hairline seams, so the lower half reads
+// as a single bright, clean surface that ends on the dark
+// footer. Burgundy appears there only as identity accents
+// (kickers, titles, hairlines, the primary action) — no
+// large dark bands.
 // ============================================================
 
 import { useEffect, useState } from 'react';
@@ -371,18 +372,19 @@ export default function HomePage() {
       {/* ══ FLAVOR INDEX — compact discovery chips ══════════ */}
       <section
         id="flavors"
-        className="burgundy-ambient scroll-mt-24 bg-wine-900 pb-10 pt-12 text-cream-50 sm:pb-12 sm:pt-14"
+        className="relative scroll-mt-24 bg-cream-page pb-10 pt-12 text-espresso sm:pb-12 sm:pt-14"
         aria-label="طعم‌های ژینو"
       >
+        <span className="band-seam" aria-hidden="true" />
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
-            <p className="kicker kicker-dark font-display">The Flavor Atlas</p>
-            <h2 className="mt-3 text-[1.35rem] font-light leading-[1.6] text-cream-50 sm:text-[1.7rem]">
+            <p className="kicker font-display">The Flavor Atlas</p>
+            <h2 className="mt-3 text-[1.35rem] font-light leading-[1.6] text-wine-950 sm:text-[1.7rem]">
               کشف طعم‌های ژینو
             </h2>
-            <p className="mt-2 text-[0.74rem] leading-6 text-cream-200/75">
+            <p className="mt-2 text-[0.74rem] leading-6 text-mocha">
               {formatNumber(jellyFlavors.length)} طعم پودر ژله
-              <span className="mx-2 text-cream-200/40" aria-hidden="true">·</span>
+              <span className="mx-2 text-espresso/35" aria-hidden="true">·</span>
               {formatNumber(custardFlavors.length)} طعم پودر کاستر
             </p>
           </div>
@@ -393,14 +395,14 @@ export default function HomePage() {
               { label: 'پودر کاستر', flavors: custardFlavors },
             ].map((row) => (
               <div key={row.label} className="flex flex-wrap items-center justify-center gap-2">
-                <span className="me-1 text-[0.72rem] font-bold tracking-wide text-cream-100/85">{row.label}</span>
+                <span className="me-1 text-[0.72rem] font-bold tracking-wide text-espresso/85">{row.label}</span>
                 {row.flavors.map((flavor) => (
                   <span
                     key={flavor.id}
-                    className="inline-flex items-center gap-2 rounded-full border border-cream-50/12 bg-cream-50/[0.06] px-3 py-1.5 text-[0.74rem] font-medium leading-none text-cream-100 transition hover:border-gold-400/45 hover:bg-cream-50/10"
+                    className="inline-flex items-center gap-2 rounded-full border border-espresso/12 bg-white px-3 py-1.5 text-[0.74rem] font-medium leading-none text-espresso transition hover:border-wine-800/40 hover:bg-wine-900/[0.03]"
                   >
                     <span
-                      className="h-2 w-2 rounded-full ring-1 ring-cream-50/25"
+                      className="h-2 w-2 rounded-full ring-1 ring-espresso/15"
                       style={{ backgroundColor: flavor.color }}
                       aria-hidden="true"
                     />
@@ -415,55 +417,55 @@ export default function HomePage() {
 
       {/* ══ RECIPES — the two official methods ═══════════════ */}
       <section
-        className="cv-auto burgundy-ambient relative bg-wine-900 pb-12 pt-12 text-cream-50 sm:pb-14 sm:pt-14"
+        className="cv-auto relative bg-cream-page pb-12 pt-12 text-espresso sm:pb-14 sm:pt-14"
         aria-label="دستورهای پیشنهادی"
       >
         <span className="band-seam" aria-hidden="true" />
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <div className="flex items-end justify-between gap-6">
             <div>
-              <p className="kicker kicker-dark font-display">From The Kitchen</p>
-              <h2 className="mt-3 text-[1.35rem] font-light text-cream-50 sm:text-[1.7rem]">دستور تهیه</h2>
+              <p className="kicker font-display">From The Kitchen</p>
+              <h2 className="mt-3 text-[1.35rem] font-light text-wine-950 sm:text-[1.7rem]">دستور تهیه</h2>
             </div>
             <Link
               to="/recipes"
-              className="group hidden shrink-0 items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50 sm:inline-flex"
+              className="group hidden shrink-0 items-center gap-2 text-sm font-medium text-wine-800 transition hover:text-wine-900 sm:inline-flex"
             >
               جزئیات دستورها
               <span className="transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
             </Link>
           </div>
 
-          <div ref={recipesReveal} className="panel-wine mt-6 overflow-hidden rounded-2xl">
+          <div ref={recipesReveal} className="panel-lux mt-6 overflow-hidden rounded-2xl">
             {recipes.map((recipe, i) => (
               <Link
                 key={recipe.id}
                 to="/recipes"
                 className={cn(
-                  'group flex items-center gap-4 px-5 py-4 transition hover:bg-cream-50/[0.05] sm:gap-5 sm:px-7 sm:py-5',
-                  i === 0 && 'border-b border-cream-50/10',
+                  'group flex items-center gap-4 px-5 py-4 transition hover:bg-wine-900/[0.025] sm:gap-5 sm:px-7 sm:py-5',
+                  i === 0 && 'border-b border-espresso/10',
                 )}
               >
                 <span
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-wine-950/55 text-2xl ring-1 ring-cream-50/12 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-wine-900/[0.05] text-2xl ring-1 ring-wine-900/10 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
                   aria-hidden="true"
                 >
                   {recipe.emoji}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[0.95rem] font-semibold text-cream-50 sm:text-[1rem]">{recipe.title}</span>
-                  <span className="mt-0.5 block truncate text-[0.74rem] leading-6 text-cream-200/70">
+                  <span className="block text-[0.95rem] font-semibold text-espresso sm:text-[1rem]">{recipe.title}</span>
+                  <span className="mt-0.5 block truncate text-[0.74rem] leading-6 text-mocha">
                     {recipe.summary}
                   </span>
                 </span>
-                <span className="text-gold-300/80 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+                <span className="text-wine-700/70 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
               </Link>
             ))}
           </div>
 
           <Link
             to="/recipes"
-            className="group mt-5 inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50 sm:hidden"
+            className="group mt-5 inline-flex items-center gap-2 text-sm font-medium text-wine-800 transition hover:text-wine-900 sm:hidden"
           >
             جزئیات دستورها
             <span className="transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
@@ -471,34 +473,28 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ══ QR — scan & share, still on the same burgundy band ═ */}
+      {/* ══ QR — scan & share, the light band's focal plate ══ */}
       <QrCodeSection />
 
-      {/* ══ CLOSING — the story seam, easing into the footer ══ */}
+      {/* ══ CLOSING — the story line, ending the light band ══ */}
       <section
-        className="cv-auto page-plate dark-surface grain burgundy-ambient relative overflow-hidden px-4 pb-14 pt-12 text-center text-cream-50 sm:pb-16 sm:pt-14"
+        className="cv-auto relative bg-cream-page px-4 pb-14 pt-12 text-center text-espresso sm:pb-16 sm:pt-14"
         aria-label="درباره ژینو"
       >
         <span className="band-seam" aria-hidden="true" />
-        {/* the band finishes on the footer's noir, so the two dark
-            blocks meet without an ivory strip between them */}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-24 bg-gradient-to-b from-transparent to-noir"
-          aria-hidden="true"
-        />
-        <p className="kicker kicker-dark font-display">The Zhino Story</p>
-        <p className="mx-auto mt-4 max-w-xl text-[1.15rem] font-light leading-9 sm:text-xl sm:leading-10">
-          <span className="font-semibold text-cream-50">کیفیت خوب،انتخاب ما.</span>
+        <p className="kicker font-display">The Zhino Story</p>
+        <p className="mx-auto mt-4 max-w-xl text-[1.15rem] font-light leading-9 text-mocha sm:text-xl sm:leading-10">
+          <span className="font-semibold text-wine-950">کیفیت خوب،انتخاب ما.</span>
         </p>
         <div className="mt-6 flex items-center justify-center gap-8">
-          <Link to="/about" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50">
+          <Link to="/about" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-wine-800 transition hover:text-wine-900">
             درباره ما
-            <span className="text-cream-200/45 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+            <span className="text-wine-700/60 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
           </Link>
-          <span className="h-4 w-px bg-cream-50/20" aria-hidden="true" />
-          <Link to="/contact" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-cream-100 transition hover:text-cream-50">
+          <span className="h-4 w-px bg-espresso/20" aria-hidden="true" />
+          <Link to="/contact" onClick={playPrimary} className="group inline-flex items-center gap-2 text-sm font-medium text-wine-800 transition hover:text-wine-900">
             تماس با ما
-            <span className="text-cream-200/45 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+            <span className="text-wine-700/60 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
           </Link>
         </div>
       </section>
