@@ -1,7 +1,8 @@
 // ============================================================
 // ZHINO — page frame
-// The header is fixed; every page except the home hero reserves
-// its height so content never sits underneath the nav.
+// The header is fixed (exactly --header-h tall, see index.css);
+// every page except the home hero reserves that height plus a
+// small breather so content never sits underneath the nav.
 // ============================================================
 
 import type { ReactNode } from 'react';
@@ -18,7 +19,7 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <div className="flex min-h-screen flex-col bg-cream-page">
       <Header />
-      <main className={cn('flex-1', !isHome && 'pt-[4.5rem]')}>{children}</main>
+      <main className={cn('flex-1', !isHome && 'pt-[calc(var(--header-h)+0.5rem)]')}>{children}</main>
       <Footer />
       <Toast />
     </div>

@@ -51,6 +51,18 @@
   --color-mocha-light: #7e6b61; /* tertiary text / placeholders (AA on ivory) */
 }
 
+/* ------------------------------------------------------------
+   Fixed-header geometry
+   The header bar (Header.tsx) is exactly this tall. The hero
+   and every inner page derive their top spacing from it, so
+   page content mathematically cannot slide under the fixed
+   bar — at any breakpoint.
+   ------------------------------------------------------------ */
+
+:root {
+  --header-h: 4rem;
+}
+
 body {
   font-family: 'Vazirmatn', system-ui, -apple-system, sans-serif;
   background: var(--color-cream-page);
@@ -448,6 +460,37 @@ body {
   background: #ffffff;
   border: 1px solid rgba(41, 35, 33, 0.09);
   box-shadow: 0 28px 56px -44px rgba(41, 35, 33, 0.35);
+}
+
+/* Quiet translucent sheet for the deep-wine band (recipes, QR):
+   the dark-surface counterpart of .panel-lux. Tinted ivory on the
+   brand burgundy instead of a bright white card. No backdrop
+   blur on purpose — these sheets sit over the drifting ambient
+   layer, and blurring it every frame is real GPU cost on phones. */
+.panel-wine {
+  background: rgba(250, 247, 242, 0.05);
+  border: 1px solid rgba(250, 247, 242, 0.11);
+  box-shadow: 0 26px 52px -42px rgba(0, 0, 0, 0.75);
+}
+
+/* Hairline seam between the stacked sub-sections of the lower
+   burgundy band (flavors → recipes → QR → closing). A real element,
+   not a pseudo-slot: ::before is taken by .burgundy-ambient and
+   ::after by .grain on these same sections. */
+.band-seam {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 1px;
+  pointer-events: none;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(250, 247, 242, 0.12) 18%,
+    rgba(184, 154, 98, 0.42) 50%,
+    rgba(250, 247, 242, 0.12) 82%,
+    transparent 100%
+  );
 }
 
 /* ------------------------------------------------------------
