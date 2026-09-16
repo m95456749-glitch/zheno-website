@@ -5,8 +5,57 @@
 import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { orderStatusLabel, type OrderStatus } from '../../services/orderStore';
+import { useCatalogSync } from '../../services/catalogSync';
 import { cn } from '../../utils/cn';
 import { IconClose } from '../Icons';
+
+/* ── database connection status (admin panel) ─────────────── */
+
+/**
+ * Small honest status line for the panel header.
+ * Connecting is invisible to the storefront; this is the operator's
+ * only view of it, so it says exactly what is happening:
+ * «متصل» / «در حال همگام‌سازی» / «خطا در اتصال» / «حالت محلی».
+ */
+export function SyncStatusBadge() {
+  const sync = useCatalogSync();
+  const connected = sync.source === 'remote';
+  const label = !connected
+    ? 'حالت محلی (بدون دیتابیس)'
+    : sync.phase === 'error'
+      ? 'خطا در اتصال به دیتابیس'
+      : sync.phase === 'ready' && sync.pending === 0
+        ? 'متصل به دیتابیس'
+        : 'در حال همگام‌سازی…';
+  const tone = !connected
+    ? 'adm-badge-ghost'
+    : sync.phase === 'error'
+      ? 'adm-badge-cancelled'
+      : sync.phase === 'ready' && sync.pending === 0
+        ? 'adm-badge-ok'
+        : 'adm-badge-warning';
+  return (
+    <span
+      className={cn('adm-badge', tone)}
+      title={connected ? sync.projectUrl : 'localStorage / داده‌های پایه'}
+    >
+      {label}
+    </span>
+  );
+}
+
+export function SyncErrorBanner() {
+  const sync = useCatalogSync();
+  if (sync.source !== 'remote' || !sync.error) return null;
+  return (
+    <p
+      role="alert"
+      className="mb-5 rounded-xl bg-red-50 px-4 py-3 text-[0.72rem] font-bold leading-6 text-red-700 ring-1 ring-red-200"
+    >
+      ذخیره در دیتابیس انجام نشد — {sync.error}
+    </p>
+  );
+}
 
 /* ── field wrapper ────────────────────────────────────────── */
 

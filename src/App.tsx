@@ -26,6 +26,7 @@ import RecipesPage from './pages/RecipesPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import NotFoundPage from './pages/NotFoundPage';
+import { useRemoteCatalog } from './services/catalogSync';
 import { AdminAuthProvider } from './admin/auth/AuthContext';
 import AdminGate from './admin/AdminGate';
 import AdminLoginPage from './admin/pages/AdminLoginPage';
@@ -58,6 +59,13 @@ function Storefront() {
 }
 
 export default function App() {
+  // Subscribing here re-renders the route tree whenever the database
+  // snapshot arrives or changes. The storefront pages read the catalog
+  // through plain functions (getVisibleProducts / getProductById), so
+  // without this the first paint would keep showing the base data until
+  // some unrelated state change happened.
+  useRemoteCatalog();
+
   return (
     <AdminAuthProvider>
       <Routes>

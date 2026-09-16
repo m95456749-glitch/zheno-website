@@ -19,7 +19,10 @@ interface FormErrors {
 }
 
 export default function AdminLoginPage() {
-  const { session, login } = useAdminAuth();
+  const { session, login, providerMode } = useAdminAuth();
+  // 'supabase' = real authentication against the project's Auth service
+  // (and every write is additionally checked by Row Level Security).
+  const isSupabaseAuth = providerMode === 'supabase';
   const navigate = useNavigate();
   const [identifier, setIdentifier] = useState('');
   const [secret, setSecret] = useState('');
@@ -33,7 +36,11 @@ export default function AdminLoginPage() {
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const next: FormErrors = {};
-    if (identifier.trim().length < 3) next.identifier = 'نام کاربری (حداقل ۳ حرف) را وارد کنید';
+    if (identifier.trim().length < 3) {
+      next.identifier = isSupabaseAuth
+        ? 'ایمیل حساب مدیر را کامل وارد کنید'
+        : 'نام کاربری (حداقل ۳ حرف) را وارد کنید';
+    }
     if (secret.trim().length < 4) next.secret = 'گذرواژه (حداقل ۴ حرف) را وارد کنید';
     setErrors(next);
     if (Object.keys(next).length > 0) return;
@@ -87,12 +94,12 @@ export default function AdminLoginPage() {
                 {errors.form}
               </p>
             )}
-            <Field label="نام کاربری" error={errors.identifier}>
+            <Field label={isSupabaseAuth ? 'ایمیل مدیر' : 'نام کاربری'} error={errors.identifier}>
               <input
                 className={cn('adm-input', errors.identifier && 'err')}
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="مثلاً admin"
+                placeholder={isSupabaseAuth ? 'admin@example.com' : 'مثلاً admin'}
                 autoComplete="username"
                 autoFocus
               />
@@ -117,14 +124,26 @@ export default function AdminLoginPage() {
           </form>
 
           {/* honest disclosure — no fake security */}
-          <div className="mt-4 rounded-xl bg-cream-100 px-4 py-3.5 text-[0.7rem] leading-6 text-mocha ring-1 ring-espresso/8">
-            <p className="font-bold text-wine-900">توجه — احراز هویت واقعی هنوز متصل نشده است.</p>
-            <p>
-              در این نسخه نمایشی هیچ گذرواژه‌ای بررسی یا ذخیره نمی‌شود و ورود فقط برای
-              پیش‌نمایش پنل امکان‌پذیر است. برای امنیت واقعی، سرویس احراز هویت بک‌اند در
-              فاز بعد متصل می‌شود (پیکربندی: <span dir="ltr" className="font-semibold">VITE_ADMIN_AUTH_MODE</span>).
-            </p>
-          </div>
+          {isSupabaseAuth ? (
+            <div className="mt-4 rounded-xl bg-cream-100 px-4 py-3.5 text-[0.7rem] leading-6 text-mocha ring-1 ring-espresso/8">
+              <p className="font-bold text-wine-900">ورود با حساب مدیر Supabase.</p>
+              <p>
+                گذرواژه فقط به سرویس احراز هویت Supabase فرستاده می‌شود و در این برنامه ذخیره
+                نمی‌شود. ویرایش محصولات و موجودی برای حساب‌های دارای نقش{' '}
+                <span dir="ltr" className="font-semibold">admin</span> مجاز است؛ همین محدودیت در
+                سطح دیتابیس (RLS) اعمال می‌شود، نه در مرورگر.
+              </p>
+            </div>
+          ) : (
+            <div className="mt-4 rounded-xl bg-cream-100 px-4 py-3.5 text-[0.7rem] leading-6 text-mocha ring-1 ring-espresso/8">
+              <p className="font-bold text-wine-900">توجه — احراز هویت واقعی هنوز متصل نشده است.</p>
+              <p>
+                در این نسخه نمایشی هیچ گذرواژه‌ای بررسی یا ذخیره نمی‌شود و ورود فقط برای
+                پیش‌نمایش پنل امکان‌پذیر است. برای امنیت واقعی، سرویس احراز هویت بک‌اند در
+                فاز بعد متصل می‌شود (پیکربندی: <span dir="ltr" className="font-semibold">VITE_ADMIN_AUTH_MODE</span>).
+              </p>
+            </div>
+          )}
 
           <p className="mt-6 text-center text-[0.7rem] text-mocha-light">
             © ژینو — پنل مدیریت

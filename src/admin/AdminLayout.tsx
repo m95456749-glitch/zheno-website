@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAdminAuth } from './auth/AuthContext';
+import { SyncErrorBanner, SyncStatusBadge } from './components/ui';
 import { ADMIN_NAV } from './nav';
 import { IconExternal, IconLogout, IconMenu } from './Icons';
 import { cn } from '../utils/cn';
@@ -71,7 +72,7 @@ function NavFooter({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const { isDemo } = useAdminAuth();
+  const { isDemo, isDatabaseAuth } = useAdminAuth();
   const [drawerOpen, setDrawerOpen] = useState(false);
   const { pathname } = useLocation();
 
@@ -163,6 +164,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                   نمایشی
                 </span>
               )}
+              {isDatabaseAuth && <SyncStatusBadge />}
             </div>
             <p className="mt-2 text-[0.82rem] leading-6 text-mocha">{current.desc}</p>
             <span
@@ -170,6 +172,9 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
               aria-hidden="true"
             />
           </div>
+          {/* a refused database write is shown here, on every page, and
+              never silently swallowed */}
+          <SyncErrorBanner />
           {children}
         </div>
       </main>

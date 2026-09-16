@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { setVariantStock, useCatalog } from '../../services/catalog';
+import { isDatabaseConnected, setVariantStock, useCatalog } from '../../services/catalog';
 import { getSettings } from '../../services/settings';
 import { getFlavor } from '../../data/products';
 import { SavedFlash } from '../components/ui';
@@ -59,6 +59,8 @@ function StockInput({
 export default function AdminInventoryPage() {
   const catalog = useCatalog();
   const settings = getSettings();
+  // true when the panel writes to the real PostgreSQL database
+  const connected = isDatabaseConnected();
   const [savedId, setSavedId] = useState<string | null>(null);
 
   const rows = useMemo(
@@ -171,6 +173,9 @@ export default function AdminInventoryPage() {
       <p className="mt-6 max-w-2xl text-[0.7rem] leading-6 text-mocha">
         عدد موجودی هر ردیف را تغییر دهید و بیرون از کادر کلیک کنید تا ذخیره شود. اگر موجودی از
         آستانه هشدار (تنظیمات) کمتر شود، وضعیت «کم‌موجود» نمایش داده می‌شود.
+        {connected
+          ? ' ذخیره از طریق تابع اتمی set_inventory_stock روی دیتابیس انجام می‌شود و فقط برای حساب مدیر مجاز است.'
+          : ' (در این نسخه نمایشی ذخیره‌سازی در همین مرورگر انجام می‌شود.)'}
       </p>
     </div>
   );
