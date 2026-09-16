@@ -3,8 +3,13 @@
 // A short premium hero (burgundy backdrop + the real
 // finished-dessert photo slideshow) flows
 // straight into ALL 22 products — the real content of the
-// page. Below the grid: a compact flavor index (#flavors),
-// the official recipes, and a small about/contact seam.
+// page. Below the grid the page settles into ONE deep-wine
+// band — flavor index (#flavors) → recipes → QR → closing —
+// separated by hairline seams instead of gaps, so the lower
+// site reads as a single premium surface that eases into the
+// footer. Every surface there is a tint of the same
+// burgundy/ivory pair used everywhere else: no white cards and
+// no second, lighter red.
 // ============================================================
 
 import { useEffect, useState } from 'react';
@@ -19,6 +24,7 @@ import { formatNumber } from '../utils/format';
 import { soundService } from '../services/soundService';
 import ProductCard from '../components/ProductCard';
 import ProductVisual from '../components/ProductVisual';
+import QrCodeSection from '../components/QrCodeSection';
 import { useReveal } from '../hooks/useReveal';
 import { withSiteBase } from '../utils/siteBase';
 import {
@@ -188,7 +194,7 @@ export default function HomePage() {
         {/* thin gold plate frame */}
         <div className="pointer-events-none absolute inset-2.5 z-[1] rounded-2xl border border-cream-50/12 sm:inset-4" aria-hidden="true" />
 
-        <div className="relative z-20 mx-auto w-full max-w-6xl px-4 pb-[calc(var(--hero-curve)_+_1.75rem)] pt-[5.5rem] sm:px-6 lg:grid lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:gap-12 lg:pb-[calc(var(--hero-curve)_+_2.5rem)] lg:pt-28">
+        <div className="relative z-20 mx-auto w-full max-w-6xl px-4 pb-[calc(var(--hero-curve)_+_1.75rem)] pt-[calc(var(--header-h)_+_1.75rem)] sm:px-6 lg:grid lg:grid-cols-[1.04fr_0.96fr] lg:items-center lg:gap-12 lg:pb-[calc(var(--hero-curve)_+_2.5rem)] lg:pt-28">
           {/* headline block */}
           <div className="text-center lg:text-right">
             <p className="rise flex items-center justify-center gap-3 lg:justify-start" style={{ '--rise-delay': '0.05s' } as CSSProperties}>
@@ -365,33 +371,36 @@ export default function HomePage() {
       {/* ══ FLAVOR INDEX — compact discovery chips ══════════ */}
       <section
         id="flavors"
-        className="burgundy-ambient mt-14 scroll-mt-24 bg-wine-800 py-8 text-cream-50 sm:py-10"
+        className="burgundy-ambient scroll-mt-24 bg-wine-900 pb-10 pt-12 text-cream-50 sm:pb-12 sm:pt-14"
         aria-label="طعم‌های ژینو"
       >
         <div className="mx-auto max-w-6xl px-4 sm:px-6">
           <div className="text-center">
-            <h2 className="text-[1.05rem] font-medium text-cream-50">کشف طعم‌های ژینو</h2>
-            <p className="mt-1.5 text-[0.72rem] leading-6 text-cream-200/80">
+            <p className="kicker kicker-dark font-display">The Flavor Atlas</p>
+            <h2 className="mt-3 text-[1.35rem] font-light leading-[1.6] text-cream-50 sm:text-[1.7rem]">
+              کشف طعم‌های ژینو
+            </h2>
+            <p className="mt-2 text-[0.74rem] leading-6 text-cream-200/75">
               {formatNumber(jellyFlavors.length)} طعم پودر ژله
-              <span className="mx-2 text-cream-200/45" aria-hidden="true">·</span>
+              <span className="mx-2 text-cream-200/40" aria-hidden="true">·</span>
               {formatNumber(custardFlavors.length)} طعم پودر کاستر
             </p>
           </div>
 
-          <div className="mt-6 space-y-3.5">
+          <div className="mt-7 space-y-4">
             {[
               { label: 'پودر ژله', flavors: jellyFlavors },
               { label: 'پودر کاستر', flavors: custardFlavors },
             ].map((row) => (
               <div key={row.label} className="flex flex-wrap items-center justify-center gap-2">
-                <span className="ml-1 text-[0.72rem] font-bold text-cream-50">{row.label}</span>
+                <span className="me-1 text-[0.72rem] font-bold tracking-wide text-cream-100/85">{row.label}</span>
                 {row.flavors.map((flavor) => (
                   <span
                     key={flavor.id}
-                    className="inline-flex items-center gap-1.5 rounded-full border border-cream-50/15 bg-cream-50 px-3 py-1 text-[0.72rem] font-medium text-espresso transition hover:border-gold-400/55"
+                    className="inline-flex items-center gap-2 rounded-full border border-cream-50/12 bg-cream-50/[0.06] px-3 py-1.5 text-[0.74rem] font-medium leading-none text-cream-100 transition hover:border-gold-400/45 hover:bg-cream-50/10"
                   >
                     <span
-                      className="h-2 w-2 rounded-full"
+                      className="h-2 w-2 rounded-full ring-1 ring-cream-50/25"
                       style={{ backgroundColor: flavor.color }}
                       aria-hidden="true"
                     />
@@ -405,12 +414,16 @@ export default function HomePage() {
       </section>
 
       {/* ══ RECIPES — the two official methods ═══════════════ */}
-      <section className="cv-auto burgundy-ambient bg-wine-800 pb-14 pt-10 text-cream-50 sm:pb-16 sm:pt-12" aria-label="دستورهای پیشنهادی">
+      <section
+        className="cv-auto burgundy-ambient relative bg-wine-900 pb-12 pt-12 text-cream-50 sm:pb-14 sm:pt-14"
+        aria-label="دستورهای پیشنهادی"
+      >
+        <span className="band-seam" aria-hidden="true" />
         <div className="mx-auto max-w-4xl px-4 sm:px-6">
           <div className="flex items-end justify-between gap-6">
             <div>
               <p className="kicker kicker-dark font-display">From The Kitchen</p>
-              <h2 className="mt-3 text-[1.65rem] font-light text-cream-50 sm:text-[2.1rem]">دستور تهیه</h2>
+              <h2 className="mt-3 text-[1.35rem] font-light text-cream-50 sm:text-[1.7rem]">دستور تهیه</h2>
             </div>
             <Link
               to="/recipes"
@@ -421,29 +434,29 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div ref={recipesReveal} className="panel-lux mt-6 rounded-xl">
+          <div ref={recipesReveal} className="panel-wine mt-6 overflow-hidden rounded-2xl">
             {recipes.map((recipe, i) => (
               <Link
                 key={recipe.id}
                 to="/recipes"
                 className={cn(
-                  'group flex items-center gap-4 px-5 py-4 transition hover:bg-cream-100/70 sm:gap-5 sm:px-7 sm:py-5',
-                  i === 0 && 'border-b border-espresso/8',
+                  'group flex items-center gap-4 px-5 py-4 transition hover:bg-cream-50/[0.05] sm:gap-5 sm:px-7 sm:py-5',
+                  i === 0 && 'border-b border-cream-50/10',
                 )}
               >
                 <span
-                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-cream-100 to-cream-200 text-2xl ring-1 ring-espresso/8 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
+                  className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-wine-950/55 text-2xl ring-1 ring-cream-50/12 transition-transform duration-300 group-hover:scale-105 sm:h-14 sm:w-14 sm:text-3xl"
                   aria-hidden="true"
                 >
                   {recipe.emoji}
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[0.95rem] font-semibold text-wine-950 sm:text-[1rem]">{recipe.title}</span>
-                  <span className="mt-0.5 block truncate text-[0.74rem] leading-6 text-mocha">
+                  <span className="block text-[0.95rem] font-semibold text-cream-50 sm:text-[1rem]">{recipe.title}</span>
+                  <span className="mt-0.5 block truncate text-[0.74rem] leading-6 text-cream-200/70">
                     {recipe.summary}
                   </span>
                 </span>
-                <span className="text-wine-700 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
+                <span className="text-gold-300/80 transition-transform duration-300 group-hover:-translate-x-1" aria-hidden="true">←</span>
               </Link>
             ))}
           </div>
@@ -458,11 +471,21 @@ export default function HomePage() {
         </div>
       </section>
 
-      {/* ══ CLOSING — a thin wine seam into the story ═══════ */}
+      {/* ══ QR — scan & share, still on the same burgundy band ═ */}
+      <QrCodeSection />
+
+      {/* ══ CLOSING — the story seam, easing into the footer ══ */}
       <section
-        className="cv-auto page-plate dark-surface grain burgundy-ambient relative mt-14 overflow-hidden px-4 py-10 text-center text-cream-50 sm:py-12"
+        className="cv-auto page-plate dark-surface grain burgundy-ambient relative overflow-hidden px-4 pb-14 pt-12 text-center text-cream-50 sm:pb-16 sm:pt-14"
         aria-label="درباره ژینو"
       >
+        <span className="band-seam" aria-hidden="true" />
+        {/* the band finishes on the footer's noir, so the two dark
+            blocks meet without an ivory strip between them */}
+        <div
+          className="pointer-events-none absolute inset-x-0 bottom-0 -z-10 h-24 bg-gradient-to-b from-transparent to-noir"
+          aria-hidden="true"
+        />
         <p className="kicker kicker-dark font-display">The Zhino Story</p>
         <p className="mx-auto mt-4 max-w-xl text-[1.15rem] font-light leading-9 sm:text-xl sm:leading-10">
           <span className="font-semibold text-cream-50">کیفیت خوب،انتخاب ما.</span>

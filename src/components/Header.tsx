@@ -60,7 +60,7 @@ export default function Header() {
         overlay ? 'bg-transparent' : 'frost',
       )}
     >
-      <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
+      <div className="mx-auto flex h-[var(--header-h)] max-w-6xl items-center justify-between gap-3 px-4 sm:px-6">
         {/* brand */}
         <Link to="/" className="group flex items-center gap-3" aria-label="ژینو — صفحه اصلی">
           <span

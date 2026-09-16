@@ -49,3 +49,20 @@ were trimmed).
 If a slideshow file is missing at runtime the slide is dropped from the
 rotation; if none remain, the tasting-trio fallback renders, so the page
 never shows a broken image.
+
+## QR code (the scan-and-share plate on the home page)
+
+The QR artwork slot in `src/components/QrCodeSection.tsx` is
+**replaceable**: drop the final file here as one of
+
+| Order | File                |
+| ----- | ------------------- |
+| 1     | `qr-code.png`       |
+| 2     | `qr-code.jpg`       |
+| 3     | `qr-code.webp`      |
+
+— the first one that exists is used automatically (square artwork;
+the frame renders it `object-contain` inside a 1:1 ivory card, so the
+QR keeps its quiet zone and stays scannable). Until a file is present
+the section shows a labelled placeholder frame instead of a broken
+image. No generated artwork is committed here.
