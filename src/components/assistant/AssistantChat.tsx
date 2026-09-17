@@ -30,7 +30,7 @@ import { Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import AssistantAvatar from './AssistantAvatar';
 import { ASSISTANT_NAME } from './assistantData';
-import { useAssistantSpeech } from './useAssistantSpeech';
+import { useAssistantVoice } from './useAssistantVoice';
 import {
   ASSISTANT_MAX_LENGTH,
   ASSISTANT_WELCOME_SUB,
@@ -155,13 +155,15 @@ export default function AssistantChat({ chat, className }: Props) {
     enabled: voiceOn,
     speaking: voiceReading,
     paused: voicePaused,
+    preparing: voicePreparing,
     voiceProblem,
     setEnabled,
+    unlock: unlockVoice,
     speak,
     stop,
     pause,
     resume,
-  } = useAssistantSpeech();
+  } = useAssistantVoice();
   /** چیپ‌ها بعد از شروع گفتگو جمع می‌شوند؛ کاربر هر وقت خواست باز می‌کند */
   const [ideasOpen, setIdeasOpen] = useState(false);
   /** پیغام کوتاه و انسانیِ صدا — چند لحظه بعد خودش می‌رود */
@@ -250,6 +252,9 @@ export default function AssistantChat({ chat, className }: Props) {
 
   const submit = () => {
     if (draft.trim().length === 0 || thinking) return;
+    // پاسخ چند لحظه بعد می‌رسد و آن لحظه دیگر «لمس کاربر» نیست؛
+    // پس همین حالا اجازهٔ پخش گرفته می‌شود تا موبایل صدا را نبندد.
+    if (voiceOn) unlockVoice();
     send();
   };
 
@@ -272,6 +277,8 @@ export default function AssistantChat({ chat, className }: Props) {
       showVoiceNotice(VOICE_UNAVAILABLE_MSG);
       return;
     }
+    // در همین لمس، اجازهٔ پخش صدا گرفته می‌شود (سیاست موبایل)
+    if (!voiceOn) unlockVoice();
     if (!voiceOn && voiceStatus === 'none') {
       showVoiceNotice(
         NO_PERSIAN_MSG,
@@ -298,8 +305,10 @@ export default function AssistantChat({ chat, className }: Props) {
       showVoiceNotice(VOICE_UNAVAILABLE_MSG);
       return;
     }
-    // همین پیام الان در حال پخش یا مکث است → توقف یا ادامه
-    if (readingId === id && (voiceReading || voicePaused)) {
+    // اجازهٔ پخش در همین لمس گرفته می‌شود (سیاست موبایل)
+    unlockVoice();
+    // همین پیام الان در حال پخش/مکث/آماده‌سازی است → توقف یا ادامه
+    if (readingId === id && (voiceReading || voicePaused || voicePreparing)) {
       if (voicePaused) {
         resume();
         return;
@@ -406,13 +415,14 @@ export default function AssistantChat({ chat, className }: Props) {
                   )}
                 </div>
 
-                {/* کار کوچک زیر پاسخ: پخش / توقف / ادامه با صدای مرورگر */}
+                {/* کار کوچک زیر پاسخ: پخش / توقف / ادامه */}
                 {message.from === 'bot' && !message.welcome && voiceAvailable && (
                   <div className="zhino-assistant-msg-foot">
                     {(() => {
                       const isReadingThis = readingId === message.id;
                       const isPausedThis = isReadingThis && voicePaused;
                       const isPlayingThis = isReadingThis && voiceReading;
+                      const isPreparingThis = isReadingThis && voicePreparing;
                       return (
                         <button
                           type="button"
@@ -423,14 +433,18 @@ export default function AssistantChat({ chat, className }: Props) {
                               ? 'توقف خواندن این پاسخ'
                               : isPausedThis
                                 ? 'ادامه خواندن این پاسخ'
-                                : 'خواندن این پاسخ'
+                                : isPreparingThis
+                                  ? 'در حال آماده‌سازی صدای این پاسخ'
+                                  : 'خواندن این پاسخ'
                           }
                           title={
                             isPlayingThis
                               ? 'توقف خواندن'
                               : isPausedThis
                                 ? 'ادامهٔ خواندن'
-                                : 'خواندن با صدای مرورگر'
+                                : isPreparingThis
+                                  ? 'در حال آماده‌سازی صدا'
+                                  : 'خواندن پاسخ با صدای فارسی'
                           }
                         >
                           {isPlayingThis ? <StopIcon /> : isPausedThis ? <PlayIcon /> : <SoundOnIcon />}
@@ -439,7 +453,9 @@ export default function AssistantChat({ chat, className }: Props) {
                               ? 'توقف خواندن'
                               : isPausedThis
                                 ? 'ادامه خواندن'
-                                : 'خواندن پاسخ'}
+                                : isPreparingThis
+                                  ? 'در حال آماده‌سازی…'
+                                  : 'خواندن پاسخ'}
                           </span>
                         </button>
                       );
@@ -552,16 +568,22 @@ export default function AssistantChat({ chat, className }: Props) {
           <span id="zhino-assistant-hint" className="zhino-assistant-hint">
             {hint}
           </span>
-          {/* کنترل‌های پخش: مکث/ادامه + توقف — فقط وقتی خواندن فعال است */}
-          {(voiceReading || voicePaused) && (
+          {/* کنترل‌های پخش: مکث/ادامه + توقف — فقط وقتی خواندن فعال است.
+              حین آماده‌سازی صدا هم همین‌جا می‌ماند تا دکمه‌ها نپرند. */}
+          {(voiceReading || voicePaused || voicePreparing) && (
             <div
               className={cn(
                 'zhino-assistant-playback',
                 voicePaused && 'is-paused',
+                voicePreparing && 'is-preparing',
               )}
               aria-label="کنترل خواندن پاسخ"
             >
-              {voicePaused ? (
+              {voicePreparing ? (
+                <span className="zhino-assistant-ctl is-waiting" aria-live="polite">
+                  <span>در حال آماده‌سازی صدا…</span>
+                </span>
+              ) : voicePaused ? (
                 <button
                   type="button"
                   className="zhino-assistant-ctl"

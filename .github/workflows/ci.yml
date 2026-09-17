@@ -59,3 +59,12 @@ jobs:
 
       - name: Runtime smoke tests
         run: npm run smoke
+
+      # Phase 9 — reading the answer aloud. Two harnesses, both offline:
+      # the device engine (Chrome Android behaviour) and the cloud Persian
+      # voice (our own Edge Function, stubbed — no provider, no key, no cost).
+      - name: Voice — device engine simulation (Chrome Android)
+        run: npm run test:voice-android
+
+      - name: Voice — cloud Persian voice simulation
+        run: npm run test:voice-cloud
