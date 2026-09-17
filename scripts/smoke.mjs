@@ -1868,10 +1868,11 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
 
 
 // ════════════════════════════════════════════════════════════
-// ASSISTANT SUITE (phase 5): the standalone /assistant page, the
-// floating launcher → route (no popup), «بازگشت به سایت», the browser
-// back button, and the chat itself — offline (local grounded engine)
-// and connected (AI proxy, mocked).
+// ASSISTANT SUITE (phase 5 → 7): the standalone /assistant page rendered
+// as an immersive, ChatGPT-style chat environment (no storefront
+// header/footer), the floating launcher → route (no popup),
+// «بازگشت به فروشگاه», the browser back button, and the chat itself —
+// offline (local grounded engine) and connected (AI proxy, mocked).
 // ════════════════════════════════════════════════════════════
 
 const OFFLINE_FETCH = () => Promise.reject(new Error('offline (smoke test)'));
@@ -1887,12 +1888,18 @@ async function sendChatMessage(dom, waitFor, text) {
   dom.window.document.querySelector('button[aria-label="ارسال پیام"]').click();
 }
 
-/** Open /assistant by clicking the floating launcher on a store page. */
+/**
+ * Open /assistant by clicking the floating launcher on a store page.
+ * Phase 7: the chat page shows a short Persian welcome instead of the
+ * old capability column, so that is what we wait for.
+ */
+const ASSISTANT_WELCOME_HEADING = 'سلام! من دستیار ژینو هستم.';
+
 async function openAssistantFromStore(dom, waitFor, text) {
   const launcher = dom.window.document.querySelector('a.zhino-assistant-launcher');
   if (!launcher) return false;
   launcher.click();
-  return waitFor(() => text().includes('توانایی‌های دستیار'));
+  return waitFor(() => text().includes(ASSISTANT_WELCOME_HEADING));
 }
 
 // ── 31. /assistant renders as a standalone page ─────────────
@@ -1907,15 +1914,54 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (!rendered) fail('assistant page — never rendered: ' + text().slice(0, 160));
     const body = text();
     expectContains('assistant page', body, 'دستیار ژینو');
-    expectContains('assistant page', body, 'بازگشت به سایت');
-    expectContains('assistant page', body, 'توانایی‌های دستیار');
-    expectContains('assistant page', body, 'سلام و درود');
+    // Phase 7 — the chat environment: a quiet «بازگشت به فروشگاه»
+    // button, a short Persian welcome, and no storefront chrome.
+    expectContains('assistant page', body, 'بازگشت به فروشگاه');
+    expectContains('assistant page', body, ASSISTANT_WELCOME_HEADING);
+    // the sidebar / capability column and the storefront footer are gone
+    expectNotContains('assistant page', body, 'توانایی‌های دستیار');
+    expectNotContains('assistant page', body, 'شفاف و بی‌ادعا');
+    expectNotContains('assistant page', body, '🇮🇷');
     // honest disclosure: no AI backend in this build, but the data source is named
     expectContains('assistant page', body, 'بدون مدل هوشمند');
     // the floating launcher must not be duplicated on its own page
     const launchers = dom.window.document.querySelectorAll('.zhino-assistant-launcher').length;
     if (launchers === 0) ok('assistant page — floating launcher is not duplicated');
     else fail(`assistant page — launcher rendered ${launchers} time(s) on /assistant`);
+    // Phase 7 — the page is an immersive chat shell: no storefront
+    // header/footer, no flags, no nav links, no capability sidebar.
+    if (dom.window.document.querySelectorAll('header').length === 1) {
+      ok('assistant page — exactly one header (the chat topbar, no storefront nav)');
+    } else {
+      fail(`assistant page — expected one header, got ${dom.window.document.querySelectorAll('header').length}`);
+    }
+    const shell = dom.window.document.querySelector('.zhino-assistant-page');
+    if (shell && dom.window.document.querySelectorAll('footer').length === 0) {
+      ok('assistant page — the storefront footer is gone (immersive shell)');
+    } else {
+      fail('assistant page — the storefront footer is still rendered');
+    }
+    const navLinks = Array.from(dom.window.document.querySelectorAll('a')).filter((a) => {
+      const href = a.getAttribute('href') ?? '';
+      return ['/products', '/recipes', '/about', '/contact', '/cart'].some((route) => href.endsWith(route));
+    });
+    if (navLinks.length === 0) ok('assistant page — no storefront menu links (خانه/محصولات/تماس…)');
+    else fail(`assistant page — storefront nav links rendered: ${navLinks.map((a) => a.getAttribute('href')).join(', ')}`);
+    const sidebarHeadings = Array.from(dom.window.document.querySelectorAll('h2')).map((h) => h.textContent ?? '');
+    if (!sidebarHeadings.some((title) => title.includes('توانایی'))) {
+      ok('assistant page — the capability sidebar is gone');
+    } else {
+      fail('assistant page — the capability sidebar is still rendered');
+    }
+    // the composer still owns the input + send button of the chat
+    if (
+      dom.window.document.querySelector('form.zhino-assistant-composer-form #zhino-assistant-input') &&
+      dom.window.document.querySelector('form.zhino-assistant-composer-form button[aria-label="ارسال پیام"]')
+    ) {
+      ok('assistant page — the ChatGPT-style composer holds the input and the send button');
+    } else {
+      fail('assistant page — the composer is missing its input or send button');
+    }
     // no popup any more
     if (dom.window.document.querySelectorAll('.zhino-assistant-panel').length === 0) {
       ok('assistant page — no popup panel exists (popup replaced by the page)');
@@ -1981,7 +2027,7 @@ async function openAssistantFromStore(dom, waitFor, text) {
   }
 }
 
-// ── 33. «بازگشت به سایت» → home, and the browser Back works ─
+// ── 33. «بازگشت به فروشگاه» → home, and the browser Back works ─
 {
   const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/products', {
     stub: { fetchImpl: OFFLINE_FETCH },
@@ -1992,20 +2038,20 @@ async function openAssistantFromStore(dom, waitFor, text) {
     const opened = await openAssistantFromStore(dom, waitFor, text);
     if (!opened) fail('assistant back — could not open /assistant');
 
-    clickButtonByContains(dom, 'بازگشت به سایت');
+    clickButtonByContains(dom, 'بازگشت به فروشگاه');
     const home = await waitFor(() => text().includes('واردکننده و پخش‌کننده پودر ژله و کاستر'));
-    if (home) ok('«بازگشت به سایت» — lands on the storefront home page');
-    else fail('«بازگشت به سایت» — home did not render: ' + text().slice(0, 160));
+    if (home) ok('«بازگشت به فروشگاه» — lands on the storefront home page');
+    else fail('«بازگشت به فروشگاه» — home did not render: ' + text().slice(0, 160));
     if (dom.window.location.pathname.replace(/\/+$/, '') === '/zheno-website') {
-      ok('«بازگشت به سایت» — the URL is the site root');
+      ok('«بازگشت به فروشگاه» — the URL is the site root');
     } else {
-      fail('«بازگشت به سایت» — unexpected URL: ' + dom.window.location.pathname);
+      fail('«بازگشت به فروشگاه» — unexpected URL: ' + dom.window.location.pathname);
     }
 
     // The browser's own Back button must walk back into the app (SPA),
     // not out of it — the route is a normal history entry.
     dom.window.history.back();
-    const returned = await waitFor(() => text().includes('توانایی‌های دستیار'));
+    const returned = await waitFor(() => text().includes(ASSISTANT_WELCOME_HEADING));
     if (returned) ok('browser Back — returns to the assistant page');
     else fail('browser Back — did not return to /assistant: ' + text().slice(0, 160));
     expectNoErrors('assistant back navigation', errors);
@@ -2776,11 +2822,11 @@ async function loadAssistantEdgeFunction(env, marker) {
       ),
   });
   try {
-    const ready = await waitFor(() => text().includes('توانایی‌های دستیار'));
+    const ready = await waitFor(() => text().includes(ASSISTANT_WELCOME_HEADING));
     if (!ready) fail('assistant routes — /assistant never rendered');
 
-    // «بازگشت به سایت» → home, then the existing routes still work
-    clickButtonByContains(dom, 'بازگشت به سایت');
+    // «بازگشت به فروشگاه» → home, then the existing routes still work
+    clickButtonByContains(dom, 'بازگشت به فروشگاه');
     await waitFor(() => text().includes('واردکننده و پخش‌کننده پودر ژله و کاستر'));
 
     const header = dom.window.document.querySelector('header');

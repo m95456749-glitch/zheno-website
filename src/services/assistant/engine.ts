@@ -44,7 +44,10 @@ import type {
   AssistantSuggestion,
 } from './types';
 
-/* ── کارت قابلیت‌ها (پنل کنار گفتگو + مستندسازی) ───────────── */
+/* ── کارت قابلیت‌ها (مستندسازی فنی؛ در فاز ۷ از UI صفحه حذف شده) ──
+   این فهرست همچنان مرجع «چه چیزی پشتیبانی می‌شود» است و در
+   ASSISTANT_AI.md هم آمده؛ صفحهٔ دستیار دیگر ستون معرفی قابلیت‌ها
+   ندارد تا محیط چت خلوت بماند. */
 
 export interface AssistantCapabilityCard {
   id: AssistantCapabilityId | 'ai';
