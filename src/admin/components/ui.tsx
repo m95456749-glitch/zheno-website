@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { orderStatusLabel, type OrderStatus } from '../../services/orderStore';
 import { useCatalogSync } from '../../services/catalogSync';
+import { useSiteDataSync } from '../../services/siteDataSync';
 import { cn } from '../../utils/cn';
 import { IconClose } from '../Icons';
 
@@ -19,19 +20,22 @@ import { IconClose } from '../Icons';
  */
 export function SyncStatusBadge() {
   const sync = useCatalogSync();
+  const siteSync = useSiteDataSync();
   const connected = sync.source === 'remote';
+  const hasError = sync.phase === 'error' || siteSync.phase === 'error';
+  const syncing = sync.phase === 'syncing' || siteSync.phase === 'syncing' || sync.phase === 'loading' || siteSync.phase === 'loading';
   const label = !connected
     ? 'حالت محلی (بدون دیتابیس)'
-    : sync.phase === 'error'
-      ? 'خطا در اتصال به دیتابیس'
-      : sync.phase === 'ready' && sync.pending === 0
+    : hasError
+      ? 'خطا در همگام‌سازی دیتابیس'
+      : !syncing && sync.phase === 'ready' && siteSync.phase === 'ready'
         ? 'متصل به دیتابیس'
         : 'در حال همگام‌سازی…';
   const tone = !connected
     ? 'adm-badge-ghost'
-    : sync.phase === 'error'
+    : hasError
       ? 'adm-badge-cancelled'
-      : sync.phase === 'ready' && sync.pending === 0
+      : !syncing && sync.phase === 'ready' && siteSync.phase === 'ready'
         ? 'adm-badge-ok'
         : 'adm-badge-warning';
   return (
@@ -46,14 +50,17 @@ export function SyncStatusBadge() {
 
 export function SyncErrorBanner() {
   const sync = useCatalogSync();
-  if (sync.source !== 'remote' || !sync.error) return null;
+  const siteSync = useSiteDataSync();
+  const errors = [sync.error, siteSync.error].filter((error): error is string => Boolean(error));
+  if (errors.length === 0) return null;
   return (
-    <p
-      role="alert"
-      className="mb-5 rounded-xl bg-red-50 px-4 py-3 text-[0.72rem] font-bold leading-6 text-red-700 ring-1 ring-red-200"
-    >
-      ذخیره در دیتابیس انجام نشد — {sync.error}
-    </p>
+    <div className="mb-5 space-y-2" role="alert">
+      {errors.map((error, index) => (
+        <p key={`${error}-${index}`} className="rounded-xl bg-red-50 px-4 py-3 text-[0.72rem] font-bold leading-6 text-red-700 ring-1 ring-red-200">
+          ذخیره یا همگام‌سازی در دیتابیس انجام نشد — {error}
+        </p>
+      ))}
+    </div>
   );
 }
 

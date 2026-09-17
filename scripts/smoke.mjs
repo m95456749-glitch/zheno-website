@@ -520,7 +520,7 @@ function expectNoErrors(label, errors) {
   const { text, errors } = await render('/zheno-website/admin/login');
   expectContains('admin login', text, 'ورود به پنل مدیریت');
   expectContains('admin login', text, 'احراز هویت واقعی');
-  expectNotContains('admin login', text, 'سفارش‌های در انتظار');
+  expectNotContains('admin login', text, 'سفارش‌های جدید');
   expectNoErrors('admin login', errors);
 }
 
@@ -623,7 +623,7 @@ function expectNoErrors(label, errors) {
     const textDeadline = Date.now() + 12000;
     let sawDashboard = false;
     while (Date.now() < textDeadline) {
-      if (text().includes('سفارش‌های در انتظار')) {
+      if (text().includes('سفارش‌های جدید')) {
         sawDashboard = true;
         break;
       }
@@ -643,6 +643,38 @@ function expectNoErrors(label, errors) {
       expectContains('admin dashboard', t, 'خروج');
       // demo-mode disclosure is visible
       expectContains('admin dashboard', t, 'نمایشی');
+      for (const label of ['سفارش‌های جدید', 'در حال آماده‌سازی', 'سفارش‌های ارسال‌شده', 'سفارش‌های تکمیل‌شده', 'مجموع فروش', 'موجودی کم یا رو به اتمام']) {
+        expectContains('admin dashboard cards', t, label);
+      }
+      for (const label of ['داشبورد', 'سفارش‌ها', 'محصولات', 'موجودی', 'قیمت‌ها', 'تصاویر محصولات', 'محتوای سایت', 'دستور تهیه', 'تنظیمات']) {
+        expectContains('admin circular launchers', t, label);
+      }
+      const launcherHrefs = Array.from(document.querySelectorAll('a')).map((link) => link.getAttribute('href') ?? '');
+      for (const href of ['/admin/products?view=prices', '/admin/products?view=images']) {
+        if (launcherHrefs.some((actual) => actual.endsWith(href))) ok(`admin circular launchers link to ${href}`);
+        else fail(`admin circular launchers missing ${href}`);
+      }
+      const customizeButton = Array.from(document.querySelectorAll('button')).find((button) =>
+        button.textContent?.includes('تنظیم کارت‌ها'),
+      );
+      if (customizeButton) {
+        customizeButton.click();
+        let controlsShown = false;
+        for (let attempt = 0; attempt < 30; attempt += 1) {
+          if (text().includes('کارت‌های آماری') && document.querySelectorAll('[role="switch"]').length >= 6) {
+            controlsShown = true;
+            break;
+          }
+          await sleep(50);
+        }
+        if (controlsShown) {
+          ok('admin dashboard — card visibility/order controls render');
+        } else {
+          fail('admin dashboard — card visibility/order controls did not render');
+        }
+      } else {
+        fail('admin dashboard — card customization button missing');
+      }
     } else {
       fail('demo login did not reach the dashboard (text: ' + text().slice(0, 220) + ')');
     }
@@ -911,7 +943,7 @@ function expectNoErrors(label, errors) {
     setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
     document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
 
-    const reachedDashboard = await waitFor(() => text().includes('سفارش‌های در انتظار'));
+    const reachedDashboard = await waitFor(() => text().includes('سفارش‌های جدید'));
     if (reachedDashboard) ok('connected admin — Supabase Auth login + is_admin() accepted');
     else fail('connected admin — login did not reach the dashboard: ' + text().slice(0, 200));
     if (calls.some((c) => c.url.includes('/auth/v1/token'))) ok('connected admin — credentials sent to /auth/v1/token');
@@ -1241,7 +1273,7 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
     if (refused) ok('authz — a non-admin account is refused with an explicit message');
     else fail('authz — non-admin login was not refused: ' + text().slice(0, 180));
 
-    if (!text().includes('سفارش‌های در انتظار') && !text().includes('افزودن محصول')) {
+    if (!text().includes('سفارش‌های جدید') && !text().includes('افزودن محصول')) {
       ok('authz — no admin screen was ever rendered for the non-admin account');
     } else {
       fail('authz — the admin panel opened for a non-admin account');
@@ -1682,7 +1714,7 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
       setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
       document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
 
-      const onDashboard = await waitFor(() => text().includes('سفارش‌های در انتظار'));
+      const onDashboard = await waitFor(() => text().includes('سفارش‌های جدید'));
       if (onDashboard) {
         ok('admin orders — the panel opened for the verified admin session');
         // the dashboard already proves the remote source:

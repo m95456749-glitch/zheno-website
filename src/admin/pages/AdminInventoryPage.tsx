@@ -7,7 +7,7 @@
 // ============================================================
 
 import { useEffect, useMemo, useState } from 'react';
-import { isDatabaseConnected, setVariantStock, useCatalog } from '../../services/catalog';
+import { adjustVariantStock, isDatabaseConnected, setVariantStock, useCatalog } from '../../services/catalog';
 import { getSettings } from '../../services/settings';
 import { getFlavor } from '../../data/products';
 import { SavedFlash } from '../components/ui';
@@ -22,37 +22,72 @@ function stockState(stock: number, lowThreshold: number) {
 function StockInput({
   value,
   onSave,
+  onAdjust,
   label,
 }: {
   value: number;
   onSave: (next: number) => void;
+  onAdjust: (delta: number) => void;
   label: string;
 }) {
   const [text, setText] = useState(String(value));
+  const [error, setError] = useState(false);
   useEffect(() => {
     setText(String(value));
+    setError(false);
   }, [value]);
 
   const commit = () => {
-    const n = Math.floor(Number(text));
-    if (Number.isFinite(n) && n >= 0 && n !== value) onSave(n);
-    else setText(String(value));
+    const n = Number(text);
+    if (!Number.isSafeInteger(n) || n < 0) {
+      setText(String(value));
+      setError(true);
+      return;
+    }
+    setError(false);
+    if (n !== value) onSave(n);
   };
 
   return (
-    <input
-      type="number"
-      min={0}
-      dir="ltr"
-      value={text}
-      onChange={(e) => setText(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-      }}
-      aria-label={label}
-      className="adm-input adm-stock-input"
-    />
+    <div className="adm-stock-control">
+      <button
+        type="button"
+        onClick={() => onAdjust(-1)}
+        disabled={value === 0}
+        aria-label={`${label}، کاهش یک عدد`}
+        className="adm-stock-step"
+      >
+        −
+      </button>
+      <input
+        type="number"
+        min={0}
+        max={Number.MAX_SAFE_INTEGER}
+        step={1}
+        dir="ltr"
+        value={text}
+        onChange={(e) => {
+          setText(e.target.value);
+          setError(false);
+        }}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+        }}
+        aria-label={label}
+        aria-invalid={error}
+        className={cn('adm-input adm-stock-input', error && 'err')}
+      />
+      {error && <p className="adm-error text-center">عدد صحیح نامعتبر</p>}
+      <button
+        type="button"
+        onClick={() => onAdjust(1)}
+        aria-label={`${label}، افزایش یک عدد`}
+        className="adm-stock-step"
+      >
+        +
+      </button>
+    </div>
   );
 }
 
@@ -68,11 +103,20 @@ export default function AdminInventoryPage() {
     [catalog],
   );
 
-  const save = (productId: string, variantId: string, stock: number) => {
-    setVariantStock(productId, variantId, stock);
+  const flashSaved = (productId: string, variantId: string) => {
     const key = `${productId}__${variantId}`;
     setSavedId(key);
     window.setTimeout(() => setSavedId((cur) => (cur === key ? null : cur)), 1800);
+  };
+
+  const save = (productId: string, variantId: string, stock: number) => {
+    setVariantStock(productId, variantId, stock);
+    flashSaved(productId, variantId);
+  };
+
+  const adjust = (productId: string, variantId: string, delta: number) => {
+    adjustVariantStock(productId, variantId, delta);
+    flashSaved(productId, variantId);
   };
 
   return (
@@ -119,6 +163,7 @@ export default function AdminInventoryPage() {
                     <StockInput
                       value={variant.stock}
                       onSave={(n) => save(product.id, variant.id, n)}
+                      onAdjust={(delta) => adjust(product.id, variant.id, delta)}
                       label={`موجودی ${product.shortName}`}
                     />
                   </td>
@@ -162,6 +207,7 @@ export default function AdminInventoryPage() {
                 <StockInput
                   value={variant.stock}
                   onSave={(n) => save(product.id, variant.id, n)}
+                  onAdjust={(delta) => adjust(product.id, variant.id, delta)}
                   label={`موجودی ${product.shortName}`}
                 />
               </div>
@@ -171,8 +217,8 @@ export default function AdminInventoryPage() {
       </ul>
 
       <p className="mt-6 max-w-2xl text-[0.7rem] leading-6 text-mocha">
-        عدد موجودی هر ردیف را تغییر دهید و بیرون از کادر کلیک کنید تا ذخیره شود. اگر موجودی از
-        آستانه هشدار (تنظیمات) کمتر شود، وضعیت «کم‌موجود» نمایش داده می‌شود.
+        برای افزایش یا کاهش یک عدد از دکمه‌های + و − استفاده کنید؛ برای مقدار دقیق عدد را وارد کنید و
+        بیرون از کادر کلیک کنید تا ذخیره شود. اگر موجودی از آستانه هشدار (تنظیمات) کمتر شود، وضعیت «کم‌موجود» نمایش داده می‌شود.
         {connected
           ? ' ذخیره از طریق تابع اتمی set_inventory_stock روی دیتابیس انجام می‌شود و فقط برای حساب مدیر مجاز است.'
           : ' (در این نسخه نمایشی ذخیره‌سازی در همین مرورگر انجام می‌شود.)'}

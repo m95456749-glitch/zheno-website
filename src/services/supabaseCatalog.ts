@@ -250,6 +250,21 @@ export async function pushVariantStock(variantId: string, stock: number): Promis
   if (error) throw new CatalogRemoteError('ایجاد ردیف موجودی ناموفق بود', describe(error));
 }
 
+/** Adjust stock atomically; the database rejects non-admin and negative results. */
+export async function pushVariantStockAdjustment(variantId: string, delta: number): Promise<void> {
+  const supabase = getSupabase();
+  if (!supabase) throw new CatalogRemoteError('Supabase is not configured', 'no client');
+  if (!Number.isSafeInteger(delta) || delta === 0) {
+    throw new CatalogRemoteError('تغییر موجودی نامعتبر است', `delta=${delta}`);
+  }
+
+  const { error } = await supabase.rpc('adjust_inventory', {
+    p_variant_id: variantId,
+    p_delta: delta,
+  });
+  if (error) throw new CatalogRemoteError('تغییر موجودی ناموفق بود', describe(error));
+}
+
 /** Read the `is_admin()` helper the RLS policies use (defence in depth). */
 export async function fetchIsAdmin(): Promise<boolean> {
   const supabase = getSupabase();

@@ -5,10 +5,19 @@
 // the exact current strings, so the storefront renders
 // identically until an admin changes a value.
 //
-// Future backend: saveSiteContent/resetSettings become API calls.
+// Supabase is the primary connected source; localStorage remains the
+// deliberate offline/demo fallback.
 // ============================================================
 
-import { createLocalStore } from './localStore';
+import { useMemo } from 'react';
+import { createLocalStore, useLocalStore } from './localStore';
+import {
+  getRemoteSiteData,
+  pushRemoteContent,
+  runRemoteSiteWrite,
+  useRemoteSiteData,
+} from './siteDataSync';
+import { getSupabase } from './supabaseClient';
 
 export interface SiteContent {
   /** About page — story lead paragraph */
@@ -47,12 +56,18 @@ function sanitize(raw: unknown): ContentOverlay | null {
 
 const store = createLocalStore<ContentOverlay>('zhino_admin_content_v1', {}, sanitize);
 
-/** Current content (defaults + any admin override). Cheap — safe in render. */
+/** Current content (database snapshot when connected, otherwise local overlay). */
 export function getSiteContent(): SiteContent {
-  return { ...DEFAULT_SITE_CONTENT, ...store.get() };
+  const remote = getRemoteSiteData();
+  return remote ? { ...DEFAULT_SITE_CONTENT, ...remote.content } : { ...DEFAULT_SITE_CONTENT, ...store.get() };
 }
 
 export function saveSiteContent(next: SiteContent): void {
+  if (getSupabase()) {
+    runRemoteSiteWrite('ذخیره محتوای سایت', () => pushRemoteContent(next));
+    return;
+  }
+
   const overlay: ContentOverlay = {};
   for (const key of Object.keys(DEFAULT_SITE_CONTENT) as (keyof SiteContent)[]) {
     if (next[key] !== DEFAULT_SITE_CONTENT[key]) overlay[key] = next[key];
@@ -60,7 +75,21 @@ export function saveSiteContent(next: SiteContent): void {
   store.set(overlay);
 }
 
-/** Discard every content change (back to the original strings). */
+/** Discard changes without deleting database rows. */
 export function resetSiteContent(): void {
+  if (getSupabase()) {
+    runRemoteSiteWrite('بازنشانی محتوای سایت', () => pushRemoteContent(DEFAULT_SITE_CONTENT));
+    return;
+  }
   store.reset();
+}
+
+/** React binding used by storefront pages that must see a remote save immediately. */
+export function useSiteContent(): SiteContent {
+  const local = useLocalStore(store);
+  const remote = useRemoteSiteData();
+  return useMemo(
+    () => (remote ? { ...DEFAULT_SITE_CONTENT, ...remote.content } : { ...DEFAULT_SITE_CONTENT, ...local }),
+    [local, remote],
+  );
 }

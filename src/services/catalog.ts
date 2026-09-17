@@ -49,6 +49,7 @@ import {
   pushProductRow,
   pushVariantRow,
   pushVariantStock,
+  pushVariantStockAdjustment,
 } from './supabaseCatalog';
 
 /** admin flags per product */
@@ -309,7 +310,7 @@ export function setProductActive(id: string, active: boolean): void {
  *  same data as the storefront, no second inventory system). */
 export function setVariantStock(productId: string, variantId: string, stock: number): void {
   const product = getProductById(productId);
-  if (!product || stock < 0) return;
+  if (!product || !Number.isSafeInteger(stock) || stock < 0) return;
 
   if (isDatabaseConnected()) {
     const next: Product = {
@@ -333,6 +334,30 @@ export function setVariantStock(productId: string, variantId: string, stock: num
     variants: product.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
   };
   upsertProduct(next, getCatalogMeta(productId).active);
+}
+
+/** Increase or decrease one stock row with the database's atomic RPC. */
+export function adjustVariantStock(productId: string, variantId: string, delta: number): void {
+  const product = getProductById(productId);
+  if (!product || !Number.isSafeInteger(delta) || delta === 0) return;
+  const variant = product.variants.find((item) => item.id === variantId);
+  if (!variant) return;
+  const nextStock = variant.stock + delta;
+  if (!Number.isSafeInteger(nextStock) || nextStock < 0) return;
+
+  if (isDatabaseConnected()) {
+    const next: Product = {
+      ...product,
+      variants: product.variants.map((item) => (item.id === variantId ? { ...item, stock: nextStock } : item)),
+    };
+    updateRemoteCatalog((current) =>
+      makeRemoteCatalog(current.products.map((item) => (item.id === productId ? next : item)), current.active),
+    );
+    runRemoteWrite('تغییر موجودی', () => pushVariantStockAdjustment(variantId, delta));
+    return;
+  }
+
+  setVariantStock(productId, variantId, nextStock);
 }
 
 /**

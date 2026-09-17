@@ -9,6 +9,7 @@
 // ============================================================
 
 import { useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { FLAVORS, getFlavor } from '../../data/products';
 import type { FlavorId, Product, ProductCategory } from '../../types';
 import {
@@ -62,6 +63,8 @@ export default function AdminProductsPage() {
   // true when the panel writes to the real PostgreSQL database
   const connected = isDatabaseConnected();
 
+  const [searchParams, setSearchParams] = useSearchParams();
+  const focus = searchParams.get('view') === 'prices' || searchParams.get('view') === 'images' ? searchParams.get('view') : null;
   const [filter, setFilter] = useState<CategoryFilter>('all');
   const [query, setQuery] = useState('');
   const [creating, setCreating] = useState(false);
@@ -145,6 +148,16 @@ export default function AdminProductsPage() {
           افزودن محصول
         </button>
       </div>
+
+      {focus && (
+        <div className="adm-products-focus mb-5" role="status">
+          <span>
+            تمرکز فعلی: <strong>{focus === 'prices' ? 'قیمت‌ها' : 'تصاویر محصولات'}</strong>
+            <small>{focus === 'prices' ? 'قیمت هر محصول در ستون قیمت و فرم ویرایش قابل تغییر است.' : 'پیش‌نمایش تصویر در فهرست و مسیر تصویر در فرم ویرایش قابل مدیریت است.'}</small>
+          </span>
+          <button type="button" onClick={() => setSearchParams({})} className="adm-quiet-link">نمایش همه</button>
+        </div>
+      )}
 
       <SavedFlash show={saved} />
 
@@ -386,11 +399,16 @@ function ProductFormModal({
     const price = Number(form.price);
     const weight = Number(form.weightGrams);
     const stock = Number(form.stock);
+    const imageUrl = form.imageUrl.trim().replace(/^\//, '');
     if (form.name.trim().length < 3) next.name = 'نام محصول را کامل وارد کنید';
     if (!form.shortName.trim()) next.shortName = 'نام کوتاه را وارد کنید';
-    if (!Number.isInteger(price) || price <= 0) next.price = 'قیمت صحیح وارد کنید (تومان)';
-    if (!Number.isInteger(weight) || weight <= 0) next.weightGrams = 'وزن صحیح وارد کنید (گرم)';
-    if (!Number.isInteger(stock) || stock < 0) next.stock = 'موجودی صحیح وارد کنید';
+    if (!Number.isSafeInteger(price) || price <= 0) next.price = 'قیمت صحیح و مثبت وارد کنید (تومان)';
+    if (!Number.isSafeInteger(weight) || weight <= 0) next.weightGrams = 'وزن صحیح و مثبت وارد کنید (گرم)';
+    if (!Number.isSafeInteger(stock) || stock < 0) next.stock = 'موجودی صحیحِ صفر یا بیشتر وارد کنید';
+    if (imageUrl && imageUrl.length > 2048) next.imageUrl = 'مسیر تصویر بیش از حد طولانی است';
+    if (imageUrl && !imageUrl.startsWith('images/') && !/^https:\/\//i.test(imageUrl)) {
+      next.imageUrl = 'فقط مسیر images/ یا نشانی https:// مجاز است';
+    }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
 
@@ -407,7 +425,7 @@ function ProductFormModal({
       name: form.name.trim(),
       shortName: form.shortName.trim(),
       categoryLabel: form.category === 'jelly' ? 'پودر ژله' : 'پودر کاستر',
-      imageUrl: form.imageUrl.trim() ? form.imageUrl.trim().replace(/^\//, '') : undefined,
+      imageUrl: imageUrl || undefined,
       featured: product?.featured,
       special: product?.special,
       variants: [
@@ -482,6 +500,8 @@ function ProductFormModal({
             <input
               type="number"
               min={1}
+              max={Number.MAX_SAFE_INTEGER}
+              step={1}
               dir="ltr"
               className={cn('adm-input', errors.weightGrams && 'err')}
               value={form.weightGrams}
@@ -492,6 +512,7 @@ function ProductFormModal({
             <input
               type="number"
               min={1000}
+              max={Number.MAX_SAFE_INTEGER}
               step={1000}
               dir="ltr"
               className={cn('adm-input', errors.price && 'err')}
@@ -503,6 +524,8 @@ function ProductFormModal({
             <input
               type="number"
               min={0}
+              max={Number.MAX_SAFE_INTEGER}
+              step={1}
               dir="ltr"
               className={cn('adm-input', errors.stock && 'err')}
               value={form.stock}
@@ -521,10 +544,14 @@ function ProductFormModal({
               placeholder="ZJ-POM-250"
             />
           </Field>
-          <Field label="تصویر محصول" hint="مسیر فایل در پوشه public/ (مثلاً images/products/new.jpg).">
+          <Field
+            label="تصویر محصول"
+            hint="مسیر images/ یا نشانی https://؛ آپلود فایل در این فاز عمداً اضافه نشده است."
+            error={errors.imageUrl}
+          >
             <input
               dir="ltr"
-              className="adm-input"
+              className={cn('adm-input', errors.imageUrl && 'err')}
               value={form.imageUrl}
               onChange={(e) => set('imageUrl', e.target.value)}
               placeholder="images/products/new.jpg"
