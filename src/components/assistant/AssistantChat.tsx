@@ -116,9 +116,11 @@ export default function AssistantChat({ chat, className }: Props) {
     status: voiceStatus,
     enabled: voiceOn,
     speaking: voiceReading,
+    paused: voicePaused,
     setEnabled,
     speak,
     stop,
+    resume,
   } = useAssistantSpeech();
   /** چیپ‌ها بعد از شروع گفتگو جمع می‌شوند؛ کاربر هر وقت خواست باز می‌کند */
   const [ideasOpen, setIdeasOpen] = useState(false);
@@ -205,6 +207,18 @@ export default function AssistantChat({ chat, className }: Props) {
       setVoiceNotice('صدای فارسی روی این دستگاه نصب نیست؛ متن پاسخ را می‌خوانید.');
       return;
     }
+    if (!voiceOn && voiceStatus === 'loading') {
+      // روی موبایل Chrome فهرست صدا با اولین لمس پر می‌شود؛ یک تلاش
+      // همگام برای بیدار کردن آن، سپس روشن کردن
+      setVoiceNotice('در حال آماده‌سازی صدا… لطفاً دوباره بزنید.');
+      // تلاش برای بارگذاری با یک فراخوان خالی (user gesture)
+      try {
+        speak(' ');
+        stop();
+      } catch {
+        /* بی‌اهمیت */
+      }
+    }
     // تازه روشن‌کردن صدا نباید پاسخ قبلی را بلند بخواند: همان را «خوانده‌شده»
     // علامت می‌زنیم و فقط پاسخ‌های بعدی صدا پیدا می‌کنند
     if (!voiceOn) {
@@ -221,6 +235,12 @@ export default function AssistantChat({ chat, className }: Props) {
       return;
     }
     if (readingId === id && voiceReading) {
+      if (voicePaused) {
+        resume();
+        return;
+      }
+      // اگر در حال پخش همان پیام است → توقف، اگر در مکث است → ادامه
+      // برای سادگی: کلیک دوباره = توقف (رفتار قبلی)
       stop();
       setReadingId(null);
       return;
@@ -229,8 +249,18 @@ export default function AssistantChat({ chat, className }: Props) {
       setVoiceNotice('صدای فارسی روی این دستگاه نصب نیست؛ متن پاسخ را می‌خوانید.');
       return;
     }
+    if (voiceStatus === 'loading') {
+      // روی موبایل، اولین لمس فهرست صدا را می‌آورد؛ اگر هنوز خالی بود
+      // یک راهنمای کوتاه نشان بده و باز هم تلاش کن
+      setVoiceNotice('در حال بارگذاری صداها… یک لحظه دیگر دوباره امتحان کنید.');
+    }
+    // اگر صدای دیگری در حال پخش است، آن را قطع کن
+    if (voiceReading) {
+      stop();
+    }
     spokenId.current = id;
     setReadingId(id);
+    // اجرای همگام برای حفظ user activation در موبایل
     speak(text);
   };
 

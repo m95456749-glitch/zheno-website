@@ -1,70 +1,52 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۸) — خواندن پاسخ‌ها با صدای مرورگر
+// ZHINO — «دستیار ژینو» (فاز ۸ — بازنویسی موبایل) — خواندن پاسخ‌ها
 //
 // چه کاری انجام می‌دهد؟
-//   متن پاسخ دستیار را با قابلیت Text-to-Speech خودِ مرورگر
-//   (Web Speech API) می‌خواند. همه‌چیز داخل مرورگر می‌ماند:
-//   هیچ درخواست شبکه‌ای زده نمی‌شود، هیچ سرویس صوتی خارجی صدا
-//   نمی‌شود و هیچ کلیدی لازم نیست.
+//   متن پاسخ دستیار را با Text-to-Speech خودِ مرورگر می‌خواند.
+//   همه‌چیز داخل مرورگر می‌ماند: بدون درخواست شبکه، بدون سرویس
+//   خارجی، بدون کلید.
 //
 // حریم خصوصی:
 //   فقط «متن پاسخ دستیار» خوانده می‌شود — هرگز سؤال کاربر، نام،
-//   نشانی یا اطلاعات سبد خرید. پاسخ دستیار هم چیزی جز همان متنی
-//   نیست که روی صفحه نوشته شده است.
+//   نشانی یا سبد خرید.
 //
-// مدیریت خطا (موبایل و مرورگرهای مختلف):
-//   • speechSynthesis وجود ندارد   → `status = 'unavailable'` و چت مثل
-//     قبل کار می‌کند؛ فقط متن نمایش داده می‌شود.
-//   • هنوز فهرست صدا نرسیده        → `status = 'loading'` (در Chrome و
-//     موبایل فهرست صدا کمی بعد می‌رسد؛ پس عجله می‌کنیم نه رد).
-//   • صدای فارسی نصب نیست           → `status = 'none'`؛ خواندن شروع
-//     نمی‌شود و یک راهنمای کوتاه به کاربر گفته می‌شود.
-//   • صدای فارسی نیست ولی عربی هست  → `status = 'arabic'`
-//     (خط فارسی را تا حد خوبی می‌خواند) — با همان راهنمای کوتاه.
-//   • هر خطای دیگر (Safari/iOS محدودیت ژست کاربر، Firefox بدون voice،
-//     AbortError هنگام cancel و …) → فقط خواندن خاموش می‌شود؛
-//     هیچ‌وقت گفتگو، ارسال پیام یا Fallback را نمی‌شکند.
-//
-// آزارنده نیست:
-//   به‌صورت پیش‌فرض خاموش است (تا کاربر ناخواسته صدایی نشنود) و
-//   انتخابش در همین مرورگر ذخیره می‌شود. با شروع گفتگوی تازه یا
-//   ترک صفحه، خواندن بلافاصله متوقف می‌شود.
+// سازگاری موبایل (Chrome Android / Desktop):
+//   • فهرست صداها در Chrome ناهمگام می‌رسد؛ با voiceschanged و
+//     polling کوتاه، صداها به‌محض آماده‌شدن برداشته می‌شوند.
+//   • اجرای صدا فقط با لمس مستقیم کاربر انجام می‌شود؛ اولین تکه
+//     همگام در همان کلیک خوانده می‌شود تا سیاست autoplay موبایل
+//     آن را مسدود نکند.
+//   • پس از cancel، resume صدا می‌شود و صف تکه‌ها زنجیروار از
+//     طریق onend پیش می‌رود (حل مشکل قطع‌شدن در Safari/Chrome
+//     هنگام خواندن چند utterance پشت‌سرهم).
+//   • اگر صدای فارسی نصب نبود، پیام کوتاه و واضح نمایش داده
+//     می‌شود و گفتگو هرگز نمی‌شکند.
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-/** کلید روشن/خاموش بودن خواندن صدا در همین مرورگر */
 const VOICE_PREF_KEY = 'zhino_assistant_voice_v1';
 
-/** وضعیت صدای قابل استفاده در این مرورگر/دستگاه */
 export type AssistantVoiceStatus =
-  /** Web Speech API وجود ندارد (مرورگرهای قدیمی، Node/jsdom، …) */
   | 'unavailable'
-  /** هنوز فهرست صداها نرسیده (در Chrome کمی طول می‌کشد) — منتظر می‌مانیم */
   | 'loading'
-  /** speechSynthesis هست ولی هیچ صدای سازگاری نصب نیست */
   | 'none'
-  /** صدای عربی — خط فارسی را تا حد خوبی می‌خواند */
   | 'arabic'
-  /** صدای فارسی پیدا شد */
   | 'persian';
 
 export interface AssistantSpeech {
-  /** آیا اصلاً می‌توان چیزی خواند؟ */
   available: boolean;
   status: AssistantVoiceStatus;
-  /** خواندن خودکار پاسخ‌ها روشن است؟ */
   enabled: boolean;
-  /** همین حالا در حال خواندن است؟ */
   speaking: boolean;
+  paused: boolean;
   setEnabled: (next: boolean) => void;
-  /** خواندن یک متن (دکمهٔ «خواندن» هر پاسخ) */
   speak: (text: string) => void;
-  /** توقف فوری */
   stop: () => void;
+  pause: () => void;
+  resume: () => void;
 }
 
-/** دسترسی امن به speechSynthesis — بدون خطا در مرورگرهای بدون پشتیبانی */
 function getSynth(): SpeechSynthesis | null {
   try {
     if (typeof window === 'undefined') return null;
@@ -74,7 +56,6 @@ function getSynth(): SpeechSynthesis | null {
   }
 }
 
-/** آیا این مرورگر می‌تواند اصلاً حرف بزند؟ */
 function canSynthesize(): boolean {
   return (
     getSynth() !== null &&
@@ -87,7 +68,6 @@ function readPref(): boolean {
   try {
     return window.localStorage.getItem(VOICE_PREF_KEY) === '1';
   } catch {
-    // بدون دسترسی به حافظه (حالت خصوصی): پیش‌فرض خاموش
     return false;
   }
 }
@@ -96,26 +76,50 @@ function writePref(on: boolean): void {
   try {
     window.localStorage.setItem(VOICE_PREF_KEY, on ? '1' : '0');
   } catch {
-    /* بی‌اهمیت — فقط ترجیح ذخیره نمی‌شود */
+    /* ذخیره نشد — مهم نیست */
   }
 }
 
 function isPersian(voice: SpeechSynthesisVoice): boolean {
-  return /^fa/i.test(voice.lang ?? '') || /persian|فارسی/i.test(voice.name ?? '');
+  const lang = (voice.lang ?? '').toLowerCase();
+  const name = (voice.name ?? '').toLowerCase();
+  return (
+    lang.startsWith('fa') ||
+    lang === 'fa-ir' ||
+    name.includes('persian') ||
+    name.includes('farsi') ||
+    name.includes('فارسی')
+  );
 }
 
 function isArabic(voice: SpeechSynthesisVoice): boolean {
-  return /^ar/i.test(voice.lang ?? '');
+  const lang = (voice.lang ?? '').toLowerCase();
+  return lang.startsWith('ar');
 }
 
-/**
- * متن گفتگو را برای خواندن آماده می‌کند:
- *   • نشانه‌های فهرست (•) به ویرگول و خط‌جدید به نقطه تبدیل می‌شوند،
- *   • متن بلند به تکه‌های کوتاه تقسیم می‌شود (Safari و Chrome با جملهٔ
- *     طولانی، خواندن را وسط کار قطع می‌کنند).
- * هیچ Lookbehinds در Regular Expressionها استفاده نشده: باندل سایت برای
- * مرورگرهای ~۲۰۱۹ (target es2019) ساخته می‌شود.
- */
+function findBestVoice(
+  voices: SpeechSynthesisVoice[],
+): SpeechSynthesisVoice | null {
+  if (voices.length === 0) return null;
+  // اولویت ۱: fa-IR دقیق
+  const exact = voices.find(
+    (v) => (v.lang ?? '').toLowerCase() === 'fa-ir',
+  );
+  if (exact) return exact;
+  // اولویت ۲: هر fa-*
+  const fa = voices.find((v) =>
+    (v.lang ?? '').toLowerCase().startsWith('fa'),
+  );
+  if (fa) return fa;
+  // اولویت ۳: نام فارسی
+  const byName = voices.find((v) => isPersian(v));
+  if (byName) return byName;
+  // اولویت ۴: عربی (خط فارسی را تا حدی می‌خواند)
+  const ar = voices.find((v) => isArabic(v));
+  if (ar) return ar;
+  return null;
+}
+
 function splitForSpeech(text: string, maxChunk = 180): string[] {
   const flat = text
     .replace(/[•▪◦]+/g, '، ')
@@ -124,7 +128,6 @@ function splitForSpeech(text: string, maxChunk = 180): string[] {
     .trim();
   if (flat.length === 0) return [];
 
-  // ۱) جمله‌بندی با نقطه/علامت پایان (بدون lookbehind)
   const sentences: string[] = [];
   let buffer = '';
   for (const char of flat) {
@@ -137,7 +140,6 @@ function splitForSpeech(text: string, maxChunk = 180): string[] {
   }
   if (buffer.trim().length > 0) sentences.push(buffer.trim());
 
-  // ۲) جمله‌های بلندتر از سقف، اول با ویرگول و بعد با فاصله می‌شکنند
   const chunks: string[] = [];
   let current = '';
   for (const piece of sentences.flatMap((sentence) =>
@@ -155,7 +157,6 @@ function splitForSpeech(text: string, maxChunk = 180): string[] {
   return chunks;
 }
 
-/** شکستن یک جملهٔ خیلی بلند: اول روی ویرگول، بعد روی فاصله */
 function breakLong(sentence: string, maxChunk: number): string[] {
   const parts = sentence
     .split(/[،,]\s*/)
@@ -196,152 +197,359 @@ function cutOnSpaces(part: string, maxChunk: number): string[] {
 }
 
 export function useAssistantSpeech(): AssistantSpeech {
-  const [available, setAvailable] = useState(canSynthesize);
-  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [enabled, setEnabledState] = useState<boolean>(() => (canSynthesize() ? readPref() : false));
+  const [available, setAvailable] = useState<boolean>(() => canSynthesize());
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => {
+    const synth = getSynth();
+    if (!synth) return [];
+    try {
+      return synth.getVoices() ?? [];
+    } catch {
+      return [];
+    }
+  });
+  const [enabled, setEnabledState] = useState<boolean>(() =>
+    canSynthesize() ? readPref() : false,
+  );
   const [speaking, setSpeaking] = useState(false);
-  /** شمارندهٔ صف: تا آخرین تکه تمام نشده، «در حال خواندن» می‌ماند */
-  const queue = useRef(0);
-  const utterRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const [paused, setPaused] = useState(false);
 
-  // فهرست صداها در بسیاری از مرورگرها ناهمگام پر می‌شود
+  const chunksRef = useRef<string[]>([]);
+  const indexRef = useRef(0);
+  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+
+  const refreshVoices = useCallback(() => {
+    const synth = getSynth();
+    if (!synth) {
+      setAvailable(false);
+      return [];
+    }
+    try {
+      const list = synth.getVoices() ?? [];
+      if (list.length > 0) {
+        setVoices(list);
+      }
+      return list;
+    } catch {
+      return [];
+    }
+  }, []);
+
+  // بارگذاری صداها: voiceschanged + polling برای Chrome Android
   useEffect(() => {
     const synth = getSynth();
     if (!synth) {
       setAvailable(false);
       return;
     }
-    const read = () => {
-      try {
-        setVoices(synth.getVoices() ?? []);
-      } catch {
-        setVoices([]);
+    setAvailable(canSynthesize());
+
+    // تلاش اول
+    refreshVoices();
+
+    let pollCount = 0;
+    const maxPolls = 20;
+    const poll = window.setInterval(() => {
+      pollCount += 1;
+      const list = refreshVoices();
+      if (list.length > 0 || pollCount >= maxPolls) {
+        window.clearInterval(poll);
       }
+    }, 300);
+
+    const onVoicesChanged = () => {
+      refreshVoices();
     };
-    read();
-    const changed = () => read();
-    if (typeof synth.addEventListener === 'function') {
-      synth.addEventListener('voiceschanged', changed);
-      return () => {
+
+    try {
+      if (typeof synth.addEventListener === 'function') {
+        synth.addEventListener('voiceschanged', onVoicesChanged);
+      }
+    } catch {
+      /* قدیمی */
+    }
+
+    const prev = synth.onvoiceschanged;
+    try {
+      synth.onvoiceschanged = (ev) => {
+        onVoicesChanged();
         try {
-          synth.removeEventListener('voiceschanged', changed);
+          prev?.call(synth, ev);
         } catch {
           /* بی‌اهمیت */
         }
       };
+    } catch {
+      /* بی‌اهمیت */
     }
-    // مرورگرهای قدیمی‌تر: فقط یک رویداد onvoiceschanged
-    const previous = synth.onvoiceschanged;
-    synth.onvoiceschanged = (event) => {
-      changed();
-      previous?.call(synth, event);
-    };
+
     return () => {
-      synth.onvoiceschanged = previous;
+      window.clearInterval(poll);
+      try {
+        if (typeof synth.removeEventListener === 'function') {
+          synth.removeEventListener('voiceschanged', onVoicesChanged);
+        }
+      } catch {
+        /* بی‌اهمیت */
+      }
+      try {
+        if (synth.onvoiceschanged === onVoicesChanged) {
+          synth.onvoiceschanged = prev;
+        } else if (prev) {
+          synth.onvoiceschanged = prev;
+        }
+      } catch {
+        /* بی‌اهمیت */
+      }
     };
-  }, []);
+  }, [refreshVoices]);
 
   const status: AssistantVoiceStatus = (() => {
     if (!available) return 'unavailable';
     if (voices.some(isPersian)) return 'persian';
     if (voices.some(isArabic)) return 'arabic';
-    // صدایی فهرست نشده: در iOS/Android/Chrome فهرست صداها معمولاً کمی بعد
-    // می‌رسد، پس «در حال بارگذاری» حساب می‌شود — نه «صدا نداریم». اگر بعداً
-    // هم چیزی نیامد، همان loading می‌ماند و خواندن فقط بی‌صدا رد می‌شود.
     if (voices.length === 0) return 'loading';
     return 'none';
   })();
 
-  const voiceFor = useCallback((): SpeechSynthesisVoice | null => {
-    if (voices.some(isPersian)) return voices.find(isPersian) ?? null;
-    if (voices.some(isArabic)) return voices.find(isArabic) ?? null;
-    return null;
-  }, [voices]);
+  const cancelInternal = useCallback(() => {
+    const synth = getSynth();
+    if (!synth) {
+      chunksRef.current = [];
+      indexRef.current = 0;
+      setSpeaking(false);
+      setPaused(false);
+      return;
+    }
+    try {
+      // اگر در حال مکث بود، اول resume تا cancel عمل کند
+      if (synth.paused) {
+        try {
+          synth.resume();
+        } catch {
+          /* بی‌اهمیت */
+        }
+      }
+      synth.cancel();
+    } catch {
+      /* برخی مرورگرها هنگام cancel خطا می‌دهند */
+    }
+    chunksRef.current = [];
+    indexRef.current = 0;
+    utteranceRef.current = null;
+    setSpeaking(false);
+    setPaused(false);
+  }, []);
 
-  const cancel = useCallback(() => {
+  const stop = useCallback(() => {
+    cancelInternal();
+  }, [cancelInternal]);
+
+  const pause = useCallback(() => {
     const synth = getSynth();
     if (!synth) return;
     try {
-      synth.cancel();
+      if (synth.speaking && !synth.paused) {
+        synth.pause();
+        setPaused(true);
+      }
     } catch {
-      /* برخی مرورگرها هنگام cancel بی‌دلیل throw می‌کنند */
+      /* بی‌اهمیت */
     }
-    queue.current = 0;
-    setSpeaking(false);
   }, []);
 
-  const stop = useCallback(() => cancel(), [cancel]);
+  const resume = useCallback(() => {
+    const synth = getSynth();
+    if (!synth) return;
+    try {
+      if (synth.paused) {
+        synth.resume();
+        setPaused(false);
+        setSpeaking(true);
+      }
+    } catch {
+      /* بی‌اهمیت */
+    }
+  }, []);
 
   const speak = useCallback(
     (text: string) => {
       const synth = getSynth();
-      if (!synth || typeof window === 'undefined' || !('SpeechSynthesisUtterance' in window)) return;
-      // صدای سازگار نصب نیست: متن روی صفحه می‌ماند و گفتگو سالم است
+      if (!synth) return;
+      if (
+        typeof window === 'undefined' ||
+        !('SpeechSynthesisUtterance' in window)
+      )
+        return;
       if (status === 'none') return;
+      if (status === 'unavailable') return;
+
+      // روی لمس کاربر، دوباره فهرست صدا را بخوان (Chrome Android
+      // فهرست را فقط بعد از اولین تعامل پر می‌کند)
+      let currentVoices = voices;
+      try {
+        const fresh = synth.getVoices() ?? [];
+        if (fresh.length > 0) {
+          currentVoices = fresh;
+          if (fresh.length !== voices.length) {
+            setVoices(fresh);
+          }
+        }
+      } catch {
+        /* بی‌اهمیت */
+      }
 
       const chunks = splitForSpeech(text);
       if (chunks.length === 0) return;
 
-      // هر خواندن قبلی لغو می‌شود تا صداها روی نیفتند
+      // لغو قبلی — همگام، تا صف تمیز شود
       try {
+        if (synth.paused) {
+          synth.resume();
+        }
         synth.cancel();
       } catch {
         /* بی‌اهمیت */
       }
 
-      const voice = voiceFor();
-      queue.current = chunks.length;
+      chunksRef.current = chunks;
+      indexRef.current = 0;
       setSpeaking(true);
+      setPaused(false);
 
-      for (const chunk of chunks) {
-        try {
-          const utterance = new SpeechSynthesisUtterance(chunk);
-          if (voice) utterance.voice = voice;
-          // همیشه فارسی: اگر صدای فارسی نبود، خودِ مرورگر تصمیم می‌گیرد
-          utterance.lang = voice?.lang || 'fa-IR';
-          utterance.rate = 0.98;
-          utterance.pitch = 1;
-          utterance.onend = () => {
-            queue.current = Math.max(0, queue.current - 1);
-            if (queue.current === 0) setSpeaking(false);
-          };
-          utterance.onerror = () => {
-            // هر خطا (شامل interrupt هنگام cancel) فقط یعنی «بس کن»
-            queue.current = 0;
-            setSpeaking(false);
-          };
-          utterRef.current = utterance;
-          synth.speak(utterance);
-        } catch {
-          queue.current = 0;
+      const voice = findBestVoice(currentVoices);
+
+      const speakIndex = (idx: number) => {
+        const synthNow = getSynth();
+        if (!synthNow) {
           setSpeaking(false);
+          setPaused(false);
           return;
         }
-      }
+        if (idx >= chunksRef.current.length) {
+          setSpeaking(false);
+          setPaused(false);
+          indexRef.current = 0;
+          chunksRef.current = [];
+          utteranceRef.current = null;
+          return;
+        }
+        indexRef.current = idx;
+        const chunk = chunksRef.current[idx];
+        try {
+          const utterance = new SpeechSynthesisUtterance(chunk);
+          if (voice) {
+            utterance.voice = voice;
+          }
+          utterance.lang = voice?.lang || 'fa-IR';
+          utterance.rate = 0.95;
+          utterance.pitch = 1;
+          utterance.volume = 1;
+
+          utterance.onend = () => {
+            // تکه بعدی زنجیروار
+            speakIndex(idx + 1);
+          };
+          utterance.onerror = (ev: SpeechSynthesisErrorEvent) => {
+            const err = (ev as unknown as { error?: string })?.error ?? '';
+            // canceled / interrupted هنگام stop طبیعی است
+            if (err === 'canceled' || err === 'interrupted') {
+              return;
+            }
+            // هر خطای دیگر → توقف کامل، بدون شکستن چت
+            chunksRef.current = [];
+            indexRef.current = 0;
+            utteranceRef.current = null;
+            setSpeaking(false);
+            setPaused(false);
+          };
+
+          utteranceRef.current = utterance;
+
+          // Chrome Android گاهی paused می‌ماند
+          try {
+            if (synthNow.paused) {
+              synthNow.resume();
+            }
+          } catch {
+            /* بی‌اهمیت */
+          }
+
+          synthNow.speak(utterance);
+
+          // اطمینان: اگر بعد از speak هنوز paused بود، resume
+          try {
+            if (synthNow.paused) {
+              synthNow.resume();
+            }
+          } catch {
+            /* بی‌اهمیت */
+          }
+        } catch {
+          chunksRef.current = [];
+          indexRef.current = 0;
+          utteranceRef.current = null;
+          setSpeaking(false);
+          setPaused(false);
+        }
+      };
+
+      // شروع همگام برای حفظ user activation در موبایل
+      speakIndex(0);
     },
-    [status, voiceFor],
+    [status, voices],
   );
 
   const setEnabled = useCallback(
     (next: boolean) => {
       setEnabledState(next);
       writePref(next);
-      if (!next) cancel();
+      if (!next) {
+        cancelInternal();
+      } else {
+        // روشن‌کردن صدا خودش فهرست را تازه می‌کند (مفید برای موبایل)
+        refreshVoices();
+      }
     },
-    [cancel],
+    [cancelInternal, refreshVoices],
   );
 
   // ترک صفحه یا رفتن به تب دیگر = سکوت
   useEffect(() => {
     const onHide = () => {
-      if (document.visibilityState === 'hidden') cancel();
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+        cancelInternal();
+      }
     };
-    document.addEventListener?.('visibilitychange', onHide);
-    return () => {
-      document.removeEventListener?.('visibilitychange', onHide);
-      cancel();
-    };
-  }, [cancel]);
+    const onPageHide = () => cancelInternal();
 
-  return { available, status, enabled, speaking, setEnabled, speak, stop };
+    try {
+      document.addEventListener?.('visibilitychange', onHide);
+      window.addEventListener?.('pagehide', onPageHide);
+    } catch {
+      /* بی‌اهمیت */
+    }
+
+    return () => {
+      try {
+        document.removeEventListener?.('visibilitychange', onHide);
+        window.removeEventListener?.('pagehide', onPageHide);
+      } catch {
+        /* بی‌اهمیت */
+      }
+      cancelInternal();
+    };
+  }, [cancelInternal]);
+
+  return {
+    available,
+    status,
+    enabled,
+    speaking,
+    paused,
+    setEnabled,
+    speak,
+    stop,
+    pause,
+    resume,
+  };
 }
