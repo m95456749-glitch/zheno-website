@@ -66,3 +66,19 @@ the frame renders it `object-contain` inside a 1:1 ivory card, so the
 QR keeps its quiet zone and stays scannable). Until a file is present
 the section shows a labelled placeholder frame instead of a broken
 image. No generated artwork is committed here.
+
+## دستیار ژینو — تصویر ربات
+
+| File                              | Role                                                     |
+| --------------------------------- | -------------------------------------------------------- |
+| `assistant/zhino-assistant.png`   | تصویر اختصاصی ربات دستیار (۳۲۰×۳۲۰، شفاف)                 |
+
+Unlike the placeholders above this **is** committed artwork: a 3D-style
+mascot illustration **generated with an image model** (not a photograph,
+not one of the owner's dessert/product photos), background keyed out to a
+real alpha channel and cropped to a head-and-torso portrait so it stays
+legible at the 44 px launcher size. It is consumed by exactly one
+component — `src/components/assistant/ZhinoAssistant.tsx` (floating
+button, chat header, message avatars) — and is never used as product
+imagery. Details and the replacement procedure:
+`public/images/assistant/README.md`.
