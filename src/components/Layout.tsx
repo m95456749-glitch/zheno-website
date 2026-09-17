@@ -4,11 +4,13 @@
 // every page except the home hero reserves that height plus a
 // small breather so content never sits underneath the nav.
 //
-// «دستیار ژینو» (فاز ۴) داخل همین قالب فروشگاه رندر می‌شود:
-// دکمهٔ شناور + محیط گفتگو. جای آن در Layout است تا روی همهٔ
+// «دستیار ژینو» داخل همین قالب فروشگاه رندر می‌شود: از فاز ۵ فقط
+// یک دکمهٔ شناور که کاربر را به صفحهٔ مستقل /assistant می‌برد
+// (پنجرهٔ Popup حذف شده است). جای دکمه در Layout است تا روی همهٔ
 // صفحه‌های اصلی فروشگاه — و فقط فروشگاه، نه پنل مدیریت — ثابت
-// بماند. روی «سبد خرید» و «تسویه حساب» نمایش داده نمی‌شود تا
-// با دکمه‌های پایین فرم و خلاصهٔ سفارش تداخل نداشته باشد.
+// بماند. روی «سبد خرید» و «تسویه حساب» نمایش داده نمی‌شود تا با
+// دکمه‌های پایین فرم و خلاصهٔ سفارش تداخل نداشته باشد، و روی خود
+// /assistant هم تکرار نمی‌شود چون آن صفحه محیط گفتگوی کامل دارد.
 // ============================================================
 
 import type { ReactNode } from 'react';
@@ -19,8 +21,8 @@ import Toast from './Toast';
 import ZhinoAssistant from './assistant/ZhinoAssistant';
 import { cn } from '../utils/cn';
 
-/** صفحه‌هایی که دستیار روی آن‌ها نمایش داده نمی‌شود (تداخل با فرم/مجموع سفارش) */
-const ASSISTANT_HIDDEN_ROUTES = ['/cart', '/checkout'];
+/** صفحه‌هایی که دکمهٔ شناور دستیار روی آن‌ها نمایش داده نمی‌شود */
+const ASSISTANT_HIDDEN_ROUTES = ['/cart', '/checkout', '/assistant'];
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
