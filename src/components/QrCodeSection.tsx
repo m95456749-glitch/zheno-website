@@ -9,6 +9,11 @@
 // into public/images/ as qr-code.png (or .jpg / .webp) and it is
 // picked up automatically at the next build; until then the
 // frame shows a labelled placeholder instead of a broken image.
+//
+// Artwork spec (qr-code.png): burgundy #5A1725 modules on ivory
+// #FAF7F2, 3-module quiet zone in the file, subtly rounded data
+// modules with sharp standard finder eyes — flat artwork, no
+// blur/transparency/shadow (the jelly frame is pure CSS).
 // ============================================================
 
 import { useState } from 'react';
@@ -71,11 +76,14 @@ export default function QrCodeSection() {
             the light band: a soft layered shadow lifts it off the
             ivory, and a double hairline (quiet neutral edge + matte
             gold inner edge) frames it like stationery — thin, never
-            thick, with the QR itself as the focal point. The inner
-            padding keeps the quiet zone around the code for scanning. */}
+            thick, with the QR itself as the focal point. The artwork
+            (public/images/qr-code.png) carries a 3-module quiet zone;
+            the balanced white padding around it completes the scan
+            safe margin to ~6 modules, so the code sits larger and
+            better proportioned without losing scannability. */}
         <div className="w-full max-w-[14.5rem] justify-self-center lg:justify-self-start">
           <div className="qr-organic rounded-2xl border border-espresso/10 bg-white p-[5px] shadow-[0_1px_2px_rgba(41,35,33,0.06),0_30px_60px_-38px_rgba(41,35,33,0.28)]">
-            <div className="qr-glass rounded-[10px] border border-gold-500/40 bg-white p-3 sm:p-3.5">
+            <div className="qr-glass rounded-[10px] border border-gold-500/40 bg-white p-2 sm:p-2.5">
               <div className="relative aspect-square w-full overflow-hidden bg-white">
                 {qrMissing ? (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 rounded-lg border border-dashed border-espresso/20 bg-cream-50 px-3 text-center">
@@ -100,7 +108,7 @@ export default function QrCodeSection() {
                     loading="lazy"
                     decoding="async"
                     onError={() => setCandidate((c) => c + 1)}
-                    className="h-full w-full object-contain p-2"
+                    className="h-full w-full object-contain p-1"
                   />
                 )}
               </div>
