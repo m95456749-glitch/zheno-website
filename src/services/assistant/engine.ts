@@ -1,0 +1,1195 @@
+// ============================================================
+// ZHINO — «دستیار ژینو» (فاز ۵ و ۶) — موتور پاسخ محلی
+//
+// این موتور «حالت آفلاین» دستیار است: بدون هیچ درخواست شبکه‌ای و
+// بدون هیچ کلیدی، پرسش فارسی کاربر را می‌فهمد و از کارت اطلاعات
+// واقعی فروشگاه (knowledge.ts) پاسخ می‌سازد.
+//
+// قواعد ثابت این فایل:
+//   ۱) قیمت، موجودی و دستور تهیه فقط از دادهٔ واقعی فروشگاه
+//      خوانده می‌شود (getVisibleProducts / getSettings / recipes).
+//   ۲) اگر داده‌ای در فروشگاه نباشد، پاسخ «نمی‌دانم» است —
+//      هیچ عدد، محصول یا دستوری از خودمان ساخته نمی‌شود.
+//   ۳) پرسش‌های بیرون از حوزهٔ ژینو با احترام و شفافیت رد می‌شوند.
+//
+// قابلیت‌های آمادهٔ امروز (و «ابزار»های آیندهٔ مدل هوش مصنوعی):
+//   راهنمای انتخاب، معرفی کاتالوگ، جست‌وجوی طعم، قیمت/موجودی،
+//   دستور مرحله‌به‌مرحله، برآورد مقدار برای تعداد نفرات،
+//   پیشنهاد بر اساس بودجه، ترکیب طعم‌ها، پیشنهاد شخصی‌سازی‌شده،
+//   ارسال/کرایه، و راهنمای سفارش.
+//
+// افزودن قابلیت تازه = یک ردیف در ASSISTANT_CAPABILITIES و یک
+// تابع پاسخ؛ بقیهٔ گفتگو (UI، تاریخچه، اتصال به مدل) تغییری لازم
+// ندارد.
+// ============================================================
+
+import type { ProductCategory } from '../../types';
+import { formatNumber, formatPrice, toPersianDigits } from '../../utils/format';
+import {
+  availableFlavors,
+  cheapestVariant,
+  dataSourceLabel,
+  describeProduct,
+  freeShippingLine,
+  isAvailable,
+  productsOf,
+  searchProducts,
+} from './knowledge';
+import type {
+  AssistantCapabilityId,
+  AssistantContext,
+  AssistantLink,
+  AssistantProductFact,
+  AssistantReply,
+  AssistantSuggestion,
+} from './types';
+
+/* ── کارت قابلیت‌ها (پنل کنار گفتگو + مستندسازی) ───────────── */
+
+export interface AssistantCapabilityCard {
+  id: AssistantCapabilityId | 'ai';
+  title: string;
+  description: string;
+  /** نمونهٔ پرسشی که این قابلیت را فعال می‌کند */
+  example: string;
+  /** ready = همین حالا کار می‌کند */
+  status: 'ready';
+  /** true یعنی برای پاسخ به مدل هوش مصنوعی نیاز دارد (در غیر این صورت آفلاین هم کار می‌کند) */
+  needsModel?: boolean;
+}
+
+export const ASSISTANT_CAPABILITIES: AssistantCapabilityCard[] = [
+  {
+    id: 'guide',
+    title: 'راهنمای انتخاب محصول',
+    description: 'تفاوت پودر ژله و کاستر، سرد یا گرم، و انتخاب برای مهمانی یا دسر خانگی.',
+    example: 'برای انتخاب محصول راهنمایی می‌کنید؟',
+    status: 'ready',
+  },
+  {
+    id: 'recipe-jelly',
+    title: 'دستور تهیهٔ مرحله‌به‌مرحله',
+    description: 'همان دستور رسمی روی بستهٔ ژینو، در سه مرحلهٔ کوتاه.',
+    example: 'طرز تهیه ژله چطور است؟',
+    status: 'ready',
+  },
+  {
+    id: 'price-stock',
+    title: 'قیمت و موجودی واقعی',
+    description: 'پاسخ فقط از کاتالوگ همین فروشگاه؛ اگر محصولی نباشد، صریح گفته می‌شود.',
+    example: 'قیمت ژله توت فرنگی چند است؟',
+    status: 'ready',
+  },
+  {
+    id: 'suggestion',
+    title: 'پیشنهاد دسر شخصی‌سازی‌شده',
+    description: 'بر اساس سرد/گرم، شکلاتی/میوه‌ای و مناسبتی که می‌خواهید.',
+    example: 'یک دسر سرد و میوه‌ای پیشنهاد بده',
+    status: 'ready',
+  },
+  {
+    id: 'budget',
+    title: 'پیشنهاد بر اساس بودجه',
+    description: 'بهترین ترکیب واقعی فروشگاه در محدودهٔ بودجهٔ شما.',
+    example: 'با ۵۰۰ هزار تومان چه ترکیبی بگیرم؟',
+    status: 'ready',
+  },
+  {
+    id: 'pairing',
+    title: 'ترکیب طعم‌ها',
+    description: 'طعم‌هایی که کنار هم خوب می‌نشینند، از بین محصولات موجود.',
+    example: 'چه ترکیب طعمی پیشنهاد می‌کنید؟',
+    status: 'ready',
+  },
+  {
+    id: 'servings',
+    title: 'محاسبهٔ مقدار برای تعداد نفرات',
+    description: 'برآورد تقریبی تعداد بسته بر پایهٔ دستور رسمی روی بسته.',
+    example: 'برای ۱۰ نفر چند بسته لازم است؟',
+    status: 'ready',
+  },
+  {
+    id: 'flavors',
+    title: 'معرفی طعم‌های موجود',
+    description: 'فهرست تازهٔ طعم‌های ژله و کاستر، دقیقاً همان چیزی که در دیتابیس فروشگاه فعال است.',
+    example: 'چه طعم‌هایی دارید؟',
+    status: 'ready',
+  },
+  {
+    id: 'catalog',
+    title: 'اتصال به کاتالوگ و موجودی فروشگاه',
+    description: 'همهٔ پاسخ‌ها زنده از همان دادهٔ فروشگاه و پنل مدیریت خوانده می‌شود.',
+    example: 'محصولات ژینو را معرفی می‌کنید؟',
+    status: 'ready',
+  },
+  {
+    id: 'ai',
+    title: 'گفتگوی هوشمند با مدل زبانی',
+    description:
+      'با فعال‌کردن Backend یا Supabase Edge Function، پاسخ‌ها از مدل زبانی می‌آید؛ کلید API فقط سمت سرور می‌ماند.',
+    example: 'یک دسر خانگی با ژله و کاستر برای مهمانی می‌خواهم',
+    status: 'ready',
+    needsModel: true,
+  },
+];
+
+/* ── پیشنهادهای آمادهٔ پیش‌فرض ─────────────────────────────── */
+
+export const DEFAULT_SUGGESTIONS: AssistantSuggestion[] = [
+  { label: 'راهنمای انتخاب محصول', prompt: 'برای انتخاب محصول راهنمایی می‌کنید؟' },
+  { label: 'طرز تهیه ژله', prompt: 'طرز تهیه ژله چطور است؟' },
+  { label: 'طرز تهیه کاستر', prompt: 'طرز تهیه کاستر چطور است؟' },
+  { label: 'معرفی محصولات', prompt: 'محصولات ژینو را معرفی می‌کنید؟' },
+  { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
+  { label: 'پیشنهاد دسر', prompt: 'یک دسر مناسب مهمانی پیشنهاد بده' },
+  { label: 'ترکیب طعم‌ها', prompt: 'چه ترکیب طعمی پیشنهاد می‌کنید؟' },
+  { label: 'قیمت و موجودی', prompt: 'قیمت محصولات چقدر است؟' },
+];
+
+export const ASSISTANT_INTRO =
+  'سلام و درود! من «دستیار ژینو» هستم؛ راهنمای انتخاب محصول، دستور تهیهٔ ژله و کاستر، پیشنهاد دسر و پاسخ دربارهٔ قیمت و موجودی واقعی فروشگاه.';
+
+/** پیام وقتی گفتگو پاک می‌شود (شروع تازه) */
+export const ASSISTANT_RESTART =
+  'گفتگو پاک شد. در خدمتم — بپرسید یا یکی از پیشنهادهای پایین را انتخاب کنید.';
+
+/**
+ * «برآورد تقریبی» مقدار لازم برای هر نفر.
+ * مبنا: دستور رسمی روی بسته —
+ *   ژله: ۳ قاشق پودر (حدود ۳۰ گرم) برای ۱.۵ لیوان آب → حدود ۲ تا ۳ پرس
+ *   کاستر: ۱ قاشق پودر (حدود ۱۰ گرم) + ۱ لیوان شیر → حدود ۱ تا ۲ پرس
+ * این اعداد همیشه با قید «برآورد تقریبی» بیان می‌شوند.
+ */
+const GRAMS_PER_SERVING: Record<ProductCategory, number> = { jelly: 12, custard: 7 };
+
+/** ترکیب‌های طعم (محتوای تحریریه، نه ادعای قیمت/موجودی) */
+const FLAVOR_COMPLEMENTS: { flavor: string; partners: string[]; note: string }[] = [
+  { flavor: 'توت فرنگی', partners: ['کاستر محلبی وانیلی', 'کاستر کاکائو'], note: 'توت فرنگی با وانیل یا کاکائو کلاسیک‌ترین ترکیب دسر است.' },
+  { flavor: 'انار', partners: ['کاستر محلبی وانیلی', 'کاستر هفت میوه'], note: 'مایهٔ انار با کاستر وانیلی لایهٔ رنگی و مقبولی می‌سازد.' },
+  { flavor: 'آلبالو', partners: ['کاستر کاکائو', 'کاستر محلبی وانیلی'], note: 'مهِ آلبالو با کاستر شکلاتی یا وانیلی متعادل می‌شود.' },
+  { flavor: 'هلو', partners: ['کاستر هفت میوه', 'کاستر موز'], note: 'هلوی ملایم با کاستر میوه‌ای هم‌خانواده است.' },
+  { flavor: 'پرتقال', partners: ['کاستر کاکائو', 'کاستر توت فرنگی'], note: 'مرکبات با کاکائو یا توت فرنگی کنتراست خوبی می‌سازد.' },
+  { flavor: 'انبه', partners: ['کاستر موز', 'کاستر هفت میوه'], note: 'انبه با کاستر موز، دسر استوایی می‌شود.' },
+  { flavor: 'لیمو', partners: ['کاستر محلبی وانیلی'], note: 'لیمو با وانیل ترکیبی خنک و بهاری می‌دهد.' },
+  { flavor: 'کیوی', partners: ['کاستر توت فرنگی'], note: 'کیوی کمی ترش است؛ کاستر توت فرنگی آن را متعادل می‌کند.' },
+  { flavor: 'هندوانه', partners: ['کاستر طالبی'], note: 'هندوانه و طالبی، دسر تابستانی و خنک می‌سازند.' },
+  { flavor: 'شاتوت', partners: ['کاستر محلبی وانیلی'], note: 'شاتوت با وانیل لایهٔ مخملی و خوشرنگی می‌دهد.' },
+  { flavor: 'تمشک', partners: ['کاستر کاکائو'], note: 'ترشی تمشک با کاستر شکلاتی متعادل می‌شود.' },
+  { flavor: 'بلوبری', partners: ['کاستر محلبی وانیلی'], note: 'بلوبری با وانیل ترکیبی نرم و اروپایی است.' },
+  { flavor: 'آناناس', partners: ['کاستر موز'], note: 'آناناس و موز، طعم استوایی موردعلاقهٔ بچه‌هاست.' },
+  { flavor: 'انگور', partners: ['کاستر طالبی'], note: 'انگور با کاستر طالبی سبک و خوش‌عطر می‌شود.' },
+  { flavor: 'کاکائو', partners: ['ژله موز', 'ژله توت فرنگی'], note: 'کاستر شکلاتی با ژلهٔ موز یا توت فرنگی، دسر لایه‌ای معروفی است.' },
+  { flavor: 'محلبی', partners: ['ژله توت فرنگی', 'ژله انار'], note: 'کاستر محلبی وانیلی پایهٔ خوبی برای لایه‌های ژله است.' },
+  { flavor: 'موز', partners: ['کاستر کاکائو', 'کاستر محلبی وانیلی'], note: 'موز با کاکائو یا وانیل ترکیب کلاسیک بستنی‌فروشی است.' },
+  { flavor: 'هفت میوه', partners: ['ژله پرتقال', 'ژله هلو'], note: 'کاستر هفت میوه با ژلهٔ پرتقال یا هلو، دسر مهمانی می‌شود.' },
+];
+
+/* ── نرمال‌سازی متن فارسی ──────────────────────────────────── */
+
+const PERSIAN_DIGITS = '۰۱۲۳۴۵۶۷۸۹';
+const ARABIC_DIGITS = '٠١٢٣٤٥٦٧٨٩';
+
+/** یکسان‌سازی متن کاربر: ارقام فارسی/عربی، ی و ک عربی، نیم‌فاصله */
+export function normalizePersian(input: string): string {
+  return input
+    .replace(/[۰-۹]/g, (d) => String(PERSIAN_DIGITS.indexOf(d)))
+    .replace(/[٠-٩]/g, (d) => String(ARABIC_DIGITS.indexOf(d)))
+    .replace(/[ىي]/g, 'ی')
+    .replace(/ك/g, 'ک')
+    .replace(/[\u200c\u200f\u200e]/g, ' ')
+    .replace(/[\u064B-\u0652]/g, '')
+    .replace(/[؟?!.,،؛:]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
+
+/** تبدیل عدد لاتین به رقم فارسی برای متن پاسخ */
+function fa(value: number): string {
+  return toPersianDigits(formatNumber(value));
+}
+
+/** مبلغ را با ارقام فارسی می‌نویسد: «۲۰۰٬۰۰۰ تومان» */
+function price(value: number): string {
+  return formatPrice(value);
+}
+
+/** عددهای متن را می‌خواند: «۳۰۰ هزار» ، «۱.۵ میلیون» ، «500000» */
+function parseAmount(text: string): number | null {
+  const match = text.match(/(\d+(?:\.\d+)?)\s*(میلیون|هزار|تومان|تومن)?/);
+  if (!match) return null;
+  const base = Number(match[1]);
+  if (!Number.isFinite(base) || base <= 0) return null;
+  const unit = match[2] ?? '';
+  if (unit === 'میلیون') return Math.round(base * 1_000_000);
+  if (unit === 'هزار') return Math.round(base * 1_000);
+  // «۱۵۰ تومان» یعنی ۱۵۰ هزار تومان (رایج در گفتار روزمره)
+  if ((unit === 'تومان' || unit === 'تومن') && base <= 1000) return Math.round(base * 1000);
+  return Math.round(base);
+}
+
+/** تعداد نفرات از متن: «برای ۸ نفر» / «۱۰ نفره» */
+function parsePeople(text: string): number | null {
+  const match = text.match(/(\d+)\s*(?:نفر|نفره|پرس|نفرآدم)/);
+  if (!match) return null;
+  const value = Number(match[1]);
+  if (!Number.isFinite(value) || value <= 0 || value > 500) return null;
+  return Math.round(value);
+}
+
+/* ── تطبیق طعم‌های واقعی در متن کاربر ─────────────────────── */
+
+/** محصولاتی که نام طعمشان در متن کاربر آمده (بلندترین عنوان اول) */
+function matchFlavorProducts(context: AssistantContext, normalized: string): AssistantProductFact[] {
+  const matched: AssistantProductFact[] = [];
+  for (const product of context.products) {
+    if (product.flavorLabel.length >= 3 && normalized.includes(product.flavorLabel)) {
+      matched.push(product);
+    }
+  }
+  matched.sort((a, b) => b.flavorLabel.length - a.flavorLabel.length);
+
+  // اگر کاربر صریحاً «ژله» یا «کاستر» گفته، همان دسته مقدم است
+  // (مثلاً «قیمت ژله توت فرنگی» نباید کاستر توت فرنگی را جلو بیندازد).
+  const wantsCustard = normalized.includes('کاستر');
+  const wantsJelly = normalized.includes('ژله');
+  if (wantsCustard !== wantsJelly) {
+    const preferred = matched.filter((product) =>
+      wantsCustard ? product.category === 'custard' : product.category === 'jelly',
+    );
+    if (preferred.length > 0) return preferred;
+  }
+  return matched;
+}
+
+/** آیا متن کاربر «طعم‌نما»یی دارد که در فروشگاه نیست؟ */
+const FLAVOR_HINTS = [
+  'انار', 'توت فرنگی', 'هلو', 'تمشک', 'بلوبری', 'پرتقال', 'آناناس', 'آلبالو',
+  'هندوانه', 'طالبی', 'شاتوت', 'انبه', 'انگور', 'کیوی', 'لیمو', 'موز', 'کاکائو',
+  'شکلات', 'وانیل', 'محلبی', 'هفت میوه', 'کارامل', 'قهوه', 'نارگیل', 'زعفران',
+  'گیلاس', 'سیب', 'خیار', 'بستنی', 'پسته',
+];
+
+/* ── ابزارهای مشترک پاسخ ───────────────────────────────────── */
+
+function link(label: string, to: string): AssistantLink {
+  return { label, to };
+}
+
+function productLinks(products: AssistantProductFact[], max = 3): AssistantLink[] {
+  return products
+    .slice(0, max)
+    .map((product) => link(`صفحهٔ ${product.shortName}`, product.to));
+}
+
+function bubble(...lines: (string | null | undefined)[]): string {
+  return lines.filter((line): line is string => typeof line === 'string' && line.length > 0).join('\n');
+}
+
+/** پاسخ محلی، پیش از آنکه منبع داده به آن پیوست شود (تنها در answerLocally) */
+type LocalReply = Omit<AssistantReply, 'dataSource'>;
+
+function reply(
+  capability: AssistantReply['capability'],
+  text: string,
+  extra: { links?: AssistantLink[]; suggestions?: AssistantSuggestion[]; grounded?: boolean } = {},
+): LocalReply {
+  return {
+    capability,
+    text,
+    links: extra.links,
+    suggestions: extra.suggestions,
+    source: 'local',
+    grounded: extra.grounded ?? false,
+  };
+}
+
+/* ── پاسخ‌های ثابت (بدون داده) ─────────────────────────────── */
+
+const SCOPE_REPLY = bubble(
+  'من دستیار ژینو هستم و فقط دربارهٔ محصولات ژینو، تهیهٔ ژله و کاستر، انتخاب دسر و سفارش‌های فروشگاه می‌توانم راهنمایی کنم.',
+  'خوشحال می‌شوم در همین موضوع‌ها کمکتان کنم — مثلاً انتخاب طعم، دستور تهیه یا پیشنهاد دسر برای مهمانی.',
+);
+
+const CLARIFY_REPLY = bubble(
+  'سؤال‌تان را کامل متوجه نشدم. اگر منظورتان محصول، دستور تهیه، قیمت و موجودی یا پیشنهاد دسر است، کوتاه‌تر بپرسید یا یکی از پیشنهادهای پایین را بزنید.',
+);
+
+/* ── پرسش «اطلاعاتت را از کجا می‌آوری؟» ────────────────────── */
+
+const SOURCE_INFO_KEYWORDS = [
+  // «منبع»، «اطلاعاتت»، «داده هات»، «دیتابیس»، «وصل هستی» و صرف‌های محاوره‌ای
+  'منبع اطلاعات',
+  'منبع داد',
+  'اطلاعاتت',
+  'اطلاعات تو',
+  'داده هات',
+  'داده ها رو',
+  'دیتابیس',
+  'دیتا بیس',
+  'سوپابیس',
+  'supabase',
+  'وصل هستی',
+  'وصل شدی',
+  'از کجا میاری',
+  'از کجا میاری',
+  'از کجا میدونی',
+  'از کجا میگیری',
+  'از کجا اوردی',
+  'آپدیت هستی',
+  'اپدیت هستی',
+  'به روز هستی',
+];
+
+function sourceInfoReply(context: AssistantContext): LocalReply {
+  const lines: string[] = [];
+  if (context.dataSource === 'database') {
+    lines.push('بله — محصولات، طعم‌ها، قیمت، موجودی و دستورهای تهیه را همین حالا از دیتابیس فروشگاه می‌خوانم.');
+    if (context.dataUpdatedAt) {
+      const time = formatClock(context.dataUpdatedAt);
+      if (time) lines.push(`آخرین همگام‌سازی: ساعت ${time}.`);
+    }
+  } else {
+    lines.push(
+      'در این لحظه اتصال دیتابیس فروشگاه برقرار نیست، بنابراین از دادهٔ محلی خود فروشگاه پاسخ می‌دهم؛ همین داده هم همان محصولات، قیمت‌ها و دستورهای واقعی است.',
+    );
+  }
+  lines.push(`سفارش‌های ارسال رایگان از ${formatPrice(context.settings.freeShippingThreshold)} محاسبه می‌شود.`);
+  lines.push('هیچ قیمت یا موجودی‌ای را از خودم نمی‌سازم؛ هر عددی که نگویم، در فهرست فروشگاه نبوده است.');
+
+  return reply(
+    'catalog',
+    bubble(...lines),
+    {
+      grounded: true,
+      links: [link('مشاهدهٔ محصولات', '/products')],
+      suggestions: [
+        { label: 'قیمت و موجودی', prompt: 'قیمت محصولات چقدر است؟' },
+        { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
+      ],
+    },
+  );
+}
+
+/** ساعت محلی به فارسی — اگر مرورگر پشتیبانی نکرد، خط نمایش داده نمی‌شود */
+function formatClock(iso: string): string | null {
+  try {
+    const date = new Date(iso);
+    if (Number.isNaN(date.getTime())) return null;
+    return new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(date);
+  } catch {
+    return null;
+  }
+}
+
+/* ── قابلیت‌ها ─────────────────────────────────────────────── */
+
+function catalogReply(context: AssistantContext): LocalReply {
+  const weights = new Set(context.products.flatMap((product) => product.variants.map((v) => v.weight)));
+  const weightLine = weights.size === 1 ? `همهٔ محصولات در بستهٔ ${[...weights][0]} عرضه می‌شوند.` : '';
+  const priceLine = context.priceRange
+    ? `قیمت‌ها از ${price(context.priceRange.min)} شروع می‌شود.`
+    : '';
+  return reply(
+    'catalog',
+    bubble(
+      `فروشگاه ژینو الان ${fa(context.counts.total)} محصول دارد: ${fa(context.counts.jelly)} طعم پودر ژله و ${fa(context.counts.custard)} طعم پودر کاستر.`,
+      weightLine,
+      priceLine,
+      freeShippingLine(context),
+      'قیمت و موجودی هر محصول در صفحهٔ همان محصول به‌روز است؛ از صفحهٔ محصولات شروع کنید.',
+      dataSourceNote(context),
+    ),
+    {
+      links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
+      grounded: true,
+      suggestions: [
+        { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
+        { label: 'پیشنهاد دسر', prompt: 'یک دسر مناسب مهمانی پیشنهاد بده' },
+      ],
+    },
+  );
+}
+
+/**
+ * فهرست طعم‌های واقعی فروشگاه.
+ *
+ * قبلاً این پرسش («چه طعم‌هایی دارید؟») به پاسخ راهنما می‌رفت؛ از
+ * فاز ۶ پاسخ مستقیم و کوتاه می‌دهد و فقط از دادهٔ همین لحظه می‌گوید.
+ */
+function flavorsReply(context: AssistantContext): LocalReply {
+  const flavors = availableFlavors(context);
+  if (flavors.jelly.length === 0 && flavors.custard.length === 0) {
+    return reply(
+      'flavors',
+      bubble(
+        'در فهرست فعلی فروشگاه، طعمی برای نمایش نیست؛ این یعنی محصول فعالی خوانده نشده است.',
+        'برای بررسی وضعیت، صفحهٔ محصولات را ببینید یا بعداً دوباره بپرسید.',
+      ),
+      {
+        links: [link('مشاهدهٔ محصولات', '/products')],
+        grounded: true,
+      },
+    );
+  }
+
+  const lines: string[] = [];
+  if (flavors.jelly.length > 0) {
+    lines.push(`• ژله (${fa(flavors.jelly.length)} طعم): ${flavors.jelly.join('، ')}`);
+  }
+  if (flavors.custard.length > 0) {
+    lines.push(`• کاستر (${fa(flavors.custard.length)} طعم): ${flavors.custard.join('، ')}`);
+  }
+
+  return reply(
+    'flavors',
+    bubble(
+      'طعم‌های موجود در فروشگاه ژینو همین حالا:',
+      ...lines,
+      dataSourceNote(context),
+      'اگر طعم خاصی مدنظرتان است، نامش را بنویسید تا قیمت و موجودی همان را بگویم.',
+    ),
+    {
+      links: [link('همهٔ محصولات', '/products')],
+      grounded: true,
+      suggestions: [
+        { label: 'قیمت و موجودی', prompt: 'قیمت محصولات چقدر است؟' },
+        { label: 'ترکیب طعم‌ها', prompt: 'چه ترکیب طعمی پیشنهاد می‌کنید؟' },
+      ],
+    },
+  );
+}
+
+function guideReply(context: AssistantContext): LocalReply {
+  return reply(
+    'guide',
+    bubble(
+      'برای انتخاب، اول ببینید دسرتان سرد است یا گرم:',
+      '• «پودر ژله» ژینو: بافت لرزان و سبک — سرو سرد؛ مناسب مهمانی، دسر تابستانی و لایه‌های رنگی.',
+      '• «پودر کاستر» ژینو: بافت مخملی و خامه‌ای — سرو گرم یا سرد؛ مناسب روی میوه، لایهٔ میانی کیک و دسر خانگی.',
+      `اکنون در فروشگاه ${fa(context.counts.jelly)} طعم ژله و ${fa(context.counts.custard)} طعم کاستر فعال است.`,
+      'اگر تازه‌کار هستید با یک طعم آشنا شروع کنید و بعد سراغ طعم‌های خاص بروید.',
+    ),
+    {
+      links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
+      grounded: true,
+      suggestions: [
+        { label: 'ژله یا کاستر؟', prompt: 'تفاوت ژله و کاستر چیست؟' },
+        { label: 'پیشنهاد دسر', prompt: 'یک دسر سرد و میوه‌ای پیشنهاد بده' },
+      ],
+    },
+  );
+}
+
+function flavorReply(context: AssistantContext, products: AssistantProductFact[]): LocalReply {
+  if (products.length === 0) {
+    // طعم‌نمای ناموجود: پاسخ ساختگی داده نمی‌شود
+    const available = context.products.slice(0, 4).map((product) => product.shortName);
+    return reply(
+      'flavor',
+      bubble(
+        'این طعم را در فهرست فعلی فروشگاه ژینو نمی‌بینم؛ ترجیح می‌دهم چیزی از خودم اضافه نکنم.',
+        available.length > 0
+          ? `طعم‌های موجود الان: ${available.join('، ')}${context.products.length > 4 ? ' و …' : ''}.`
+          : null,
+        'اگر طعم خاصی مدنظرتان است، از صفحهٔ محصولات فهرست کامل را ببینید.',
+      ),
+      {
+        links: [link('همهٔ محصولات', '/products')],
+        grounded: true,
+        suggestions: [
+          { label: 'معرفی محصولات', prompt: 'محصولات ژینو را معرفی می‌کنید؟' },
+  { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
+          { label: 'راهنمای انتخاب', prompt: 'برای انتخاب محصول راهنمایی می‌کنید؟' },
+        ],
+      },
+    );
+  }
+
+  const lines = products.slice(0, 4).map((product) => `• ${describeProduct(product)}`);
+  const anyAvailable = products.some(isAvailable);
+  return reply(
+    'flavor',
+    bubble(
+      products.length === 1 ? 'این محصول در فروشگاه موجود است:' : 'این گزینه‌ها را در فروشگاه داریم:',
+      ...lines,
+      anyAvailable
+        ? 'قیمت و موجودی بالا همین حالا از صفحهٔ همین محصولات خوانده شده است.'
+        : 'این محصول(ها) الان در فهرست فروشگاه موجود نیستند.',
+    ),
+    {
+      links: productLinks(products),
+      grounded: true,
+      suggestions: [
+        { label: 'طرز تهیه', prompt: `طرز تهیه ${products[0].shortName} چطور است؟` },
+        { label: 'ترکیب طعم‌ها', prompt: `${products[0].flavorLabel} با چه طعمی خوب می‌شود؟` },
+      ],
+    },
+  );
+}
+
+function priceStockReply(context: AssistantContext, products: AssistantProductFact[]): LocalReply {
+  if (products.length > 0) {
+    const lines = products.slice(0, 5).map((product) => {
+      const variant = cheapestVariant(product);
+      if (!variant) return `• ${product.shortName} — فعلاً موجود نیست`;
+      const stock =
+        variant.stock <= context.settings.lowStockThreshold
+          ? `موجودی: ${fa(variant.stock)} عدد (کم)`
+          : `موجود در انبار`;
+      return `• ${product.shortName} — ${variant.weight}: ${price(variant.price)} — ${stock}`;
+    });
+    return reply('price-stock', bubble('قیمت و موجودی روز فروشگاه:', ...lines), {
+      links: [...productLinks(products), link('همهٔ محصولات', '/products')],
+      grounded: true,
+    });
+  }
+
+  const cheapest = context.priceRange ? price(context.priceRange.min) : null;
+  return reply(
+    'price-stock',
+    bubble(
+      'برای اینکه قیمت و موجودی دقیق را بگویم، اسم طعم یا محصول را بفرمایید (مثلاً «قیمت ژله انار»).',
+      cheapest ? `قیمت‌های فروشگاه از ${cheapest} شروع می‌شود و همه از همین کاتالوگ خوانده می‌شود.` : null,
+      freeShippingLine(context),
+    ),
+    {
+      links: [link('مشاهدهٔ محصولات', '/products')],
+      grounded: true,
+      suggestions: [
+        { label: 'قیمت ژله توت فرنگی', prompt: 'قیمت ژله توت فرنگی چند است؟' },
+        { label: 'موجودی کاستر کاکائو', prompt: 'کاستر کاکائو موجود است؟' },
+      ],
+    },
+  );
+}
+
+function recipeReply(
+  context: AssistantContext,
+  category: ProductCategory | null,
+): LocalReply {
+  const wanted: ProductCategory[] = category ? [category] : ['jelly', 'custard'];
+  const found = wanted
+    .map((item) => context.recipes.find((recipe) => recipe.category === item))
+    .filter((recipe): recipe is AssistantContext['recipes'][number] => Boolean(recipe));
+
+  if (found.length === 0) {
+    return reply(
+      category === 'custard' ? 'recipe-custard' : 'recipe-jelly',
+      bubble(
+        'دستور رسمی این دسته الان در فهرست فروشگاه نیست؛ برای اینکه دستور اشتباهی به شما ندهم، از خودم چیزی نمی‌گویم.',
+        'صفحهٔ دستور تهیه را ببینید یا پشتیبانی ژینو را بپرسید.',
+      ),
+      {
+        links: [link('صفحهٔ دستور تهیه', '/recipes'), link('تماس با ژینو', '/contact')],
+        grounded: true,
+      },
+    );
+  }
+
+  const blocks = found.map((recipe) =>
+    bubble(
+      `${recipe.title} — ${recipe.summary}`,
+      ...recipe.steps.map((step, index) => `${fa(index + 1)}. ${step}`),
+    ),
+  );
+
+  const relatedProducts = found
+    .flatMap((recipe) => productsOf(context, recipe.category).slice(0, 2))
+    .filter((product, index, list) => list.findIndex((item) => item.id === product.id) === index);
+
+  return reply(
+    category === 'custard' ? 'recipe-custard' : 'recipe-jelly',
+    bubble(
+      ...blocks,
+      'این‌ها همان دستور رسمی روی بستهٔ ژینو هستند؛ برای دیدن نسخهٔ کامل به صفحهٔ دستور تهیه سر بزنید.',
+      'برای لایه‌های رنگی، هر لایه را جدا آماده کنید و پیش از ریختن لایهٔ بعدی کمی در یخچال بگذارید تا ببندد.',
+    ),
+    {
+      links: [link('صفحهٔ دستور تهیه', '/recipes'), ...productLinks(relatedProducts, 2)],
+      grounded: true,
+      suggestions: [
+        { label: 'برای ۱۰ نفر چقدر لازم است؟', prompt: 'برای ۱۰ نفر چند بسته لازم است؟' },
+        { label: 'ترکیب طعم‌ها', prompt: 'چه ترکیب طعمی پیشنهاد می‌کنید؟' },
+      ],
+    },
+  );
+}
+
+function servingsReply(context: AssistantContext, people: number, category: ProductCategory | null): LocalReply {
+  const wanted: ProductCategory[] = category ? [category] : ['jelly', 'custard'];
+  const lines: string[] = [];
+  const usedProducts: AssistantProductFact[] = [];
+
+  for (const item of wanted) {
+    const candidates = productsOf(context, item).filter(isAvailable);
+    const products = candidates.length > 0 ? candidates : productsOf(context, item);
+    const product = products[0];
+    if (!product) continue;
+    const variant = cheapestVariant(product) ?? product.variants[0];
+    if (!variant) continue;
+    const gramsNeeded = people * GRAMS_PER_SERVING[item];
+    const packs = Math.max(1, Math.ceil(gramsNeeded / variant.weightGrams));
+    const servingsPerPack = Math.floor(variant.weightGrams / GRAMS_PER_SERVING[item]);
+    lines.push(
+      `• ${item === 'jelly' ? 'ژله' : 'کاستر'}: حدود ${fa(packs)} بستهٔ ${variant.weight} (هر بسته تقریباً ${fa(servingsPerPack)} پرس کوچک)`,
+    );
+    usedProducts.push(product);
+  }
+
+  if (lines.length === 0) {
+    return reply('servings', CLARIFY_REPLY, {
+      grounded: true,
+      suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+    });
+  }
+
+  return reply(
+    'servings',
+    bubble(
+      `برای ${fa(people)} نفر، برآورد تقریبی این مقدار است:`,
+      ...lines,
+      'این یک «برآورد تقریبی» بر پایهٔ دستور رسمی روی بسته است (۳ قاشق پودر ژله برای ۱.۵ لیوان آب و ۱ قاشق پودر کاستر برای ۱ لیوان شیر)؛ با اندازهٔ کاسه‌ها و لایه‌ها کمی کم و زیاد می‌شود.',
+      'اگر هر دو دسر را سرو می‌کنید، برای هر نفر یک پرس از هر کدام در نظر بگیرید.',
+    ),
+    {
+      links: [...productLinks(usedProducts, 2), link('دستور تهیه', '/recipes')],
+      grounded: true,
+      suggestions: [
+        { label: 'طرز تهیه', prompt: 'طرز تهیه ژله چطور است؟' },
+        { label: 'پیشنهاد ترکیب', prompt: 'چه ترکیب طعمی پیشنهاد می‌کنید؟' },
+      ],
+    },
+  );
+}
+
+function budgetReply(context: AssistantContext, budget: number): LocalReply {
+  const candidates = context.products
+    .map((product) => ({ product, variant: cheapestVariant(product) }))
+    .filter(
+      (item): item is { product: AssistantProductFact; variant: NonNullable<ReturnType<typeof cheapestVariant>> } =>
+        item.variant !== null && item.variant.price <= budget,
+    )
+    .sort((a, b) => a.variant.price - b.variant.price);
+
+  if (candidates.length === 0) {
+    const cheapest = context.priceRange?.min ?? null;
+    return reply(
+      'budget',
+      bubble(
+        `با ${price(budget)}، هیچ محصولی از فهرست فعلی فروشگاه در سبد جا نمی‌شود.`,
+        cheapest
+          ? `ارزان‌ترین گزینهٔ موجود ${price(cheapest)} است؛ اگر بودجه را کمی بالاتر ببرید، پیشنهاد بهتری دارم.`
+          : 'فهرست محصولات را ببینید و اگر بودجه را بگویید، ترکیب پیشنهادی می‌سازم.',
+      ),
+      {
+        links: [link('مشاهدهٔ محصولات', '/products')],
+        grounded: true,
+      },
+    );
+  }
+
+  // انتخاب از ارزان به گران؛ حداکثر ۴ قلم و حداکثر ۲ ژله،
+  // با اولویت این که از هر دو دسته (ژله و کاستر) در سبد باشد.
+  const picked: { product: AssistantProductFact; variant: (typeof candidates)[number]['variant'] }[] = [];
+  let total = 0;
+  let jellyCount = 0;
+
+  // مرحلهٔ ۱: ارزان‌ترین گزینهٔ هر دسته (اگر در بودجه جا شود)
+  for (const category of ['jelly', 'custard'] as const) {
+    const item = candidates.find((candidate) => candidate.product.category === category);
+    if (!item || total + item.variant.price > budget) continue;
+    picked.push(item);
+    total += item.variant.price;
+    if (category === 'jelly') jellyCount += 1;
+  }
+
+  // مرحلهٔ ۲: افزودن گزینه‌های تنوع‌دهنده تا سقف بودجه
+  for (const item of candidates) {
+    if (picked.length >= 4) break;
+    if (picked.some((entry) => entry.product.id === item.product.id)) continue;
+    if (item.product.category === 'jelly' && jellyCount >= 2) continue;
+    if (total + item.variant.price > budget) continue;
+    picked.push(item);
+    total += item.variant.price;
+    if (item.product.category === 'jelly') jellyCount += 1;
+  }
+
+  if (picked.length === 0) {
+    const cheapest = candidates[0];
+    picked.push(cheapest);
+    total = cheapest.variant.price;
+  }
+
+  const remaining = budget - total;
+  return reply(
+    'budget',
+    bubble(
+      `با بودجهٔ ${price(budget)} این ترکیب را از محصولات موجود پیشنهاد می‌کنم:`,
+      ...picked.map(
+        (item, index) =>
+          `${fa(index + 1)}. ${item.product.shortName} — ${item.variant.weight}: ${price(item.variant.price)}`,
+      ),
+      `جمع: ${price(total)}${remaining > 0 ? ` — ${price(remaining)} از بودجه باقی می‌ماند` : ''}`,
+      remaining >= context.settings.standardShippingCost
+        ? 'با باقی‌ماندهٔ بودجه می‌توانید کرایهٔ ارسال را هم حساب کنید.'
+        : freeShippingLine(context),
+      'همهٔ قیمت‌ها از کاتالوگ همین فروشگاه خوانده شده است.',
+    ),
+    {
+      links: [...productLinks(picked.map((item) => item.product)), link('سبد خرید', '/cart')],
+      grounded: true,
+      suggestions: [
+        { label: 'دستور تهیه', prompt: 'طرز تهیه کاستر چطور است؟' },
+        { label: 'ترکیب طعم‌ها', prompt: 'چه ترکیب طعمی پیشنهاد می‌کنید؟' },
+      ],
+    },
+  );
+}
+
+function pairingReply(context: AssistantContext, products: AssistantProductFact[]): LocalReply {
+  const anchor = products[0];
+  const suggestions: AssistantProductFact[] = [];
+  let note = '';
+
+  if (anchor) {
+    // ۱) طعم مشترک در دو دسته: ژله + کاستر هم‌نام (لایه‌ای)
+    const sameFlavor = context.products.filter(
+      (product) => product.flavorLabel === anchor.flavorLabel && product.id !== anchor.id,
+    );
+    if (sameFlavor.length > 0) {
+      suggestions.push(sameFlavor[0], anchor);
+      note = 'همین طعم در دو دسته موجود است؛ دسر لایه‌ای با ژله و کاستر هم‌نام، مطمئن‌ترین انتخاب برای مهمانی است.';
+    } else {
+      const rule = FLAVOR_COMPLEMENTS.find((entry) => entry.flavor === anchor.flavorLabel);
+      const partners = (rule?.partners ?? []).flatMap((name) => searchProducts(context, name));
+      if (partners.length > 0) {
+        suggestions.push(anchor, partners[0]);
+        note = rule?.note ?? 'این دو طعم در کنار هم متعادل می‌شوند.';
+      }
+    }
+  }
+
+  if (suggestions.length === 0) {
+    // ۲) طعمی که در هر دو دسته موجود است → مطمئن‌ترین ترکیب لایه‌ای
+    for (const jelly of productsOf(context, 'jelly')) {
+      if (!isAvailable(jelly)) continue;
+      const partner = productsOf(context, 'custard').find(
+        (product) => product.flavorLabel === jelly.flavorLabel && isAvailable(product),
+      );
+      if (partner) {
+        suggestions.push(jelly, partner);
+        note = 'همین طعم در دو دسته موجود است؛ ژله و کاستر هم‌طعم، دسر لایه‌ای خوش‌رنگی می‌سازند.';
+        break;
+      }
+    }
+  }
+
+  if (suggestions.length === 0) {
+    // ۳) پیشنهادهای پیش‌فرض از ترکیب‌های تحریریه، فقط اگر در فروشگاه موجود باشند
+    for (const rule of FLAVOR_COMPLEMENTS) {
+      const base = searchProducts(context, `ژله ${rule.flavor}`)[0] ?? searchProducts(context, rule.flavor)[0];
+      const partner = rule.partners.flatMap((name) => searchProducts(context, name))[0];
+      if (base && partner && isAvailable(base) && isAvailable(partner)) {
+        suggestions.push(base, partner);
+        note = rule.note;
+        break;
+      }
+    }
+  }
+
+  if (suggestions.length === 0) {
+    return reply(
+      'pairing',
+      bubble(
+        'برای پیشنهاد ترکیب طعم، فعلاً محصول کافی در فهرست فروشگاه نمی‌بینم؛ ترجیح می‌دهم چیزی از خودم نسازم.',
+        'از صفحهٔ محصولات، طعم‌های موجود را ببینید.',
+      ),
+      { links: [link('مشاهدهٔ محصولات', '/products')], grounded: true },
+    );
+  }
+
+  return reply(
+    'pairing',
+    bubble(
+      'این ترکیب را پیشنهاد می‌کنم:',
+      ...suggestions.map((product) => `• ${describeProduct(product)}`),
+      note,
+      'هر دو قلم را می‌توانید همان‌جا در سبد خرید بگذارید و به‌صورت یک دسر لایه‌ای سرو کنید.',
+    ),
+    {
+      links: [...productLinks(suggestions, 3), link('سبد خرید', '/cart')],
+      grounded: true,
+      suggestions: [
+        { label: 'مقدار برای ۸ نفر', prompt: 'برای ۸ نفر چند بسته لازم است؟' },
+        { label: 'دستور تهیه', prompt: 'طرز تهیه ژله چطور است؟' },
+      ],
+    },
+  );
+}
+
+/** نشانه‌های سلیقه در متن کاربر → پیشنهاد شخصی‌سازی‌شده */
+type Preference = 'cold' | 'warm' | 'chocolate' | 'fruity' | 'creamy' | 'quick' | 'party';
+
+const PREFERENCE_RULES: { preference: Preference; keywords: string[] }[] = [
+  { preference: 'cold', keywords: ['سرد', 'خنک', 'یخچال', 'تابستان', 'تابستانی', 'بستنی'] },
+  { preference: 'warm', keywords: ['گرم', 'داغ', 'زمستان', 'شب یلدا', 'یلدا'] },
+  { preference: 'chocolate', keywords: ['شکلات', 'کاکائو', 'شکلاتی'] },
+  { preference: 'fruity', keywords: ['میوه', 'میوه‌ای', 'میوهای', 'ترش', 'کم شیرین'] },
+  { preference: 'creamy', keywords: ['خامه', 'خامه‌ای', 'مخملی', 'شیری', 'محلبی'] },
+  { preference: 'quick', keywords: ['سریع', 'آسان', 'وقت ندارم', 'فوری', 'کم‌زحمت'] },
+  { preference: 'party', keywords: ['مهمانی', 'مهمان', 'جشن', 'تولد', 'میزبان', 'پذیرایی', 'ولنتاین'] },
+];
+
+function detectPreferences(normalized: string): Preference[] {
+  return PREFERENCE_RULES.filter((rule) =>
+    rule.keywords.some((keyword) => normalized.includes(normalizePersian(keyword))),
+  ).map((rule) => rule.preference);
+}
+
+function suggestionReply(context: AssistantContext, preferences: Preference[]): LocalReply {
+  if (preferences.length === 0) {
+    return reply(
+      'suggestion',
+      bubble(
+        'برای اینکه پیشنهادم دقیق باشد، دو چیز را بگویید: دسر سرد می‌خواهید یا گرم، و شکلاتی دوست دارید یا میوه‌ای؟',
+        'بعد همان‌جا از بین محصولات موجود فروشگاه، ترکیب مناسب را با قیمت واقعی برایتان می‌چینم.',
+      ),
+      {
+        suggestions: [
+          { label: 'سرد و میوه‌ای', prompt: 'یک دسر سرد و میوه‌ای پیشنهاد بده' },
+          { label: 'شکلاتی', prompt: 'یک دسر شکلاتی پیشنهاد بده' },
+          { label: 'گرم و مخملی', prompt: 'یک دسر گرم و مخملی پیشنهاد بده' },
+          { label: 'سریع و آسان', prompt: 'یک دسر سریع و آسان پیشنهاد بده' },
+        ],
+      },
+    );
+  }
+
+  const wantsCold = preferences.includes('cold') || preferences.includes('fruity') || preferences.includes('party');
+  const wantsWarm = preferences.includes('warm') || preferences.includes('creamy') || preferences.includes('chocolate');
+
+  const picks: AssistantProductFact[] = [];
+  const reasons: string[] = [];
+
+  const pushPick = (product: AssistantProductFact | undefined, reason: string) => {
+    if (!product || !isAvailable(product)) return;
+    if (picks.some((item) => item.id === product.id)) return;
+    picks.push(product);
+    reasons.push(reason);
+  };
+
+  if (preferences.includes('chocolate')) {
+    pushPick(productsOf(context, 'custard').find((p) => p.flavorLabel.includes('کاکائو')), 'شکلاتی و مخملی؛ گرم یا سرد سرو می‌شود.');
+    pushPick(productsOf(context, 'jelly').find((p) => p.flavorLabel.includes('موز')), 'کنار کاستر شکلاتی، دسر لایه‌ای معروفی می‌سازد.');
+  }
+  if (wantsCold) {
+    pushPick(productsOf(context, 'jelly')[0], 'ژله سرد و سبک؛ برای پذیرایی و هوای گرم عالی است.');
+  }
+  if (wantsWarm) {
+    pushPick(productsOf(context, 'custard')[0], 'کاستر گرم و مخملی؛ روی میوه یا به‌تنهایی.');
+  }
+  if (preferences.includes('quick')) {
+    pushPick(productsOf(context, 'jelly')[0], 'سریع‌ترین گزینه: سه مرحله و بعد یخچال.');
+  }
+  if (preferences.includes('fruity')) {
+    const fruity = productsOf(context, 'jelly').find((p) => ['توت فرنگی', 'انار', 'آلبالو', 'هلو'].some((f) => p.flavorLabel.includes(f)));
+    pushPick(fruity, 'طعم میوه‌ای و خوش‌رنگ برای لایه‌بندی.');
+  }
+  if (picks.length === 0) {
+    pushPick(context.products.find(isAvailable), 'نزدیک‌ترین گزینهٔ موجود به سلیقهٔ شما.');
+  }
+  if (picks.length === 0) {
+    return reply('suggestion', CLARIFY_REPLY, { grounded: true });
+  }
+
+  const summary = preferences.includes('party')
+    ? 'برای پذیرایی، ترکیب ژله سرد و کاستر مخملی معمولاً جواب می‌دهد.'
+    : preferences.includes('quick')
+      ? 'این گزینه‌ها کم‌زحمت‌ترین راه رسیدن به یک دسر خانگی‌اند.'
+      : 'این ترکیب با سلیقهٔ گفته‌شدهٔ شما هم‌خوان است.';
+
+  return reply(
+    'suggestion',
+    bubble(
+      summary,
+      ...picks.map((product, index) => `${fa(index + 1)}. ${describeProduct(product)} — ${reasons[index] ?? ''}`.trim()),
+      'قیمت و موجودی بالا از کاتالوگ فعلی فروشگاه خوانده شده است.',
+    ),
+    {
+      links: [...productLinks(picks, 3), link('سبد خرید', '/cart')],
+      grounded: true,
+      suggestions: [
+        { label: 'دستور تهیه', prompt: picks[0].category === 'jelly' ? 'طرز تهیه ژله چطور است؟' : 'طرز تهیه کاستر چطور است؟' },
+        { label: 'مقدار برای ۸ نفر', prompt: 'برای ۸ نفر چند بسته لازم است؟' },
+      ],
+    },
+  );
+}
+
+function shippingReply(context: AssistantContext): LocalReply {
+  return reply(
+    'shipping',
+    bubble(
+      freeShippingLine(context),
+      `کرایهٔ ارسال عادی ${price(context.settings.standardShippingCost)} و ارسال سریع ${price(context.settings.expressShippingCost)} است.`,
+      'مبلغ نهایی و وضعیت ارسال رایگان را در صفحهٔ سبد خرید و تسویه حساب می‌بینید.',
+    ),
+    {
+      links: [link('سبد خرید', '/cart'), link('مشاهدهٔ محصولات', '/products')],
+      grounded: true,
+    },
+  );
+}
+
+function orderHelpReply(): LocalReply {
+  return reply(
+    'order-help',
+    bubble(
+      'سفارش خیلی ساده است:',
+      '۱. محصول را از صفحهٔ محصولات انتخاب و «افزودن به سبد خرید» را بزنید.',
+      '۲. در سبد خرید تعداد را بررسی کنید.',
+      '۳. در تسویه حساب مشخصات تحویل‌گیرنده را پر کنید و سفارش را ثبت کنید.',
+      'اگر جایی گیر کردید، همین‌جا بنویسید تا راهنمایی کنم.',
+    ),
+    {
+      links: [link('مشاهدهٔ محصولات', '/products'), link('سبد خرید', '/cart'), link('تسویه حساب', '/checkout')],
+    },
+  );
+}
+
+/* ── تشخیص موضوع پرسش ──────────────────────────────────────── */
+
+interface IntentRule {
+  id: AssistantCapabilityId;
+  keywords: string[];
+}
+
+const INTENT_RULES: IntentRule[] = [
+  { id: 'recipe-jelly', keywords: ['طرز تهیه ژله', 'دستور ژله', 'ژله درست کنم', 'ژله بپزم', 'چطور ژله'] },
+  { id: 'recipe-custard', keywords: ['طرز تهیه کاستر', 'دستور کاستر', 'کاستر درست کنم', 'کاستر بپزم', 'چطور کاستر'] },
+  { id: 'servings', keywords: ['چند بسته', 'چقدر لازم', 'چقدر پودر', 'برای چند نفر', 'مقدار لازم', 'به اندازه'] },
+  {
+    id: 'budget',
+    keywords: ['بودجه', 'با این پول', 'چقدر پول', 'کم هزینه', 'کم‌هزینه', 'ارزان ترین', 'ارزان‌ترین'],
+  },
+  { id: 'pairing', keywords: ['ترکیب طعم', 'ترکیب', 'کنار هم', 'با هم بخوره', 'لایه ای', 'لایه‌ای', 'با چی', 'چی خوبه'] },
+  {
+    id: 'suggestion',
+    keywords: [
+      'پیشنهاد بده',
+      'پیشنهاد کن',
+      'پیشنهاد دسر',
+      'چی درست کنم',
+      'چه دسری',
+      'سلیقه',
+      'مهمانی',
+      'تولد',
+      'پذیرایی',
+      'دسر',
+      'میخوام',
+      'میخام',
+      'می خواهم',
+      'دوست دارم',
+      'شیرینی',
+    ],
+  },
+  { id: 'shipping', keywords: ['ارسال', 'کرایه', 'پست', 'رایگان', 'هزینه ارسال', 'پیک'] },
+  { id: 'order-help', keywords: ['سفارش', 'خرید', 'سبد', 'تسویه', 'پرداخت', 'ثبت سفارش', 'رهگیری'] },
+  {
+    id: 'price-stock',
+    keywords: [
+      'قیمت',
+      'موجود',
+      'موجودی',
+      'تمام شده',
+      'قیمتش',
+      'چند تومان',
+      // محاوره: «چنده»، «چقدره»، «چند در میاد»
+      'چنده',
+      'چقدره',
+      'چقدر می',
+      'چند میشه',
+      'چند در میاد',
+      'چند میارزه',
+    ],
+  },
+  { id: 'catalog', keywords: ['محصولات', 'محصول', 'معرفی', 'لیست', 'چیا دارید', 'چه دارید', 'فروشگاه', 'کاتالوگ', 'طعم ها', 'طعمها', 'چند تا'] },
+  { id: 'flavors', keywords: ['چه طعم', 'چی طعم', 'طعم ها', 'طعمها', 'طعم هاش', 'انواع طعم', 'طعم دارید', 'چه مزه', 'طعماش'] },
+  { id: 'guide', keywords: ['انتخاب', 'راهنما', 'تفاوت', 'کدام', 'بهتر', 'ژله یا کاستر', 'تازه کار', 'نمی دانم چه'] },
+  { id: 'recipe-jelly', keywords: ['ژله'] },
+  { id: 'recipe-custard', keywords: ['کاستر'] },
+];
+
+/** تشخیص بهترین موضوع؛ امتیاز = مجموع طول کلیدواژه‌های پیداشده */
+function detectIntent(normalized: string): { id: AssistantCapabilityId; score: number } {
+  let best: { id: AssistantCapabilityId; score: number } = { id: 'guide', score: 0 };
+  for (const rule of INTENT_RULES) {
+    const score = rule.keywords.reduce(
+      (sum, keyword) => (normalized.includes(normalizePersian(keyword)) ? sum + keyword.length : sum),
+      0,
+    );
+    if (score > best.score) best = { id: rule.id, score };
+  }
+  return best;
+}
+
+const GREETING_PATTERNS = ['سلام', 'درود', 'وقت بخیر', 'روز بخیر', 'hello', 'hi', 'کمک', 'شروع'];
+
+const DOMAIN_HINTS = [
+  'ژینو', 'ژله', 'کاستر', 'دسر', 'محصول', 'خرید', 'سفارش', 'قیمت', 'موجود', 'طعم',
+  'تهیه', 'دستور', 'بسته', 'ارسال', 'سبد', 'پودر', 'مهمانی', 'پیشنهاد', 'ترکیب', 'کیک', 'دسر',
+];
+
+/** هستهٔ تشخیص موضوع و ساخت پاسخ (بدون پیوست‌کردن منبع داده) */
+function resolveAnswer(question: string, context: AssistantContext): LocalReply {
+  const normalized = normalizePersian(question);
+
+  if (normalized.length === 0) {
+    return reply('open', CLARIFY_REPLY, { suggestions: DEFAULT_SUGGESTIONS.slice(0, 4) });
+  }
+
+  // سلام و احوال‌پرسی
+  if (normalized.length <= 12 && GREETING_PATTERNS.some((item) => normalized.includes(item))) {
+    return reply('open', ASSISTANT_INTRO, {
+      grounded: true,
+      suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+    });
+  }
+
+  // «اطلاعاتت را از کجا می‌آوری؟» → پاسخ صادقانه از وضعیت واقعی همگام‌سازی
+  if (SOURCE_INFO_KEYWORDS.some((keyword) => normalized.includes(normalizePersian(keyword)))) {
+    return sourceInfoReply(context);
+  }
+
+  const people = parsePeople(normalized);
+  const intent = detectIntent(normalized);
+  const flavorProducts = matchFlavorProducts(context, normalized);
+
+  // اولویت‌ها: عدد نفرات ← بودجه ← تشخیص موضوع ← تطبیق طعم
+  if (people !== null && (intent.id === 'servings' || intent.score === 0 || normalized.includes('نفر'))) {
+    const category: ProductCategory | null = normalized.includes('کاستر')
+      ? 'custard'
+      : normalized.includes('ژله')
+        ? 'jelly'
+        : null;
+    return servingsReply(context, people, category);
+  }
+
+  const mentionsShipping = /(ارسال|کرایه|پست|پیک)/.test(normalized);
+  const asksCost = /(هزینه|کرایه|چند|چقدر|قیمت)/.test(normalized);
+
+  // «هزینه پست چنده؟» دربارهٔ محصول نیست، دربارهٔ ارسال است
+  if (
+    flavorProducts.length === 0 &&
+    ((intent.id === 'shipping' && mentionsShipping) || (mentionsShipping && asksCost))
+  ) {
+    return shippingReply(context);
+  }
+
+  if (intent.id === 'budget' || (intent.id !== 'price-stock' && !mentionsShipping && /(بودجه|با \d)/.test(normalized))) {
+    const amount = parseAmount(normalized);
+    if (amount !== null) return budgetReply(context, amount);
+  }
+
+  if (flavorProducts.length > 0 && (intent.id === 'price-stock' || intent.score === 0)) {
+    return intent.id === 'price-stock'
+      ? priceStockReply(context, flavorProducts)
+      : flavorReply(context, flavorProducts);
+  }
+
+  // اگر کاربر دنبال محصولی با طعمی است که در فروشگاه نیست
+  // («ژله گیلاس دارید؟») پیش از هر پاسخ دیگری، صریح و صادقانه بگوییم.
+  const asksAboutAvailability = /(دارید|دارین|موجود|قیمت|قیمتش|هست|هستش|بفروش|می فروش|چند تومان)/.test(normalized);
+  const missingFlavor = FLAVOR_HINTS.some(
+    (hint) =>
+      normalized.includes(normalizePersian(hint)) &&
+      !context.products.some((product) => product.flavorLabel.includes(normalizePersian(hint))),
+  );
+  if (missingFlavor && asksAboutAvailability && intent.score < 9) {
+    return flavorReply(context, []);
+  }
+
+  // فقط موضوع‌های واقعاً تشخیص‌داده‌شده پاسخ می‌گیرند؛ وقتی هیچ
+  // کلیدواژه‌ای پیدا نشد، سراغ پاسخ‌های عمومی/محدودهٔ کار می‌رویم.
+  if (intent.score > 0) switch (intent.id) {
+    case 'recipe-jelly':
+      return recipeReply(context, normalized.includes('کاستر') && !normalized.includes('ژله') ? 'custard' : 'jelly');
+    case 'recipe-custard':
+      return recipeReply(context, 'custard');
+    case 'servings':
+      return servingsReply(context, people ?? 8, normalized.includes('کاستر') ? 'custard' : normalized.includes('ژله') ? 'jelly' : null);
+    case 'budget': {
+      const amount = parseAmount(normalized);
+      return amount !== null
+        ? budgetReply(context, amount)
+        : reply('budget', 'بودجهٔ تقریبی‌تان را بفرمایید (مثلاً «۵۰۰ هزار تومان») تا ترکیب پیشنهادی از محصولات موجود بسازم.', {
+            grounded: true,
+            suggestions: [
+              { label: '۳۰۰ هزار تومان', prompt: 'با ۳۰۰ هزار تومان چه ترکیبی بگیرم؟' },
+              { label: '۵۰۰ هزار تومان', prompt: 'با ۵۰۰ هزار تومان چه ترکیبی بگیرم؟' },
+            ],
+          });
+    }
+    case 'pairing':
+      return pairingReply(context, flavorProducts);
+    case 'suggestion': {
+      const preferences = detectPreferences(normalized);
+      // بدون هیچ نشانهٔ سلیقه، اگر مشتری طعم/محصول مشخصی را نام برده،
+      // همان را معرفی می‌کنیم؛ وگرنه دو پرسش کوتاه برای دقیق‌شدن می‌پرسیم.
+      if (preferences.length === 0 && flavorProducts.length > 0) {
+        return flavorReply(context, flavorProducts);
+      }
+      return suggestionReply(context, preferences);
+    }
+    case 'shipping':
+      return shippingReply(context);
+    case 'order-help':
+      return orderHelpReply();
+    case 'price-stock':
+      return priceStockReply(context, flavorProducts);
+    case 'catalog':
+      return catalogReply(context);
+    case 'flavors':
+      return flavorsReply(context);
+    case 'guide':
+      return flavorProducts.length > 0 ? flavorReply(context, flavorProducts) : guideReply(context);
+    default:
+      break;
+  }
+
+  if (flavorProducts.length > 0) return flavorReply(context, flavorProducts);
+
+  // پرسش بیرون از حوزهٔ ژینو
+  const inDomain = DOMAIN_HINTS.some((hint) => normalized.includes(normalizePersian(hint)));
+  if (!inDomain) {
+    return reply('scope', SCOPE_REPLY, {
+      grounded: true,
+      links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
+      suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+    });
+  }
+
+  return reply('open', CLARIFY_REPLY, {
+    grounded: true,
+    suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+  });
+}
+
+/**
+ * پاسخ محلی به یک پرسش کاربر.
+ *
+ * خروجی همیشه یک AssistantReply است؛ هیچ خطایی به UI نمی‌رسد و
+ * منبع داده (دیتابیس یا دادهٔ محلی) همیشه به پاسخ پیوست می‌شود تا
+ * رابط کاربری و مدل بتوانند صادقانه بگویند پاسخ بر چه چیزی ساخته شده.
+ */
+export function answerLocally(question: string, context: AssistantContext): AssistantReply {
+  return { ...resolveAnswer(question, context), dataSource: context.dataSource };
+}
+
+/** یادداشت شفاف منبع داده — برای نمایش زیر پاسخ‌های مهم */
+export function dataSourceNote(context: AssistantContext): string {
+  return context.dataSource === 'database'
+    ? 'این پاسخ از دادهٔ زندهٔ دیتابیس فروشگاه (محصولات، قیمت، موجودی و دستورها) خوانده شده است.'
+    : `این پاسخ از ${dataSourceLabel(context.dataSource)} ساخته شده است؛ اتصال دیتابیس فروشگاه در این لحظه فعال نیست.`;
+}

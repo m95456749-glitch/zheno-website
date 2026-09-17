@@ -25,6 +25,7 @@ import CheckoutPage from './pages/CheckoutPage';
 import RecipesPage from './pages/RecipesPage';
 import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
+import AssistantPage from './pages/AssistantPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { useRemoteCatalog } from './services/catalogSync';
 import { useRemoteSiteData } from './services/siteDataSync';
@@ -53,6 +54,10 @@ function Storefront() {
         <Route path="/recipes" element={<RecipesPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
+        {/* دستیار ژینو (فاز ۵) — صفحهٔ مستقل؛ دکمهٔ شناور به همین
+            مسیر می‌رود و در Layout روی همین مسیر نمایش داده نمی‌شود
+            تا دوباره تکرار نشود. بقیهٔ مسیرها دست‌نخورده‌اند. */}
+        <Route path="/assistant" element={<AssistantPage />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

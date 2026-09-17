@@ -1,14 +1,16 @@
 /* ============================================================
-   ZHINO — «دستیار ژینو» (فاز ۴ — فقط رابط کاربری)
-   دکمهٔ شناور + محیط گفت‌وگو.
+   ZHINO — «دستیار ژینو» (فاز ۵)
+   دو بخش:
+     ۱) دکمهٔ شناور — همان هویت فاز ۴، این بار لینک به /assistant
+     ۲) صفحهٔ مستقل دستیار: سربرگ، نشان وضعیت و محیط گفتگو
    رنگ‌بندی هم‌هویت با برند: burgundy #71313B / wine-950 #2A0B12
    روی زمینهٔ ivory. سبک: شیشه‌ای، ظریف، لوکس، بدون شلوغی.
    همهٔ مقادیر از توکن‌های طراحی index.css می‌آیند.
    ============================================================ */
 
-/* ------------------------------------------------------------
-   دکمهٔ شناور — همیشه سمت چپ صفحه، ثابت در اسکرول
-   ------------------------------------------------------------ */
+/* ============================================================
+   ۱) دکمهٔ شناور — همیشه سمت چپ صفحه، ثابت در اسکرول
+   ============================================================ */
 
 .zhino-assistant-launcher {
   position: fixed;
@@ -19,7 +21,7 @@
   /* مقدار ساده اول = جایگزین برای مرورگرهای قدیمی بدون env() */
   bottom: clamp(0.9rem, 3vw, 1.6rem);
   bottom: calc(env(safe-area-inset-bottom, 0px) + clamp(0.9rem, 3vw, 1.6rem));
-  z-index: 45; /* زیر هدر (50)، زیر توست (60)، زیر چت (70) */
+  z-index: 45; /* زیر هدر (50)، زیر توست (60) */
   display: grid;
   place-items: center;
   width: 3.5rem;
@@ -28,6 +30,7 @@
   border-radius: 9999px;
   border: 1px solid rgba(250, 247, 242, 0.2);
   color: var(--color-cream-50);
+  text-decoration: none;
   background-color: rgba(90, 23, 37, 0.92);
   background-image: linear-gradient(
     152deg,
@@ -61,6 +64,7 @@
 /* لایهٔ حرکت شناور — جدا از transform خود دکمه، تا hover با
    انیمیشن دائمی تداخل نکند */
 .zhino-assistant-float {
+  position: relative;
   display: grid;
   place-items: center;
   animation: zhino-assistant-float 6.4s ease-in-out infinite;
@@ -100,7 +104,7 @@
   display: block;
 }
 
-/* نشان «تازه» — نقطهٔ ثابت طلایی، بدون چشمک؛ بعد از اولین باز شدن می‌رود */
+/* نشان «تازه» — نقطهٔ ثابت طلایی، بدون چشمک؛ بعد از اولین بازدید می‌رود */
 .zhino-assistant-dot {
   position: absolute;
   top: 0.15rem;
@@ -164,39 +168,39 @@
   transform: translateY(-1px) scale(0.972);
 }
 
-/* ------------------------------------------------------------
-   محیط گفت‌وگو
-   ------------------------------------------------------------ */
+/* ============================================================
+   ۲) سربرگ صفحهٔ دستیار
+   ============================================================ */
 
-.zhino-assistant-panel {
-  position: fixed;
-  /* چسبیده به همان لبهٔ چپِ دکمه (فیزیکی، مثل خود دکمه) */
-  left: clamp(0.75rem, 3vw, 1.5rem);
-  bottom: 1.15rem;
-  bottom: calc(env(safe-area-inset-bottom, 0px) + 1.15rem);
-  z-index: 70;
-  display: flex;
-  flex-direction: column;
-  width: min(25rem, calc(100vw - 1.5rem));
-  /* vh برای مرورگرهای بدون dvh؛ بعدی روی موبایل نوار آدرس را حساب می‌کند */
-  max-height: min(34rem, calc(100vh - 5rem));
-  max-height: min(34rem, calc(100dvh - 5rem));
-  overflow: hidden;
-  border-radius: 1.375rem;
-  border: 1px solid rgba(41, 35, 33, 0.1);
-  background: #ffffff;
+/* مدال بزرگ ربات روی پلیت burgundy */
+.zhino-assistant-hero-mark {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 6rem;
+  height: 6rem;
+  margin: 0 auto;
+  border-radius: 9999px;
+  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f1e7dc 58%, #ddcbbc 100%);
   box-shadow:
-    0 44px 80px -44px rgba(29, 7, 12, 0.6),
-    0 18px 40px -32px rgba(29, 7, 12, 0.45);
-  /* RTL: گوشهٔ چسبیده به دکمه گوشهٔ پایینِ سمت شروع (چپ) است */
-  transform-origin: bottom left;
-  animation: zhino-assistant-panel-in 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+    inset 0 0 0 1px rgba(184, 154, 98, 0.45),
+    0 26px 44px -26px rgba(29, 7, 12, 0.85);
+  animation: zhino-assistant-mark-in 0.75s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-@keyframes zhino-assistant-panel-in {
+.zhino-assistant-hero-mark img,
+.zhino-assistant-hero-mark svg {
+  width: 4.9rem;
+  height: 4.9rem;
+  object-fit: contain;
+  display: block;
+  animation: zhino-assistant-mark-float 7.5s ease-in-out infinite;
+}
+
+@keyframes zhino-assistant-mark-in {
   from {
     opacity: 0;
-    transform: translateY(10px) scale(0.985);
+    transform: translateY(10px) scale(0.94);
   }
   to {
     opacity: 1;
@@ -204,9 +208,105 @@
   }
 }
 
-/* سربرگ — همان پلیت burgundy صفحه‌های داخلی */
-.zhino-assistant-head {
+@keyframes zhino-assistant-mark-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+/* پیل وضعیت اتصال — شفاف، بدون ادعای اضافه */
+.zhino-assistant-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.75rem;
+  padding-inline: 1rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(250, 247, 242, 0.16);
+  background: rgba(250, 247, 242, 0.04);
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: rgba(243, 237, 228, 0.82);
+}
+
+.zhino-assistant-status-dot {
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 9999px;
+  background: var(--color-gold-400);
+  box-shadow: 0 0 0 3px rgba(201, 174, 124, 0.16);
+}
+
+.zhino-assistant-status.is-online .zhino-assistant-status-dot {
+  background: #7fbf94;
+  box-shadow: 0 0 0 3px rgba(127, 191, 148, 0.18);
+}
+
+.zhino-assistant-status.is-checking .zhino-assistant-status-dot {
+  animation: zhino-assistant-pulse 1.4s ease-in-out infinite;
+}
+
+.zhino-assistant-status.is-error .zhino-assistant-status-dot,
+.zhino-assistant-status.is-unconfigured .zhino-assistant-status-dot {
+  background: var(--color-gold-400);
+}
+
+@keyframes zhino-assistant-pulse {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@media (min-width: 640px) {
+  .zhino-assistant-status {
+    height: 2.25rem;
+    font-size: 0.7rem;
+  }
+}
+
+/* ============================================================
+   ۳) محیط گفتگو
+   ============================================================ */
+
+.zhino-assistant-console {
+  display: flex;
+  flex-direction: column;
+  /* vh برای مرورگرهای بدون dvh؛ بعدی نوار آدرس موبایل را حساب می‌کند */
+  height: clamp(24rem, calc(100vh - 15rem), 42rem);
+  height: clamp(24rem, calc(100dvh - 15rem), 42rem);
+  overflow: hidden;
+  border-radius: 1.375rem;
+  border: 1px solid rgba(41, 35, 33, 0.1);
+  background: #ffffff;
+  box-shadow:
+    0 38px 72px -52px rgba(29, 7, 12, 0.6),
+    0 14px 34px -30px rgba(29, 7, 12, 0.45);
+  animation: zhino-assistant-console-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes zhino-assistant-console-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* سربرگ محیط گفتگو — همان پلیت burgundy، این بار باریک‌تر */
+.zhino-assistant-console-head {
   position: relative;
+  flex: none;
   display: flex;
   align-items: center;
   gap: 0.7rem;
@@ -218,27 +318,13 @@
   color: var(--color-cream-50);
 }
 
-.zhino-assistant-head .zhino-assistant-medallion {
-  width: 2.6rem;
-  height: 2.6rem;
-  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f1e7dc 58%, #ddcbbc 100%);
-  box-shadow:
-    inset 0 0 0 1px rgba(184, 154, 98, 0.4),
-    0 8px 18px -10px rgba(29, 7, 12, 0.7);
-}
-
-.zhino-assistant-head .zhino-assistant-medallion img,
-.zhino-assistant-head .zhino-assistant-medallion svg {
-  width: 2.1rem;
-  height: 2.1rem;
-}
-
 .zhino-assistant-titles {
   flex: 1 1 auto;
   min-width: 0;
 }
 
 .zhino-assistant-title {
+  display: block;
   font-size: 0.92rem;
   font-weight: 700;
   line-height: 1.5;
@@ -261,6 +347,11 @@
   height: 0.32rem;
   border-radius: 9999px;
   background: var(--color-gold-400);
+  flex: none;
+}
+
+.zhino-assistant-sub.is-online::before {
+  background: #7fbf94;
 }
 
 .zhino-assistant-close {
@@ -291,8 +382,44 @@
   transform: scale(0.95);
 }
 
+/* نوار خطا/تلاش دوباره — فقط وقتی مدل پاسخ نداده */
+.zhino-assistant-banner {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  padding: 0.55rem 0.9rem;
+  border-bottom: 1px solid rgba(184, 154, 98, 0.28);
+  background: rgba(224, 208, 171, 0.22);
+  font-size: 0.7rem;
+  line-height: 1.9;
+  color: var(--color-espresso);
+}
+
+.zhino-assistant-banner-retry {
+  flex: none;
+  border-radius: 9999px;
+  border: 1px solid rgba(113, 49, 59, 0.3);
+  background: #ffffff;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: var(--color-wine-800);
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-banner-retry:hover {
+    background: rgba(113, 49, 59, 0.08);
+    border-color: rgba(113, 49, 59, 0.5);
+  }
+}
+
 /* پیام‌ها */
-.zhino-assistant-body {
+.zhino-assistant-feed {
   flex: 1 1 auto;
   min-height: 8rem;
   overflow-y: auto;
@@ -319,18 +446,45 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 1.9rem;
-  height: 1.9rem;
+  width: 2.2rem;
+  height: 2.2rem;
   border-radius: 9999px;
-  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f0e5d9 100%);
-  box-shadow: inset 0 0 0 1px rgba(113, 49, 59, 0.14);
+  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f1e7dc 58%, #ddcbbc 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 154, 98, 0.35),
+    0 8px 18px -12px rgba(29, 7, 12, 0.6);
+}
+
+.zhino-assistant-console-head .zhino-assistant-avatar {
+  width: 2.6rem;
+  height: 2.6rem;
 }
 
 .zhino-assistant-avatar img,
 .zhino-assistant-avatar svg {
+  width: 1.9rem;
+  height: 1.9rem;
+  object-fit: contain;
+  display: block;
+}
+
+.zhino-assistant-console-head .zhino-assistant-avatar img,
+.zhino-assistant-console-head .zhino-assistant-avatar svg {
+  width: 2.1rem;
+  height: 2.1rem;
+}
+
+.zhino-assistant-avatar.is-small {
+  width: 1.9rem;
+  height: 1.9rem;
+  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f0e5d9 100%);
+  box-shadow: inset 0 0 0 1px rgba(113, 49, 59, 0.14);
+}
+
+.zhino-assistant-avatar.is-small img,
+.zhino-assistant-avatar.is-small svg {
   width: 1.6rem;
   height: 1.6rem;
-  object-fit: contain;
 }
 
 .zhino-assistant-bubble {
@@ -383,6 +537,7 @@
   font-size: 0.7rem;
   font-weight: 600;
   color: var(--color-wine-800);
+  text-decoration: none;
   transition:
     background-color 0.25s ease,
     border-color 0.25s ease;
@@ -395,7 +550,7 @@
   }
 }
 
-/* یادداشت صادقانهٔ «نسخهٔ نمایشی» زیر اولین پیام */
+/* یادداشت شفافیت زیر پاسخ (وضعیت اتصال / پاسخ جایگزین محلی) */
 .zhino-assistant-note {
   display: block;
   margin-top: 0.5rem;
@@ -404,6 +559,10 @@
   font-size: 0.66rem;
   line-height: 1.9;
   color: var(--color-mocha-light);
+}
+
+.zhino-assistant-note.is-warn {
+  color: var(--color-gold-700);
 }
 
 /* نشانگر «در حال نوشتن» */
@@ -486,25 +645,11 @@
   cursor: default;
 }
 
-/* ------------------------------------------------------------
-   هم‌زیستی با توست فروشگاه
-   توست پیام‌های سایت (مثلاً «به سبد خرید اضافه شد») وسط/پایین
-   صفحه است؛ وقتی گفتگو باز است کمی بالاتر می‌رود تا نه توست زیر
-   پنل پنهان شود و نه کادر ورود پیام را بپوشاند. تنها همین یک
-   قاعدهٔ اختیاری عوض می‌شود و رفتار خود Toast دست‌نخورده است.
-   ------------------------------------------------------------ */
-
-body.zhino-assistant-open [role='status'] {
-  top: calc(var(--header-h) + 0.75rem);
-  bottom: auto;
-  z-index: 80;
-}
-
 /* کادر ورود پیام + دکمهٔ ارسال */
-.zhino-assistant-compose {
+.zhino-assistant-composer {
   flex: none;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 0.5rem;
   padding: 0.7rem 0.9rem 0.75rem;
   padding-bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
@@ -512,9 +657,16 @@ body.zhino-assistant-open [role='status'] {
   background: #ffffff;
 }
 
-.zhino-assistant-input {
+.zhino-assistant-field {
   flex: 1 1 auto;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.zhino-assistant-input {
+  width: 100%;
   height: 2.75rem;
   border-radius: 9999px;
   border: 1px solid rgba(41, 35, 33, 0.14);
@@ -536,6 +688,13 @@ body.zhino-assistant-open [role='status'] {
   outline: none;
   border-color: rgba(113, 49, 59, 0.5);
   box-shadow: 0 0 0 3px rgba(113, 49, 59, 0.1);
+}
+
+.zhino-assistant-hint {
+  padding-inline: 0.95rem;
+  font-size: 0.62rem;
+  line-height: 1.6;
+  color: var(--color-mocha-light);
 }
 
 .zhino-assistant-send {
@@ -573,9 +732,9 @@ body.zhino-assistant-open [role='status'] {
   cursor: default;
 }
 
-/* ------------------------------------------------------------
-   واکنش‌گرایی — موبایل
-   ------------------------------------------------------------ */
+/* ============================================================
+   ۴) واکنش‌گرایی
+   ============================================================ */
 
 @media (max-width: 639px) {
   .zhino-assistant-launcher {
@@ -595,40 +754,59 @@ body.zhino-assistant-open [role='status'] {
     height: 2.2rem;
   }
 
-  .zhino-assistant-panel {
-    left: 0.6rem;
-    right: 0.6rem;
+  .zhino-assistant-console {
+    height: clamp(26rem, calc(100vh - 12rem), 36rem);
+    height: clamp(26rem, calc(100dvh - 12rem), 36rem);
+    border-radius: 1.15rem;
+  }
+
+  .zhino-assistant-hero-mark {
+    width: 5rem;
+    height: 5rem;
+  }
+
+  .zhino-assistant-hero-mark img,
+  .zhino-assistant-hero-mark svg {
+    width: 4.1rem;
+    height: 4.1rem;
+  }
+
+  .zhino-assistant-bubble,
+  .zhino-assistant-card {
+    max-width: 90%;
     width: auto;
-    max-height: min(32rem, calc(100vh - 4.5rem));
-    max-height: min(32rem, calc(100dvh - 4.5rem));
-    border-radius: 1.25rem;
-    transform-origin: bottom center;
+  }
+
+  /* ۱۶px: کوچک‌تر از این، iOS هنگام فوکوس روی کادر ورود پیام کل صفحه را
+     زوم می‌کند و کاربر را از گفتگو بیرون می‌برد. */
+  .zhino-assistant-input {
+    font-size: 1rem;
+  }
+
+  .zhino-assistant-hint {
+    font-size: 0.66rem;
   }
 }
 
-/* روی ارتفاع‌های کم (موبایل افقی) پنل کوتاه‌تر می‌شود تا کادر ورود پیام بماند */
+/* روی ارتفاع‌های کم (موبایل افقی) کادر ورود پیام باید بماند */
 @media (max-height: 480px) {
-  .zhino-assistant-panel {
-    max-height: calc(100vh - 3rem);
-    max-height: calc(100dvh - 3rem);
-  }
-
-  .zhino-assistant-body {
-    min-height: 5rem;
+  .zhino-assistant-console {
+    height: calc(100vh - 3rem);
+    height: calc(100dvh - 3rem);
   }
 }
 
-/* ------------------------------------------------------------
-   کاهش حرکت — حرکت دائمی حذف می‌شود، همه‌چیز خوانا می‌ماند
-   ------------------------------------------------------------ */
+/* ============================================================
+   ۵) کاهش حرکت — حرکت دائمی حذف می‌شود، همه‌چیز خوانا می‌ماند
+   ============================================================ */
 
 @media (prefers-reduced-motion: reduce) {
-  .zhino-assistant-float {
-    animation: none !important;
-    transform: none !important;
-  }
-
-  .zhino-assistant-panel {
+  .zhino-assistant-float,
+  .zhino-assistant-hero-mark,
+  .zhino-assistant-hero-mark img,
+  .zhino-assistant-hero-mark svg,
+  .zhino-assistant-console,
+  .zhino-assistant-status.is-checking .zhino-assistant-status-dot {
     animation: none !important;
     transform: none !important;
   }

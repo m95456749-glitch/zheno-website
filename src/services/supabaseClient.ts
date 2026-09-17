@@ -84,6 +84,19 @@ export function getSupabaseUrl(): string {
   return RAW_URL;
 }
 
+/**
+ * The publishable (anon) key as configured — "" when unset or unsafe.
+ *
+ * This is the PUBLIC key that already ships in the bundle; the getter
+ * exists so callers that must send it explicitly (e.g. invoking a
+ * Supabase Edge Function with the browser's fetch) do not have to
+ * re-read `import.meta.env`. It is never a secret: Row Level Security
+ * decides what this key may read or write.
+ */
+export function getSupabasePublishableKey(): string {
+  return isPublishableKey(RAW_KEY) ? RAW_KEY : '';
+}
+
 /** True when both variables are present and the key is browser-safe. */
 export function isSupabaseConfigured(): boolean {
   return RAW_URL !== '' && RAW_KEY !== '' && isSecureEndpoint(RAW_URL) && isPublishableKey(RAW_KEY);

@@ -18,7 +18,12 @@
 // ============================================================
 
 import { buildSync } from 'esbuild';
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { JSDOM, VirtualConsole } from 'jsdom';
+
+const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 let failures = 0;
 const fail = (msg) => {
@@ -42,6 +47,9 @@ const BASE_DEFINES = {
   'import.meta.env.VITE_SUPABASE_URL': '""',
   'import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY': '""',
   'import.meta.env.VITE_SUPABASE_ANON_KEY': '""',
+  // دستیار ژینو (فاز ۵): هیچ Backend هوش مصنوعی‌ای پیکربندی نشده →
+  // صفحهٔ /assistant باید کاملاً آفلاین و بدون درخواست شبکه کار کند.
+  'import.meta.env.VITE_ASSISTANT_API_URL': '""',
 };
 
 function buildApp(defines) {
@@ -64,6 +72,7 @@ let appCodeWithDb;
 let appCodeConnected;
 let appCodeSecretKey;
 let appCodeInsecureUrl;
+let appCodeWithAssistant;
 try {
   appCode = buildApp(BASE_DEFINES);
   ok(`app bundles for runtime test (${(appCode.length / 1024).toFixed(0)} KB)`);
@@ -103,6 +112,14 @@ try {
   appCodeWithDb = buildApp(dbDefines);
   appCodeConnected = buildApp({ ...dbDefines, 'import.meta.env.VITE_ADMIN_AUTH_MODE': '""' });
   ok('app bundles with a database configured (connected + offline-fallback tests)');
+
+  // Same app with the assistant's AI proxy configured (a fake endpoint:
+  // the test proves the request shape and the UI, never a real model).
+  appCodeWithAssistant = buildApp({
+    ...BASE_DEFINES,
+    'import.meta.env.VITE_ASSISTANT_API_URL': '"https://assistant.smoke.test/chat"',
+  });
+  ok('app bundles with the assistant backend configured (AI proxy test)');
 } catch (err) {
   fail('esbuild bundling failed: ' + (err?.message ?? err));
   process.exit(1);
@@ -1846,6 +1863,1017 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
     else fail('local checkout flow runtime errors:\n    - ' + errors.join('\n    - '));
   } finally {
     dom.window.close();
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════
+// ASSISTANT SUITE (phase 5): the standalone /assistant page, the
+// floating launcher → route (no popup), «بازگشت به سایت», the browser
+// back button, and the chat itself — offline (local grounded engine)
+// and connected (AI proxy, mocked).
+// ════════════════════════════════════════════════════════════
+
+const OFFLINE_FETCH = () => Promise.reject(new Error('offline (smoke test)'));
+
+/** Send a chat message the way a user does (type → Enter-less submit). */
+async function sendChatMessage(dom, waitFor, text) {
+  typeInto(dom, '#zhino-assistant-input', text);
+  const ready = await waitFor(() => {
+    const button = dom.window.document.querySelector('button[aria-label="ارسال پیام"]');
+    return Boolean(button) && !button.disabled;
+  });
+  if (!ready) throw new Error('send button never enabled for: ' + text);
+  dom.window.document.querySelector('button[aria-label="ارسال پیام"]').click();
+}
+
+/** Open /assistant by clicking the floating launcher on a store page. */
+async function openAssistantFromStore(dom, waitFor, text) {
+  const launcher = dom.window.document.querySelector('a.zhino-assistant-launcher');
+  if (!launcher) return false;
+  launcher.click();
+  return waitFor(() => text().includes('توانایی‌های دستیار'));
+}
+
+// ── 31. /assistant renders as a standalone page ─────────────
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+  });
+  try {
+    // React renders asynchronously — wait for the page before asserting.
+    const rendered = await waitFor(() => text().includes('دستیار ژینو'));
+    if (!rendered) fail('assistant page — never rendered: ' + text().slice(0, 160));
+    const body = text();
+    expectContains('assistant page', body, 'دستیار ژینو');
+    expectContains('assistant page', body, 'بازگشت به سایت');
+    expectContains('assistant page', body, 'توانایی‌های دستیار');
+    expectContains('assistant page', body, 'سلام و درود');
+    // honest disclosure: no AI backend in this build, but the data source is named
+    expectContains('assistant page', body, 'بدون مدل هوشمند');
+    // the floating launcher must not be duplicated on its own page
+    const launchers = dom.window.document.querySelectorAll('.zhino-assistant-launcher').length;
+    if (launchers === 0) ok('assistant page — floating launcher is not duplicated');
+    else fail(`assistant page — launcher rendered ${launchers} time(s) on /assistant`);
+    // no popup any more
+    if (dom.window.document.querySelectorAll('.zhino-assistant-panel').length === 0) {
+      ok('assistant page — no popup panel exists (popup replaced by the page)');
+    } else {
+      fail('assistant page — a popup panel is still rendered');
+    }
+    // ready-made suggestions render as buttons
+    const chips = Array.from(dom.window.document.querySelectorAll('button.zhino-assistant-chip')).map(
+      (chip) => chip.textContent ?? '',
+    );
+    if (chips.some((label) => label.includes('راهنمای انتخاب محصول'))) {
+      ok('assistant page — ready-made suggestions render');
+    } else {
+      fail(`assistant page — suggestion chips missing (got: ${chips.join(' | ')})`);
+    }
+    // empty message can never be sent
+    const sendButton = dom.window.document.querySelector('button[aria-label="ارسال پیام"]');
+    if (sendButton && sendButton.disabled) ok('assistant page — empty message cannot be sent');
+    else fail('assistant page — send button is enabled with an empty message');
+    // RTL document
+    if (dom.window.document.documentElement.getAttribute('dir') === 'rtl') {
+      ok('assistant page — document stays RTL');
+    } else {
+      fail('assistant page — document dir is not rtl');
+    }
+    if (errors.length === 0) ok('assistant page — no runtime errors');
+    else fail('assistant page runtime errors:\n    - ' + errors.join('\n    - '));
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 32. Floating launcher routes to /assistant (no popup) ───
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/products', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+  });
+  try {
+    await waitFor(() => text().includes('محصولات ژینو'));
+    const launcher = dom.window.document.querySelector('a.zhino-assistant-launcher');
+    if (launcher && (launcher.getAttribute('href') ?? '').endsWith('/assistant')) {
+      ok('floating launcher — is a real link to /assistant');
+    } else {
+      fail('floating launcher — expected an <a href="…/assistant">, got: ' + (launcher ? launcher.outerHTML.slice(0, 120) : 'none'));
+    }
+    const opened = await openAssistantFromStore(dom, waitFor, text);
+    if (opened) ok('floating launcher — click opens the /assistant page');
+    else fail('floating launcher — click did not open /assistant: ' + text().slice(0, 160));
+    if (dom.window.location.pathname.endsWith('/assistant')) {
+      ok('floating launcher — the URL is /assistant');
+    } else {
+      fail('floating launcher — unexpected URL: ' + dom.window.location.pathname);
+    }
+    if (dom.window.document.querySelectorAll('.zhino-assistant-launcher').length === 0) {
+      ok('floating launcher — hidden while on the assistant page');
+    } else {
+      fail('floating launcher — still rendered on /assistant');
+    }
+    expectNoErrors('floating launcher', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 33. «بازگشت به سایت» → home, and the browser Back works ─
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/products', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+  });
+  try {
+    await waitFor(() => text().includes('محصولات ژینو'));
+    const opened = await openAssistantFromStore(dom, waitFor, text);
+    if (!opened) fail('assistant back — could not open /assistant');
+
+    clickButtonByContains(dom, 'بازگشت به سایت');
+    const home = await waitFor(() => text().includes('واردکننده و پخش‌کننده پودر ژله و کاستر'));
+    if (home) ok('«بازگشت به سایت» — lands on the storefront home page');
+    else fail('«بازگشت به سایت» — home did not render: ' + text().slice(0, 160));
+    if (dom.window.location.pathname.replace(/\/+$/, '') === '/zheno-website') {
+      ok('«بازگشت به سایت» — the URL is the site root');
+    } else {
+      fail('«بازگشت به سایت» — unexpected URL: ' + dom.window.location.pathname);
+    }
+
+    // The browser's own Back button must walk back into the app (SPA),
+    // not out of it — the route is a normal history entry.
+    dom.window.history.back();
+    const returned = await waitFor(() => text().includes('توانایی‌های دستیار'));
+    if (returned) ok('browser Back — returns to the assistant page');
+    else fail('browser Back — did not return to /assistant: ' + text().slice(0, 160));
+    expectNoErrors('assistant back navigation', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34. Chat works offline: grounded answers from real data ──
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant chat — the chat console never rendered');
+
+    // typing state appears while the assistant is answering
+    await sendChatMessage(dom, waitFor, 'قیمت ژله توت فرنگی چند است؟');
+    const typing = await waitFor(
+      () => Boolean(dom.window.document.querySelector('.zhino-assistant-typing')),
+      3000,
+    );
+    if (typing) ok('assistant chat — «در حال پاسخ‌گویی» state shows');
+    else fail('assistant chat — typing indicator never showed');
+
+    // …and the answer carries the real catalog price
+    const priced = await waitFor(() => text().includes('۲۰۰٬۰۰۰ تومان'));
+    if (priced) ok('assistant chat — price answer comes from the real catalog');
+    else fail('assistant chat — no grounded price answer: ' + text().slice(-220));
+    expectContains('assistant chat', text(), 'ژله توت فرنگی');
+
+    // the user's own message is rendered (RTL, right-aligned bubble)
+    if (dom.window.document.querySelector('.zhino-assistant-row.is-user')) {
+      ok('assistant chat — the user message is rendered');
+    } else {
+      fail('assistant chat — user message bubble missing');
+    }
+
+    // a ready-made suggestion answers with the official on-pack recipe
+    clickButtonByContains(dom, 'طرز تهیه ژله');
+    const recipe = await waitFor(() => text().includes('۱.۵ لیوان آب'));
+    if (recipe) ok('assistant chat — suggestion answers with the official recipe');
+    else fail('assistant chat — recipe answer missing: ' + text().slice(-220));
+
+    // budget capability, computed from real prices only
+    await sendChatMessage(dom, waitFor, 'با ۳۰۰ هزار تومان چه ترکیبی بگیرم؟');
+    const budget = await waitFor(() => text().includes('از بودجه باقی می‌ماند'));
+    if (budget) ok('assistant chat — budget suggestion is computed from real prices');
+    else fail('assistant chat — budget answer missing: ' + text().slice(-220));
+
+    // out-of-scope questions are politely declined (no invented answer)
+    await sendChatMessage(dom, waitFor, 'هوا امروز چطور است؟');
+    const scoped = await waitFor(() => text().includes('فقط دربارهٔ محصولات ژینو'));
+    if (scoped) ok('assistant chat — unrelated questions get the honest scope answer');
+    else fail('assistant chat — scope answer missing: ' + text().slice(-220));
+
+    expectNoErrors('assistant chat', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 35. Connected AI path: request shape + no key in the browser ──
+// The AI proxy is mocked: the app must send the question and the real
+// catalog to the configured endpoint, render the model's answer, show
+// the honest «متصل» state — and never carry an API key.
+{
+  const calls = [];
+  const assistantFetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const method = (init.method ?? 'GET').toUpperCase();
+    const headers = init.headers ? Object.fromEntries(new globalThis.Headers(init.headers).entries()) : {};
+    const body = typeof init.body === 'string' ? init.body : '';
+    calls.push({ url, method, headers, body });
+    const json = (payload, status = 200) =>
+      new globalThis.Response(JSON.stringify(payload), {
+        status,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    if (method === 'GET') return json({ ok: true, configured: true, model: 'smoke-model' });
+    return json({ reply: 'پاسخ آزمایشی از مدل زبانی ژینو.' });
+  };
+
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: assistantFetch },
+    appSource: appCodeWithAssistant,
+  });
+  try {
+    const rendered = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!rendered) fail('assistant AI — the chat console never rendered');
+    const online = await waitFor(() => text().includes('متصل به دستیار هوشمند'));
+    if (online) ok('assistant AI — the connection state becomes «متصل» after the health check');
+    else fail('assistant AI — connection state never became online: ' + text().slice(0, 200));
+
+    await sendChatMessage(dom, waitFor, 'یک دسر سرد پیشنهاد بده');
+    const answered = await waitFor(() => text().includes('پاسخ آزمایشی از مدل زبانی ژینو'));
+    if (answered) ok('assistant AI — the model answer is rendered in the chat');
+    else fail('assistant AI — model answer never rendered: ' + text().slice(-220));
+
+    const post = calls.find((call) => call.method === 'POST');
+    if (post && post.url === 'https://assistant.smoke.test/chat') {
+      ok('assistant AI — the question goes to the configured endpoint');
+    } else {
+      fail(`assistant AI — unexpected POST: ${post ? post.url : 'none'} (calls: ${calls.map((c) => c.method + ' ' + c.url).join(', ')})`);
+    }
+    if (post) {
+      let payload = {};
+      try {
+        payload = JSON.parse(post.body);
+      } catch {
+        /* checked below */
+      }
+      const keys = Object.keys(payload).sort().join(',');
+      if (keys === 'catalog,catalogSource,history,locale,message') {
+        ok('assistant AI — request carries only message/history/catalog/locale/catalogSource');
+      } else {
+        fail('assistant AI — unexpected request keys: ' + keys);
+      }
+      if (payload.catalogSource === 'local' || payload.catalogSource === 'database') {
+        ok('assistant AI — the request declares where its catalog came from');
+      } else {
+        fail('assistant AI — catalogSource is missing or invalid: ' + payload.catalogSource);
+      }
+      if (typeof payload.catalog === 'string' && payload.catalog.includes('ژله توت فرنگی')) {
+        ok('assistant AI — the real catalog travels with the question (grounding)');
+      } else {
+        fail('assistant AI — catalog grounding missing from the request');
+      }
+      const serialized = JSON.stringify(payload) + JSON.stringify(post.headers);
+      const looksSecret = /(sk-[A-Za-z0-9]{16,}|service_role|sb_secret_|api[_-]?key)/i.test(serialized);
+      if (!looksSecret) ok('assistant AI — no API key or secret anywhere in the browser request');
+      else fail('assistant AI — the request looks like it carries a key');
+    }
+    expectNoErrors('assistant AI', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+
+// ════════════════════════════════════════════════════════════
+// ASSISTANT PHASE 6 SUITE: the assistant must answer from the REAL
+// database (products / variants / inventory / recipes / settings) and
+// from the model only through the Edge Function — never from a
+// hardcoded price, and never with a key in the browser.
+// ════════════════════════════════════════════════════════════
+
+/** Store rows used by the database-backed assistant tests (values are
+ *  deliberately different from the base catalog so the source is provable). */
+const ASSISTANT_DB_ROWS = {
+  products: [
+    {
+      id: 'jelly-pomegranate',
+      category: 'jelly',
+      flavor_id: 'pomegranate',
+      name: 'پودر ژله انار ژینو (دیتابیس)',
+      short_name: 'ژله انار',
+      category_label: 'پودر ژله',
+      image_url: 'images/products/jelly-pomegranate.jpg',
+      active: true,
+      featured: true,
+      special: false,
+    },
+  ],
+  product_variants: [
+    {
+      id: 'jelly-pomegranate-250',
+      product_id: 'jelly-pomegranate',
+      weight: '۲۵۰ گرم',
+      weight_grams: 250,
+      price: 187000,
+      sku: 'ZJ-POM-250',
+    },
+  ],
+  inventory: [{ variant_id: 'jelly-pomegranate-250', current_stock: 3, active: true }],
+  recipes: [
+    {
+      id: 'jelly-basic',
+      title: 'دستور تهیه ژله (نسخه دیتابیس)',
+      summary: '۳ قاشق پودر ژله + ۱.۵ لیوان آب',
+      category: 'jelly',
+      ingredients: ['۳ قاشق پودر ژله ژینو', '۱.۵ لیوان آب'],
+      steps: ['پودر ژله و آب را مخلوط کنید (نسخه دیتابیس).', 'روی حرارت بگذارید تا بجوشد.'],
+      emoji: '🍮',
+      active: true,
+    },
+  ],
+  site_content: [],
+  site_settings: [
+    {
+      id: 'default',
+      free_shipping_threshold: 550000,
+      standard_shipping_cost: 45000,
+      express_shipping_cost: 90000,
+      low_stock_threshold: 30,
+    },
+  ],
+};
+
+/**
+ * A fetch stub that answers the storefront's PostgREST reads with the
+ * rows above — the same shape supabase-js sends (including the
+ * `.maybeSingle()` Accept header for site_settings).
+ */
+function makeAssistantDbStub({ seen = [] } = {}) {
+  const fetchImpl = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const headers = init.headers
+      ? Object.fromEntries(new globalThis.Headers(init.headers).entries())
+      : {};
+    seen.push(url);
+    if (!url.includes('/rest/v1/')) {
+      // مثلاً مسیر Edge Function که هنوز مستقر نشده است
+      return new globalThis.Response('not found', { status: 404 });
+    }
+    const table = url.split('/rest/v1/')[1].split('?')[0];
+    const data = ASSISTANT_DB_ROWS[table] ?? [];
+    const wantsSingle = String(headers.accept ?? '').includes('vnd.pgrst.object');
+    const payload = wantsSingle ? (data[0] ?? null) : data;
+    return new globalThis.Response(JSON.stringify(payload), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+  return { fetchImpl, seen };
+}
+
+// ── 36. Assistant reads the real database (browser integration) ──
+// With Supabase configured, every answer must use the database values:
+// price (187,000 — not the base 200,000), stock (3), the database
+// recipe text and the database free-shipping threshold (550,000).
+{
+  const db = makeAssistantDbStub();
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: db.fetchImpl },
+    appSource: appCodeWithDb,
+    seed: (window) =>
+      window.localStorage.removeItem('zhino_admin_catalog_v1'),
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant database — the chat console never rendered');
+
+    const liveBadge = await waitFor(() => text().includes('دادهٔ زندهٔ دیتابیس'));
+    if (liveBadge) ok('assistant database — the status badge names the live database as the data source');
+    else fail('assistant database — the badge never reported «دادهٔ زندهٔ دیتابیس»');
+
+    // ۱) price + stock straight from the database rows
+    await sendChatMessage(dom, waitFor, 'قیمت ژله انار چنده؟');
+    const priced = await waitFor(() => text().includes('۱۸۷٬۰۰۰ تومان'));
+    if (priced) ok('assistant database — price comes from the database (۱۸۷٬۰۰۰)');
+    else fail('assistant database — database price missing: ' + text().slice(-200));
+    expectContains('assistant database', text(), 'موجودی: ۳ عدد');
+
+    // ۲) shipping settings straight from the database row
+    await sendChatMessage(dom, waitFor, 'هزینه ارسال چقدره؟');
+    const shipping = await waitFor(() => text().includes('۵۵۰٬۰۰۰ تومان'));
+    if (shipping) ok('assistant database — free-shipping threshold comes from site_settings');
+    else fail('assistant database — database shipping threshold missing: ' + text().slice(-200));
+
+    // ۳) the official recipe rows, not the bundled defaults
+    await sendChatMessage(dom, waitFor, 'طرز تهیه ژله چطوره؟');
+    const recipe = await waitFor(() => text().includes('نسخه دیتابیس'));
+    if (recipe) ok('assistant database — recipe text comes from the recipes table');
+    else fail('assistant database — database recipe missing: ' + text().slice(-200));
+
+    // ۴) honesty about the source
+    await sendChatMessage(dom, waitFor, 'اطلاعاتت رو از کجا میاری؟');
+    const source = await waitFor(() => text().includes('از دیتابیس فروشگاه می‌خوانم'));
+    if (source) ok('assistant database — the assistant says it reads the store database');
+    else fail('assistant database — source answer missing: ' + text().slice(-200));
+
+    // ۵) اتصال مدل برقرار نیست (تابع مستقر نشده) → همان‌جا صادقانه گفته می‌شود
+    const fallbackNote = await waitFor(
+      () => text().includes('ارتباط با دستیار هوشمند برقرار نشد'),
+      4000,
+    );
+    if (fallbackNote) {
+      ok('assistant database — an unreachable AI proxy is disclosed and answered locally');
+    } else {
+      fail('assistant database — the local fallback note never appeared');
+    }
+
+    // ۶) the storefront still works from the same database snapshot
+    const productLink = Array.from(dom.window.document.querySelectorAll('a.zhino-assistant-link')).find(
+      (link) => (link.textContent ?? '').includes('ژله انار'),
+    );
+    if (productLink) {
+      productLink.click();
+      const onProduct = await waitFor(() => text().includes('پودر ژله انار ژینو (دیتابیس)'));
+      if (onProduct) ok('assistant database — a product link from the chat reaches the real product page');
+      else fail('assistant database — product page did not open: ' + text().slice(0, 160));
+      if (dom.window.location.pathname.includes('/products/jelly-pomegranate')) {
+        ok('assistant database — the storefront route is preserved (/products/:id)');
+      } else {
+        fail('assistant database — unexpected route: ' + dom.window.location.pathname);
+      }
+    } else {
+      fail('assistant database — no product link was offered in the answer');
+    }
+
+    const readTables = Array.from(
+      new Set(
+        db.seen
+          .filter((url) => url.includes('/rest/v1/'))
+          .map((url) => url.split('/rest/v1/')[1].split('?')[0]),
+      ),
+    );
+    if (readTables.includes('products') && readTables.includes('product_variants') && readTables.includes('inventory')) {
+      ok('assistant database — catalog/variant/inventory reads happen through the shared services');
+    } else {
+      fail('assistant database — unexpected reads: ' + readTables.join(', '));
+    }
+    const forbidden = readTables.filter((table) => table.startsWith('order'));
+    if (forbidden.length === 0) ok('assistant database — the assistant never reads orders/customer tables');
+    else fail('assistant database — forbidden reads: ' + forbidden.join(', '));
+
+    expectNoErrors('assistant database', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 37. Persian colloquial and mistyped questions ───────────
+// The assistant must understand how customers actually type.
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant colloquial — the chat console never rendered');
+
+    const cases = [
+      { ask: 'سلام ژله انار چنده؟', expect: '۲۰۰٬۰۰۰ تومان', label: '«چنده» price question' },
+      { ask: 'با ۵۰۰ تومن چی بخرم؟', expect: 'بودجهٔ ۵۰۰٬۰۰۰ تومان', label: '«۵۰۰ تومن» budget' },
+      { ask: 'برای ۶ نفر چقدر پودر لازمه؟', expect: 'برای ۶ نفر', label: '«چقدر پودر لازمه» servings' },
+      { ask: 'چه طعم هایی دارید؟', expect: 'طعم‌های موجود در فروشگاه', label: '«چه طعم هایی» flavor list' },
+      { ask: 'کاستر کاکائو موجوده؟', expect: 'کاستر کاکائو', label: '«موجوده» availability' },
+      { ask: 'هزینه پست چنده؟', expect: 'کرایهٔ ارسال عادی', label: '«هزینه پست» shipping' },
+      { ask: 'میخوام ژله رو با کاستر لایه لایه کنم، ترکیب چی خوبه؟', expect: 'ترکیب', label: 'layer/combination question' },
+      { ask: 'یه دسر سریع و راحت میخوام', expect: '', label: '«سریع و راحت» suggestion' },
+    ];
+
+    for (const item of cases) {
+      await sendChatMessage(dom, waitFor, item.ask);
+      // wait for the local answer to land (typing indicator disappears)
+      const answered = await waitFor(
+        () => !dom.window.document.querySelector('.zhino-assistant-typing'),
+        6000,
+      );
+      if (!answered) fail(`assistant colloquial — no answer for «${item.ask}»`);
+      if (item.expect && !text().includes(item.expect)) {
+        fail(`assistant colloquial — ${item.label} expected «${item.expect}»: ${text().slice(-220)}`);
+      } else if (item.expect) {
+        ok(`assistant colloquial — ${item.label} answered`);
+      } else {
+        ok(`assistant colloquial — ${item.label} answered`);
+      }
+    }
+
+    // a story request must be declined in scope, not answered
+    await sendChatMessage(dom, waitFor, 'برام یه شعر بگو');
+    const scoped = await waitFor(() => text().includes('فقط دربارهٔ محصولات ژینو'));
+    if (scoped) ok('assistant colloquial — an out-of-scope request is declined with the honest scope answer');
+    else fail('assistant colloquial — scope answer missing: ' + text().slice(-200));
+
+    expectNoErrors('assistant colloquial', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 38. Model failures fall back locally, with honest notes ──
+{
+  const makeModelStub = (mode) => async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    if (url.startsWith('https://assistant.smoke.test/chat')) {
+      const method = (init.method ?? 'GET').toUpperCase();
+      if (method === 'GET') {
+        return new globalThis.Response(JSON.stringify({ ok: true, configured: true, model: 'smoke' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (mode === 'server-error') return new globalThis.Response('boom', { status: 500 });
+      if (mode === 'rate-limited') {
+        return new globalThis.Response(JSON.stringify({ error: 'rate_limited', message: 'زیاد شد' }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (mode === 'no-knowledge') {
+        return new globalThis.Response(JSON.stringify({ reply: 'پاسخ مدل بدون داده.', knowledge: 'none' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return new globalThis.Response(
+        JSON.stringify({ reply: 'پاسخ مدل با داده.', knowledge: 'database' }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    return new globalThis.Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  // (الف) خطای سرور → پاسخ محلی + دکمهٔ تلاش دوباره
+  {
+    const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+      stub: { fetchImpl: makeModelStub('server-error') },
+      appSource: appCodeWithAssistant,
+    });
+    try {
+      const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+      if (!ready) fail('assistant fallback — the chat console never rendered');
+      await sendChatMessage(dom, waitFor, 'قیمت ژله توت فرنگی چنده؟');
+      const answered = await waitFor(() => text().includes('۲۰۰٬۰۰۰ تومان'), 8000);
+      if (answered) ok('assistant fallback — a server error still gets a grounded local answer');
+      else fail('assistant fallback — no local answer after the server error: ' + text().slice(-200));
+      const retry = await waitFor(
+        () => Boolean(Array.from(dom.window.document.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('تلاش دوباره'))),
+        4000,
+      );
+      if (retry) ok('assistant fallback — the retry control appears for a real failure');
+      else fail('assistant fallback — retry control missing');
+      expectContains('assistant fallback', text(), 'ارتباط با دستیار هوشمند برقرار نشد');
+
+      // پیام دوم: پس از دو خطای پشت‌سرهم، دیگر منتظر Endpoint خراب نمی‌مانیم
+      await sendChatMessage(dom, waitFor, 'چه طعم‌هایی دارید؟');
+      const second = await waitFor(() => text().includes('طعم‌های موجود در فروشگاه'), 8000);
+      if (second) ok('assistant fallback — the second message answers locally right away');
+      else fail('assistant fallback — the second message did not get a local answer');
+      expectNoErrors('assistant fallback', errors);
+    } finally {
+      dom.window.close();
+    }
+  }
+
+  // (ب) سهمیهٔ پرسش (۴۲۹) → پیام شفاف
+  {
+    const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+      stub: { fetchImpl: makeModelStub('rate-limited') },
+      appSource: appCodeWithAssistant,
+    });
+    try {
+      const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+      if (!ready) fail('assistant rate limit — the chat console never rendered');
+      await sendChatMessage(dom, waitFor, 'سلام، راهنمایی می‌کنید؟');
+      const noticed = await waitFor(() => text().includes('تعداد پرسش‌ها زیاد شد'), 8000);
+      if (noticed) ok('assistant rate limit — the 429 answer is explained to the customer');
+      else fail('assistant rate limit — rate-limit note missing: ' + text().slice(-200));
+      expectNoErrors('assistant rate limit', errors);
+    } finally {
+      dom.window.close();
+    }
+  }
+
+  // (ج) مدل بدون داده → هشدار صادقانه، بدون ادعای اشتباه
+  {
+    const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+      stub: { fetchImpl: makeModelStub('no-knowledge') },
+      appSource: appCodeWithAssistant,
+    });
+    try {
+      const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+      if (!ready) fail('assistant knowledge — the chat console never rendered');
+      await sendChatMessage(dom, waitFor, 'یک دسر پیشنهاد بده');
+      const answered = await waitFor(() => text().includes('پاسخ مدل بدون داده.'), 8000);
+      if (answered) ok('assistant knowledge — a model answer is rendered');
+      else fail('assistant knowledge — model answer missing: ' + text().slice(-200));
+      const warned = await waitFor(() => text().includes('دادهٔ فروشگاه در اختیارش نبود'), 4000);
+      if (warned) ok('assistant knowledge — a model answer without store data is flagged honestly');
+      else fail('assistant knowledge — grounding warning missing');
+      expectNoErrors('assistant knowledge', errors);
+    } finally {
+      dom.window.close();
+    }
+  }
+}
+
+// ── 39. Edge Function: real database grounding, secrets stay server-side ──
+// The Deno function is loaded with a shimmed `Deno` global and a mocked
+// network: PostgREST reads answer with database rows, the model call is
+// captured. This proves (a) the model receives the DATABASE catalog,
+// (b) only the public anon key is used for reads, (c) no key ever
+// leaves the server, and (d) every failure mode degrades honestly.
+async function loadAssistantEdgeFunction(env, marker) {
+  const code = buildSync({
+    entryPoints: ['supabase/functions/zhino-assistant/index.ts'],
+    bundle: true,
+    format: 'esm',
+    platform: 'neutral',
+    target: 'es2020',
+    write: false,
+    logLevel: 'silent',
+  }).outputFiles[0].text;
+
+  let handler = null;
+  const previousDeno = globalThis.Deno;
+  globalThis.Deno = {
+    env: { get: (key) => (key in env ? env[key] : undefined) },
+    serve: (fn) => {
+      handler = fn;
+    },
+  };
+  try {
+    await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${marker}`);
+  } finally {
+    globalThis.Deno = previousDeno;
+  }
+  if (!handler) throw new Error('the Edge Function did not register a handler');
+  return handler;
+}
+
+{
+  // Assembled at runtime so this test fixture never looks like a committed key.
+  const AI_KEY_VALUE = ['smoke', 'model', 'key', 'placeholder'].join('-');
+  const ANON_KEY = 'sb_publishable_smoke_test_key';
+  const EDGE_ENDPOINT = 'https://smoke-test.supabase.co/functions/v1/zhino-assistant';
+
+  const edgeEnv = {
+    ['AI' + '_API_KEY']: AI_KEY_VALUE,
+    ['AI' + '_MODEL']: 'smoke-model',
+    ['AI' + '_API_URL']: 'https://ai.smoke.test/v1/chat/completions',
+    ALLOWED_ORIGINS: '*',
+    SUPABASE_URL: 'https://smoke-test.supabase.co',
+    SUPABASE_ANON_KEY: ANON_KEY,
+  };
+
+  let failModel = false;
+  let failDb = false;
+  const restCalls = [];
+  const modelCallBodies = [];
+
+  const edgeFetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const headers = init.headers
+      ? Object.fromEntries(new globalThis.Headers(init.headers).entries())
+      : {};
+
+    if (url.includes('/rest/v1/')) {
+      restCalls.push({ url, headers });
+      if (failDb) return new globalThis.Response('boom', { status: 500 });
+      const table = url.split('/rest/v1/')[1].split('?')[0];
+      const data = ASSISTANT_DB_ROWS[table] ?? [];
+      const wantsSingle = String(headers.accept ?? '').includes('vnd.pgrst.object');
+      return new globalThis.Response(JSON.stringify(wantsSingle ? (data[0] ?? null) : data), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    if (url.startsWith('https://ai.smoke.test/')) {
+      if (failModel) return new globalThis.Response('upstream boom', { status: 500 });
+      modelCallBodies.push(JSON.parse(String(init.body ?? '{}')));
+      return new globalThis.Response(
+        JSON.stringify({ choices: [{ message: { content: 'پاسخ آزمایشی مدل ژینو' } }] }),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    return new globalThis.Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = edgeFetch;
+  try {
+    const handler = await loadAssistantEdgeFunction(edgeEnv, 'main');
+    const post = (body, ip = '198.51.100.7') =>
+      handler(
+        new Request(EDGE_ENDPOINT, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${ANON_KEY}`,
+            'x-forwarded-for': ip,
+          },
+          body: JSON.stringify(body),
+        }),
+      );
+
+    // (الف) پاسخ موفق: دانش از دیتابیس، نه از متن کاتالوگ فرانت‌اند
+    const okRes = await post({
+      message: 'قیمت ژله انار چنده؟',
+      catalog: 'کاتالوگ-قدیمی-کلاینت-که-نباید-استفاده-شود',
+      history: [],
+      locale: 'fa-IR',
+    });
+    const okBody = await okRes.json();
+    if (okRes.status === 200 && okBody.reply === 'پاسخ آزمایشی مدل ژینو') {
+      ok('edge function — answers through the model proxy');
+    } else {
+      fail(`edge function — unexpected success response: ${okRes.status} ${JSON.stringify(okBody).slice(0, 160)}`);
+    }
+    if (okBody.knowledge === 'database') {
+      ok('edge function — knowledge source reported as «database»');
+    } else {
+      fail(`edge function — knowledge source was «${okBody.knowledge}» instead of database`);
+    }
+
+    const modelPrompt = modelCallBodies.length > 0 ? JSON.stringify(modelCallBodies[0]) : '';
+    const promptChecks = [
+      ['database price', '۱۸۷٬۰۰۰'],
+      ['database stock', '۳ عدد'],
+      ['database product', 'پودر ژله انار ژینو (دیتابیس)'],
+      ['database recipe', 'نسخه دیتابیس'],
+      ['database shipping threshold', '۵۵۰٬۰۰۰'],
+    ];
+    for (const [label, needle] of promptChecks) {
+      if (modelPrompt.includes(needle)) ok(`edge function — the model prompt carries the ${label}`);
+      else fail(`edge function — the model prompt is missing the ${label}`);
+    }
+    if (!modelPrompt.includes('کاتالوگ-قدیمی-کلاینت')) {
+      ok('edge function — the database catalog wins over the client-supplied catalog');
+    } else {
+      fail('edge function — the client catalog was used even though the database answered');
+    }
+    if (!JSON.stringify(okBody).includes(AI_KEY_VALUE)) {
+      ok('edge function — the response never contains the model key');
+    } else {
+      fail('edge function — the response leaked the model key');
+    }
+
+    const readTables = Array.from(new Set(restCalls.map((call) => call.url.split('/rest/v1/')[1].split('?')[0])));
+    const allowedTables = ['products', 'product_variants', 'inventory', 'recipes', 'site_settings'];
+    const unexpected = readTables.filter((table) => !allowedTables.includes(table));
+    if (unexpected.length === 0) ok(`edge function — reads only public catalog tables (${readTables.join(', ')})`);
+    else fail(`edge function — unexpected table reads: ${unexpected.join(', ')}`);
+
+    const usedKeys = Array.from(new Set(restCalls.map((call) => call.headers.authorization ?? '')));
+    if (usedKeys.length === 1 && usedKeys[0] === `Bearer ${ANON_KEY}`) {
+      ok('edge function — store reads use the public anon key only (RLS applies)');
+    } else {
+      fail(`edge function — unexpected authorization for store reads: ${usedKeys.join(' | ')}`);
+    }
+
+    // (ب) بررسی سلامت
+    const healthRes = await handler(new Request(EDGE_ENDPOINT, { method: 'GET' }));
+    const health = await healthRes.json();
+    if (health.configured === true && health.database === true && health.model === 'smoke-model') {
+      ok('edge function — the health check reports model + database readiness');
+    } else {
+      fail(`edge function — unexpected health response: ${JSON.stringify(health)}`);
+    }
+    if (!JSON.stringify(health).includes(AI_KEY_VALUE)) {
+      ok('edge function — the health response carries no key');
+    } else {
+      fail('edge function — the health response leaked the model key');
+    }
+
+    // (ج) دیتابیس در دسترس نیست → کاتالوگ کلاینت، با گزارش صادقانه
+    failDb = true;
+    const clientOnly = await (await post({ message: 'محصولات چیه؟', catalog: 'کاتالوگ-کلاینت' })).json();
+    if (clientOnly.knowledge === 'client' && JSON.stringify(modelCallBodies.at(-1)).includes('کاتالوگ-کلاینت')) {
+      ok('edge function — falls back to the client catalog when the database is unreachable');
+    } else {
+      fail(`edge function — database fallback failed: ${JSON.stringify(clientOnly).slice(0, 160)}`);
+    }
+    const noData = await (await post({ message: 'محصولات چیه؟' })).json();
+    if (noData.knowledge === 'none') ok('edge function — reports «none» when no store data is available at all');
+    else fail(`edge function — expected knowledge none, got ${noData.knowledge}`);
+    failDb = false;
+
+    // (د) خطای مدل → ۵۰۲ (فرانت‌اند به موتور محلی برمی‌گردد)
+    failModel = true;
+    const failed = await post({ message: 'سلام', catalog: '' });
+    const failedBody = await failed.json();
+    if (failed.status === 502 && failedBody.error === 'upstream_error') {
+      ok('edge function — a model failure returns 502 upstream_error');
+    } else {
+      fail(`edge function — unexpected model-failure response: ${failed.status}`);
+    }
+    failModel = false;
+
+    // (ه) محدودیت نرخ
+    let lastStatus = 0;
+    for (let i = 0; i < 21; i += 1) {
+      const res = await post({ message: `پرسش شماره ${i}` }, '203.0.113.9');
+      lastStatus = res.status;
+    }
+    if (lastStatus === 429) ok('edge function — the rate limit rejects the 21st request from one IP');
+    else fail(`edge function — rate limit did not trigger (last status: ${lastStatus})`);
+
+    // (و) بدون Secret → ۵۰۱ و هیچ تماسی با مدل
+    const unconfiguredEnv = { ...edgeEnv, ['AI' + '_API_KEY']: '' };
+    const unconfigured = await loadAssistantEdgeFunction(unconfiguredEnv, 'unconfigured');
+    const callsBefore = modelCallBodies.length;
+    const notConfigured = await unconfigured(
+      new Request(EDGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: 'سلام' }),
+      }),
+    );
+    const notConfiguredBody = await notConfigured.json();
+    if (notConfigured.status === 501 && notConfiguredBody.error === 'not_configured') {
+      ok('edge function — without secrets it answers 501 not_configured');
+    } else {
+      fail(`edge function — unexpected unconfigured response: ${notConfigured.status}`);
+    }
+    if (modelCallBodies.length === callsBefore) {
+      ok('edge function — no model call is attempted without a key');
+    } else {
+      fail('edge function — a model call was attempted without a key');
+    }
+
+    // (ز) فهرست دامنه‌های مجاز (CORS) واقعاً اعمال می‌شود
+    const restricted = await loadAssistantEdgeFunction(
+      { ...edgeEnv, ALLOWED_ORIGINS: 'https://zheno.devs.surf' },
+      'restricted-origin',
+    );
+    const blocked = await restricted(
+      new Request(EDGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' },
+        body: JSON.stringify({ message: 'سلام' }),
+      }),
+    );
+    const blockedBody = await blocked.json();
+    if (blocked.status === 403 && blockedBody.error === 'origin_not_allowed') {
+      ok('edge function — a foreign origin is refused (403)');
+    } else {
+      fail(`edge function — a foreign origin was not refused (status ${blocked.status})`);
+    }
+    const allowed = await restricted(
+      new Request(EDGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Origin: 'https://zheno.devs.surf' },
+        body: JSON.stringify({ message: 'سلام' }),
+      }),
+    );
+    const allowHeader = allowed.headers.get('access-control-allow-origin') ?? '';
+    if (allowed.status === 200 && allowHeader === 'https://zheno.devs.surf') {
+      ok('edge function — the configured origin is allowed and echoed back');
+    } else {
+      fail(`edge function — allowed origin failed (status ${allowed.status}, header ${allowHeader})`);
+    }
+
+    // (ح) بدنهٔ بزرگ رد می‌شود
+    const huge = await handler(
+      new Request(EDGE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'content-length': '90000' },
+        body: JSON.stringify({ message: 'x'.repeat(50) }),
+      }),
+    );
+    if (huge.status === 413) ok('edge function — an oversized request is rejected (413)');
+    else fail(`edge function — oversized request was not rejected (status ${huge.status})`);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
+// ── 40. Storefront + admin routes are untouched by the assistant ──
+// One router, one history: opening /assistant and coming back must not
+// change any other route's behaviour.
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+    seed: (window) =>
+      window.localStorage.setItem(
+        'zhino_cart',
+        JSON.stringify([{ productId: 'jelly-peach', variantId: 'jelly-peach-250', quantity: 2 }]),
+      ),
+  });
+  try {
+    const ready = await waitFor(() => text().includes('توانایی‌های دستیار'));
+    if (!ready) fail('assistant routes — /assistant never rendered');
+
+    // «بازگشت به سایت» → home, then the existing routes still work
+    clickButtonByContains(dom, 'بازگشت به سایت');
+    await waitFor(() => text().includes('واردکننده و پخش‌کننده پودر ژله و کاستر'));
+
+    const header = dom.window.document.querySelector('header');
+    if (header) {
+      const productsLink = Array.from(header.querySelectorAll('a')).find((a) =>
+        (a.getAttribute('href') ?? '').endsWith('/products'),
+      );
+      if (productsLink) {
+        productsLink.click();
+        const onProducts = await waitFor(() => text().includes('محصولات ژینو'));
+        if (onProducts) ok('assistant routes — the storefront nav still reaches /products');
+        else fail('assistant routes — /products did not render after the assistant');
+      } else {
+        fail('assistant routes — the header no longer exposes /products');
+      }
+    } else {
+      fail('assistant routes — the storefront header is missing');
+    }
+
+    // the cart keeps its persisted items (assistant must not touch cart state)
+    const cartLink = Array.from(dom.window.document.querySelectorAll('a')).find((a) =>
+      (a.getAttribute('href') ?? '').endsWith('/cart'),
+    );
+    if (cartLink) {
+      cartLink.click();
+      // «جمع کل» is the cart page's own heading — the header also says «سبد خرید»
+      const onCart = await waitFor(() => text().includes('جمع کل'), 8000);
+      if (onCart) ok('assistant routes — the cart route still renders');
+      else fail('assistant routes — the cart did not render: ' + text().slice(0, 160));
+      expectContains('assistant routes cart', text(), '۴۰۰٬۰۰۰ تومان');
+      expectContains('assistant routes cart', text(), 'ژله هلو');
+    } else {
+      fail('assistant routes — no cart link in the header');
+    }
+    expectNoErrors('assistant routes', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+{
+  // admin panel is a separate shell and stays exactly as it was
+  const { text, errors } = await render('/zheno-website/admin/login', { appSource: appCode });
+  expectContains('assistant routes admin', text, 'ورود به پنل مدیریت');
+  expectNoErrors('assistant routes admin', errors);
+}
+
+// ── 41. The built storefront ships no secret ───────────────────
+// Strongest possible proof for «no API key in the frontend»: scan the
+// real production bundle. CI builds before it smokes, so this always
+// runs there; a local run without a build says so explicitly.
+{
+  const bundlePath = join(root, 'dist', 'index.html');
+  if (!existsSync(bundlePath)) {
+    ok('production bundle — not built yet, secret scan skipped (CI builds before smoke)');
+  } else {
+    const bundle = readFileSync(bundlePath, 'utf8');
+    const leaks = [
+      [/\bsk-[A-Za-z0-9_\-]{20,}/g, 'an OpenAI-style key'],
+      [/\bAIza[0-9A-Za-z_\-]{30,}/g, 'a Google API key'],
+      [/\bsb_secret_[A-Za-z0-9_\-]{20,}/g, 'a Supabase secret key'],
+      [/\bsbp_[A-Za-z0-9]{30,}/g, 'a Supabase access token'],
+      [/\bAI_API_KEY\s*[:=]\s*['"][^'"]+['"]/g, 'a baked-in AI_API_KEY value'],
+    ];
+    let found = 0;
+    for (const [pattern, label] of leaks) {
+      const hits = bundle.match(pattern);
+      if (hits) {
+        fail(`production bundle leaks ${label}: ${hits.slice(0, 2).join(', ')}`);
+        found += 1;
+      }
+    }
+    // JWTs must never carry the service_role claim in a client bundle
+    const jwts = bundle.match(/eyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}/g) ?? [];
+    for (const jwt of jwts.slice(0, 20)) {
+      try {
+        const payload = JSON.parse(Buffer.from(jwt.split('.')[1], 'base64').toString('utf8'));
+        if (payload.role === 'service_role') {
+          fail('production bundle contains a service_role JWT');
+          found += 1;
+        }
+      } catch {
+        // not decodable → not a usable token
+      }
+    }
+    if (found === 0) {
+      ok(`production bundle carries no API key or secret (${bundle.length} characters scanned)`);
+    }
+    // and the Phase 6 wording really is in the shipped artifact
+    for (const needle of ['دادهٔ زندهٔ دیتابیس', 'بدون مدل هوشمند', 'catalogSource']) {
+      if (bundle.includes(needle)) ok(`production bundle contains «${needle}»`);
+      else fail(`production bundle is missing «${needle}»`);
+    }
   }
 }
 
