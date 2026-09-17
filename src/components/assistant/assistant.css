@@ -1,9 +1,12 @@
 /* ============================================================
-   ZHINO — «دستیار ژینو» (فاز ۷) — محیط چت تمام‌صفحه شبیه ChatGPT
-   دو بخش:
+   ZHINO — «دستیار ژینو» (فاز ۷ و ۸) — محیط چت تمام‌صفحه شبیه ChatGPT
+   سه بخش:
      ۱) دکمهٔ شناور — همان هویت فاز ۴، این بار لینک به /assistant
      ۲) صفحهٔ دستیار: یک محیط گفتگوی خلوت و تمام‌قد، بدون فوتر،
-        بدون منو، بدون پرچم و بدون ستون کنار.
+        بدون منو، بدون پرچم، بدون ستون کنار — و (از فاز ۸) بدون هیچ
+        متن فنی برای مشتری.
+     ۳) ابزارهای گفتگوی فاز ۸: چیپ‌های پیشنهاد، خواندن پاسخ‌ها با
+        صدای مرورگر و امضای کوچک سازنده.
    رنگ‌بندی هم‌هویت با برند: burgundy #71313B / hero #5A1725
    روی زمینهٔ روشن و لوکس ivory (بدون سفیدشدگی زننده).
    همهٔ مقادیر از توکن‌های طراحی index.css می‌آیند.
@@ -54,12 +57,16 @@
 
 /* هالهٔ نرم طلایی/شیشه‌ای روی سطح دکمه */
 .zhino-assistant-launcher::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
-  background: radial-gradient(120% 120% at 50% 0%, rgba(224, 208, 171, 0.2) 0%, rgba(224, 208, 171, 0) 62%);
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    rgba(224, 208, 171, 0.2) 0%,
+    rgba(224, 208, 171, 0) 62%
+  );
 }
 
 /* لایهٔ حرکت شناور — جدا از transform خود دکمه، تا hover با
@@ -90,7 +97,12 @@
   width: 2.9rem;
   height: 2.9rem;
   border-radius: 9999px;
-  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f1e7dc 58%, #ddcbbc 100%);
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    #faf7f2 0%,
+    #f1e7dc 58%,
+    #ddcbbc 100%
+  );
   box-shadow:
     inset 0 0 0 1px rgba(113, 49, 59, 0.16),
     0 6px 14px -8px rgba(29, 7, 12, 0.55);
@@ -186,10 +198,22 @@
   /* ivory لوکس با هالهٔ بسیار ملایم زرشکی — روشن، اما نه سفید یکنواخت */
   background-color: var(--color-cream-page);
   background-image:
-    radial-gradient(72% 46% at 88% -8%, rgba(113, 49, 59, 0.075) 0%, rgba(113, 49, 59, 0) 62%),
-    radial-gradient(60% 40% at 4% 4%, rgba(184, 154, 98, 0.09) 0%, rgba(184, 154, 98, 0) 60%),
+    radial-gradient(
+      72% 46% at 88% -8%,
+      rgba(113, 49, 59, 0.075) 0%,
+      rgba(113, 49, 59, 0) 62%
+    ),
+    radial-gradient(
+      60% 40% at 4% 4%,
+      rgba(184, 154, 98, 0.09) 0%,
+      rgba(184, 154, 98, 0) 60%
+    ),
     /* ردِ رنگ Hero برند (#5A1725) در بالای صفحه */
-    radial-gradient(120% 18% at 50% 0%, rgba(90, 23, 37, 0.055) 0%, rgba(90, 23, 37, 0) 70%),
+    radial-gradient(
+        120% 18% at 50% 0%,
+        rgba(90, 23, 37, 0.055) 0%,
+        rgba(90, 23, 37, 0) 70%
+      ),
     linear-gradient(180deg, #fbf9f6 0%, var(--color-cream-page) 100%);
 }
 
@@ -214,13 +238,18 @@
 
 /* خط طلایی مویی زیر سربرگ */
 .zhino-assistant-topbar::after {
-  content: '';
+  content: "";
   position: absolute;
   inset-inline: 12%;
   bottom: -1px;
   height: 1px;
   pointer-events: none;
-  background: linear-gradient(90deg, transparent, rgba(184, 154, 98, 0.5), transparent);
+  background: linear-gradient(
+    90deg,
+    transparent,
+    rgba(184, 154, 98, 0.5),
+    transparent
+  );
 }
 
 .zhino-assistant-brand {
@@ -237,7 +266,12 @@
   width: 2.35rem;
   height: 2.35rem;
   border-radius: 9999px;
-  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f0e6db 60%, #e2d3c4 100%);
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    #faf7f2 0%,
+    #f0e6db 60%,
+    #e2d3c4 100%
+  );
   box-shadow:
     inset 0 0 0 1px rgba(113, 49, 59, 0.14),
     0 10px 20px -14px rgba(29, 7, 12, 0.6);
@@ -278,63 +312,15 @@
   text-overflow: ellipsis;
 }
 
-/* پیل وضعیت — ظریف، شفاف، بدون ادعای اضافه */
-.zhino-assistant-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.45rem;
-  max-width: 100%;
-  margin-inline-start: auto;
-  padding: 0.34rem 0.72rem;
-  border-radius: 9999px;
-  border: 1px solid rgba(113, 49, 59, 0.16);
-  background: rgba(255, 255, 255, 0.72);
-  font-size: 0.66rem;
-  font-weight: 500;
-  line-height: 1.7;
-  color: var(--color-mocha);
-}
-
-/* متن پیل در فضای کم با … کوتاه می‌شود (متن کامل در title است) */
-.zhino-assistant-status-text {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
-.zhino-assistant-status-dot {
-  width: 0.42rem;
-  height: 0.42rem;
-  flex: none;
-  border-radius: 9999px;
-  background: var(--color-gold-400);
-  box-shadow: 0 0 0 3px rgba(201, 174, 124, 0.16);
-}
-
-.zhino-assistant-status.is-online .zhino-assistant-status-dot {
-  background: #6fae86;
-  box-shadow: 0 0 0 3px rgba(111, 174, 134, 0.18);
-}
-
-.zhino-assistant-status.is-checking .zhino-assistant-status-dot {
-  animation: zhino-assistant-pulse 1.4s ease-in-out infinite;
-}
-
-.zhino-assistant-status.is-error .zhino-assistant-status-dot,
-.zhino-assistant-status.is-unconfigured .zhino-assistant-status-dot {
-  background: var(--color-gold-400);
-}
-
-@keyframes zhino-assistant-pulse {
-  0%,
-  100% {
-    opacity: 0.45;
-  }
-  50% {
-    opacity: 1;
-  }
-}
+/* ============================================================
+   فاز ۸ — پیل «وضعیت اتصال/دیتابیس» از سربرگ حذف شد.
+   اتصال دیتابیس، مدل هوش مصنوعی و Fallback محلی دقیقاً مثل قبل
+   پشت صحنه کار می‌کنند؛ فقط این اصطلاحات دیگر به مشتری نشان داده
+   نمی‌شود. به‌جایش ابزارهای تازهٔ گفتگو این‌جا تعریف می‌شوند:
+     • چیپ‌های پیشنهاد (Premium، کوچک، بدون بیرون‌زدگی در موبایل)
+     • خواندن پاسخ‌ها با صدای خود مرورگر + دکمهٔ توقف
+     • امضای کوچک سازنده
+   ============================================================ */
 
 /* دکمه‌های ظریف سربرگ — بازگشت به فروشگاه / گفتگوی تازه */
 .zhino-assistant-ghost {
@@ -367,6 +353,9 @@
 .zhino-assistant-ghost.is-icon {
   width: 2.25rem;
   padding-inline: 0;
+  /* چون پیل وضعیت حذف شده، «Margin-inline-start: auto» جابه‌جا شد:
+     حالا همین دکمه، دو دکمهٔ سربرگ را به انتهای نوار می‌چسباند */
+  margin-inline-start: auto;
 }
 
 @media (hover: hover) {
@@ -401,46 +390,6 @@
   }
   to {
     opacity: 1;
-  }
-}
-
-/* نوار خطا/تلاش دوباره — فقط وقتی مدل پاسخ نداده */
-.zhino-assistant-banner {
-  flex: none;
-  /* هم‌تراز با ستون گفتگو، با فاصلهٔ امن از لبه‌های صفحه */
-  width: min(100% - 1.8rem, 48rem);
-  margin: 0.7rem auto 0;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.6rem;
-  padding: 0.5rem 0.9rem;
-  border-radius: 0.9rem;
-  border: 1px solid rgba(184, 154, 98, 0.35);
-  background: rgba(224, 208, 171, 0.26);
-  font-size: 0.7rem;
-  line-height: 1.9;
-  color: var(--color-espresso);
-}
-
-.zhino-assistant-banner-retry {
-  flex: none;
-  border-radius: 9999px;
-  border: 1px solid rgba(113, 49, 59, 0.3);
-  background: #ffffff;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.68rem;
-  font-weight: 600;
-  color: var(--color-wine-800);
-  transition:
-    background-color 0.25s ease,
-    border-color 0.25s ease;
-}
-
-@media (hover: hover) {
-  .zhino-assistant-banner-retry:hover {
-    background: rgba(113, 49, 59, 0.08);
-    border-color: rgba(113, 49, 59, 0.5);
   }
 }
 
@@ -491,7 +440,12 @@
   width: clamp(4.6rem, 16vw, 6rem);
   height: clamp(4.6rem, 16vw, 6rem);
   border-radius: 9999px;
-  background: radial-gradient(120% 120% at 50% 0%, #ffffff 0%, #f4ece2 58%, #e4d6c7 100%);
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    #ffffff 0%,
+    #f4ece2 58%,
+    #e4d6c7 100%
+  );
   box-shadow:
     inset 0 0 0 1px rgba(184, 154, 98, 0.42),
     0 30px 50px -34px rgba(29, 7, 12, 0.75);
@@ -538,29 +492,35 @@
   margin-top: 1.1rem;
 }
 
-.zhino-assistant-welcome-note {
-  margin-top: 0.9rem;
-  max-width: 36rem;
-  font-size: 0.66rem;
-  line-height: 2;
-  color: var(--color-mocha-light);
+/* پیشنهادهای آغازین — درست زیر پیام خوشامد، وسط‌چین و خلوت */
+.zhino-assistant-welcome-chips {
+  margin-top: 1.5rem;
+  width: min(100%, 34rem);
 }
 
-/* پیشنهادهای آغازین در حالت خوشامد */
-.zhino-assistant-welcome-chips {
-  display: flex;
-  flex-wrap: wrap;
+.zhino-assistant-welcome-chips .zhino-assistant-ideas-list {
   justify-content: center;
-  gap: 0.45rem;
-  margin-top: 1.35rem;
-  max-width: 40rem;
 }
 
 .zhino-assistant-row {
   display: flex;
   align-items: flex-end;
   gap: 0.55rem;
+  min-width: 0;
   animation: zhino-assistant-rise 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ستون کنار هر پیام: حباب + ردیف کارهای کوچکش (مثل «خواندن پاسخ») */
+.zhino-assistant-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  min-width: 0;
+  max-width: 88%;
+}
+
+.zhino-assistant-row.is-user .zhino-assistant-stack {
+  align-items: flex-end;
 }
 
 /* پیام کاربر در سمت چپ (سمت مخالف شروع) — مثل پیام‌رسان‌های فارسی */
@@ -575,7 +535,12 @@
   width: 2rem;
   height: 2rem;
   border-radius: 9999px;
-  background: radial-gradient(120% 120% at 50% 0%, #faf7f2 0%, #f1e7dc 58%, #ddcbbc 100%);
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    #faf7f2 0%,
+    #f1e7dc 58%,
+    #ddcbbc 100%
+  );
   box-shadow:
     inset 0 0 0 1px rgba(184, 154, 98, 0.32),
     0 8px 18px -12px rgba(29, 7, 12, 0.55);
@@ -590,7 +555,7 @@
 }
 
 .zhino-assistant-bubble {
-  max-width: 88%;
+  max-width: 100%;
   padding: 0.7rem 0.95rem;
   border-radius: 1.15rem;
   font-size: 0.86rem;
@@ -610,7 +575,12 @@
 
 .zhino-assistant-bubble.is-user {
   background-color: var(--color-wine-800);
-  background-image: linear-gradient(160deg, #7c3843 0%, var(--color-wine-800) 55%, #63262f 100%);
+  background-image: linear-gradient(
+    160deg,
+    #7c3843 0%,
+    var(--color-wine-800) 55%,
+    #63262f 100%
+  );
   border: 1px solid rgba(42, 11, 18, 0.22);
   border-start-end-radius: 0.35rem;
   color: var(--color-cream-50);
@@ -619,8 +589,8 @@
 
 /* کارت پاسخ ربات با لینک‌های داخلی سایت */
 .zhino-assistant-card {
-  width: 88%;
-  max-width: 88%;
+  width: 100%;
+  max-width: 100%;
 }
 
 .zhino-assistant-links {
@@ -654,19 +624,69 @@
   }
 }
 
-/* یادداشت شفافیت زیر پاسخ (وضعیت اتصال / پاسخ جایگزین محلی) */
+/* یادداشت کوتاه و انسانی زیر پاسخ — فقط وقتی لازم است (بدون اصطلاح فنی) */
 .zhino-assistant-note {
   display: block;
-  margin-top: 0.55rem;
-  padding-top: 0.5rem;
-  border-top: 1px dashed rgba(41, 35, 33, 0.12);
-  font-size: 0.66rem;
+  margin-top: 0.5rem;
+  padding-top: 0.45rem;
+  border-top: 1px dashed rgba(41, 35, 33, 0.1);
+  font-size: 0.68rem;
   line-height: 1.95;
   color: var(--color-mocha-light);
 }
 
-.zhino-assistant-note.is-warn {
-  color: var(--color-gold-700);
+/* ── ردیف کارهای کوچک زیر پاسخ ربات (خواندن با صدای مرورگر) ── */
+.zhino-assistant-msg-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin-top: 0.3rem;
+  padding-inline-start: 0.15rem;
+}
+
+.zhino-assistant-read {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border: 1px solid transparent;
+  border-radius: 9999px;
+  background: none;
+  padding: 0.22rem 0.5rem;
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--color-mocha-light);
+  opacity: 0.72;
+  cursor: pointer;
+  transition:
+    color 0.25s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    opacity 0.25s ease;
+}
+
+.zhino-assistant-read svg {
+  flex: none;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-read:hover {
+    opacity: 1;
+    color: var(--color-wine-800);
+    background: rgba(255, 255, 255, 0.85);
+    border-color: rgba(113, 49, 59, 0.16);
+  }
+}
+
+.zhino-assistant-read:active {
+  transform: scale(0.97);
+}
+
+/* روی لمسی همیشه کمی روشن‌تر است تا انگشت هم آن را پیدا کند */
+@media (hover: none) {
+  .zhino-assistant-read {
+    opacity: 0.9;
+  }
 }
 
 /* نشانگر «در حال پاسخ‌گویی» */
@@ -717,67 +737,170 @@
   flex: none;
   width: min(100%, 48rem);
   margin-inline: auto;
-  padding: 0 clamp(0.9rem, 4vw, 1.5rem) calc(0.9rem + env(safe-area-inset-bottom, 0px));
+  padding: 0 clamp(0.9rem, 4vw, 1.5rem)
+    calc(0.9rem + env(safe-area-inset-bottom, 0px));
 }
 
 /* محو شدن نرم پیام‌ها در بالای کادر نوشتن — بدون هیچ هم‌پوشانی،
    چون بیرون از ناحیهٔ اسکرول و با pointer-events: none است */
 .zhino-assistant-composer::before {
-  content: '';
+  content: "";
   position: absolute;
   inset-inline: 0;
   top: -1.75rem;
   height: 1.75rem;
   pointer-events: none;
-  background: linear-gradient(180deg, rgba(250, 247, 242, 0) 0%, var(--color-cream-page) 88%);
+  background: linear-gradient(
+    180deg,
+    rgba(250, 247, 242, 0) 0%,
+    var(--color-cream-page) 88%
+  );
 }
 
-/* چیپ‌های پیشنهاد بالای کادر — روی موبایل افقی اسکرول می‌شوند */
-.zhino-assistant-suggestions {
+/* ── ردیف پیشنهادها بالای کادر نوشتن — بعد از شروع گفتگو جمع می‌شود ── */
+.zhino-assistant-ideas {
   display: flex;
-  gap: 0.4rem;
-  margin-bottom: 0.6rem;
-  padding-bottom: 0.1rem;
-  overflow-x: auto;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  margin-bottom: 0.55rem;
+  min-width: 0;
 }
 
-.zhino-assistant-suggestions::-webkit-scrollbar {
-  display: none;
+.zhino-assistant-ideas-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(113, 49, 59, 0.14);
+  background: rgba(255, 255, 255, 0.6);
+  padding: 0.26rem 0.66rem 0.26rem 0.55rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--color-mocha);
+  cursor: pointer;
+  transition:
+    color 0.25s ease,
+    border-color 0.25s ease,
+    background-color 0.25s ease;
+}
+
+.zhino-assistant-ideas-toggle svg {
+  flex: none;
+}
+
+.zhino-assistant-ideas-caret {
+  display: inline-flex;
+  transition: transform 0.25s ease;
+}
+
+.zhino-assistant-ideas-toggle[aria-expanded="true"]
+  .zhino-assistant-ideas-caret {
+  transform: rotate(180deg);
+}
+
+.zhino-assistant-ideas-toggle[aria-expanded="true"] {
+  color: var(--color-wine-800);
+  border-color: rgba(113, 49, 59, 0.32);
+  background: rgba(255, 255, 255, 0.9);
+}
+
+@media (hover: hover) {
+  .zhino-assistant-ideas-toggle:hover {
+    color: var(--color-wine-900);
+    border-color: rgba(113, 49, 59, 0.34);
+    background: #ffffff;
+  }
+}
+
+/* داخلش اسکرول عمودی دارد تا هرگز روی گفتگو بیفتد */
+.zhino-assistant-ideas-body {
+  width: 100%;
+  max-height: min(10.5rem, 30vh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 1.1rem;
+  border: 1px solid rgba(41, 35, 33, 0.07);
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 18px 30px -30px rgba(29, 7, 12, 0.6);
+  padding: 0.6rem 0.7rem;
+  animation: zhino-assistant-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ── خود چیپ‌ها: کارت‌های کوچک و نرم، نه کادرهای بزرگ ── */
+.zhino-assistant-ideas-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  min-width: 0;
 }
 
 .zhino-assistant-chip {
-  flex: none;
-  white-space: nowrap;
-  border-radius: 9999px;
-  border: 1px solid rgba(113, 49, 59, 0.2);
-  background: rgba(255, 255, 255, 0.8);
-  padding: 0.4rem 0.78rem;
-  font-size: 0.7rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  min-width: 0;
+  max-width: 100%;
+  border-radius: 0.95rem;
+  border: 1px solid rgba(113, 49, 59, 0.16);
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(250, 247, 242, 0.86) 100%
+  );
+  box-shadow: 0 12px 22px -20px rgba(29, 7, 12, 0.55);
+  padding: 0.42rem 0.78rem;
+  font-size: 0.72rem;
   font-weight: 600;
+  line-height: 1.75;
   color: var(--color-wine-800);
+  text-align: start;
+  cursor: pointer;
   transition:
     background-color 0.25s ease,
     border-color 0.25s ease,
+    box-shadow 0.25s ease,
     transform 0.25s ease;
+}
+
+/* جرقهٔ طلایی کوچک — نشانهٔ «این یک پیشنهاد است» */
+.zhino-assistant-chip-spark {
+  flex: none;
+  display: inline-flex;
+  color: var(--color-gold-400);
+}
+
+.zhino-assistant-chip-text {
+  min-width: 0;
+  /* در موبایل، متن طولانی پیشنهاد از کادر بیرون نمی‌زند */
+  overflow-wrap: anywhere;
 }
 
 @media (hover: hover) {
   .zhino-assistant-chip:hover {
+    border-color: rgba(184, 154, 98, 0.6);
     background: #ffffff;
-    border-color: rgba(113, 49, 59, 0.42);
+    box-shadow:
+      0 0 0 3px rgba(184, 154, 98, 0.1),
+      0 16px 26px -20px rgba(29, 7, 12, 0.6);
     transform: translateY(-1px);
   }
 }
 
+.zhino-assistant-chip:focus-visible {
+  outline: 2px solid rgba(113, 49, 59, 0.5);
+  outline-offset: 2px;
+}
+
 .zhino-assistant-chip:active {
-  transform: scale(0.97);
+  transform: scale(0.98);
 }
 
 .zhino-assistant-chip:disabled {
   opacity: 0.5;
   cursor: default;
+  transform: none;
 }
 
 /* خود کادر: یک سطح سفید گرم با سایهٔ نرم و قوس زیاد */
@@ -845,7 +968,12 @@
   border-radius: 9999px;
   color: var(--color-cream-50);
   background-color: var(--color-wine-800);
-  background-image: linear-gradient(160deg, #7c3843 0%, var(--color-wine-800) 60%, #63262f 100%);
+  background-image: linear-gradient(
+    160deg,
+    #7c3843 0%,
+    var(--color-wine-800) 60%,
+    #63262f 100%
+  );
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.16),
     0 14px 24px -16px rgba(42, 11, 18, 0.8);
@@ -876,15 +1004,155 @@
   cursor: default;
 }
 
+/* ردیف زیر کادر: راهنما + دکمهٔ توقف خواندن */
+.zhino-assistant-composer-meta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.45rem;
+  padding-inline: 0.4rem;
+}
+
 /* راهنمای کوچک زیر کادر — کوتاه و بی‌ادعا */
 .zhino-assistant-hint {
-  display: block;
-  margin-top: 0.45rem;
-  padding-inline: 0.9rem;
-  text-align: center;
   font-size: 0.62rem;
   line-height: 1.8;
   color: var(--color-mocha-light);
+}
+
+/* ── دکمهٔ صدا داخل کادر نوشتن — کوچک، گرد، کم‌سروصدا ── */
+.zhino-assistant-voice {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2.35rem;
+  height: 2.35rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(113, 49, 59, 0.14);
+  background: rgba(250, 247, 242, 0.85);
+  color: var(--color-mocha);
+  cursor: pointer;
+  transition:
+    color 0.25s ease,
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    box-shadow 0.25s ease,
+    transform 0.25s ease;
+}
+
+/* روشن بودن صدا: یک حلقهٔ طلایی مات — بدون هیچ شلوغی */
+.zhino-assistant-voice.is-on {
+  color: var(--color-wine-800);
+  border-color: rgba(184, 154, 98, 0.55);
+  background: linear-gradient(180deg, #ffffff 0%, #faf3e6 100%);
+  box-shadow:
+    0 0 0 3px rgba(184, 154, 98, 0.12),
+    0 10px 18px -16px rgba(29, 7, 12, 0.5);
+}
+
+@media (hover: hover) {
+  .zhino-assistant-voice:hover {
+    color: var(--color-wine-900);
+    border-color: rgba(113, 49, 59, 0.34);
+    background: #ffffff;
+  }
+}
+
+.zhino-assistant-voice:active {
+  transform: scale(0.95);
+}
+
+.zhino-assistant-voice:focus-visible {
+  outline: 2px solid rgba(113, 49, 59, 0.5);
+  outline-offset: 2px;
+}
+
+/* دکمهٔ «توقف خواندن» — فقط وقتی صدا در حال پخش است */
+.zhino-assistant-stop {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(113, 49, 59, 0.2);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0.24rem 0.7rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--color-wine-800);
+  cursor: pointer;
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-stop:hover {
+    background: #ffffff;
+    border-color: rgba(113, 49, 59, 0.42);
+  }
+}
+
+.zhino-assistant-soundbars {
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 0.62rem;
+}
+
+.zhino-assistant-soundbars span {
+  width: 2px;
+  height: 100%;
+  border-radius: 2px;
+  background: currentColor;
+  opacity: 0.6;
+  transform-origin: bottom;
+  animation: zhino-assistant-eq 1s ease-in-out infinite;
+}
+
+.zhino-assistant-soundbars span:nth-child(2) {
+  animation-delay: 0.18s;
+}
+
+.zhino-assistant-soundbars span:nth-child(3) {
+  animation-delay: 0.36s;
+}
+
+@keyframes zhino-assistant-eq {
+  0%,
+  100% {
+    transform: scaleY(0.45);
+  }
+  50% {
+    transform: scaleY(1);
+  }
+}
+
+/* راهنمای کوتاه و انسانی وقتی دستگاه صدای فارسی ندارد */
+.zhino-assistant-voice-note {
+  display: block;
+  margin-top: 0.4rem;
+  text-align: center;
+  font-size: 0.64rem;
+  line-height: 1.9;
+  color: var(--color-gold-700);
+  animation: zhino-assistant-rise 0.3s ease both;
+}
+
+/* ── امضای کوچک سازنده — بسیار کم‌رنگ، خوانا، بی‌مزاحمت ── */
+.zhino-assistant-signature {
+  margin-top: 0.55rem;
+  text-align: center;
+  font-size: 0.58rem;
+  font-weight: 400;
+  letter-spacing: 0.03em;
+  line-height: 1.7;
+  color: var(--color-mocha-light);
+  opacity: 0.6;
+  /* انتخاب متن چت را قاطی نمی‌کند */
+  user-select: none;
 }
 
 /* ============================================================
@@ -918,9 +1186,23 @@
     display: none;
   }
 
-  .zhino-assistant-status {
-    font-size: 0.62rem;
-    padding-inline: 0.6rem;
+  /* چیپ‌ها روی موبایل کوچک‌تر و کم‌فاصله‌اند تا هرگز از کادر بیرون نزنند */
+  .zhino-assistant-ideas-list {
+    gap: 0.4rem;
+  }
+
+  .zhino-assistant-chip {
+    font-size: 0.7rem;
+    padding: 0.38rem 0.66rem;
+  }
+
+  .zhino-assistant-voice {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .zhino-assistant-signature {
+    font-size: 0.55rem;
   }
 
   .zhino-assistant-back-text {
@@ -932,9 +1214,13 @@
     padding-inline: 0;
   }
 
+  .zhino-assistant-stack {
+    max-width: 92%;
+  }
+
   .zhino-assistant-bubble,
   .zhino-assistant-card {
-    max-width: 92%;
+    max-width: 100%;
     width: auto;
   }
 
@@ -949,7 +1235,7 @@
   }
 }
 
-/* روی صفحه‌های بسیار باریک فقط نشان، عنوان و پیل وضعیت می‌مانند */
+/* روی صفحه‌های بسیار باریک فقط نشان، عنوان و دو دکمهٔ سربرگ می‌مانند */
 @media (max-width: 380px) {
   .zhino-assistant-brand-mark {
     width: 2.1rem;
@@ -994,9 +1280,15 @@
   .zhino-assistant-console,
   .zhino-assistant-row,
   .zhino-assistant-welcome,
-  .zhino-assistant-status.is-checking .zhino-assistant-status-dot {
+  .zhino-assistant-ideas-body,
+  .zhino-assistant-voice-note {
     animation: none !important;
     transform: none !important;
+  }
+
+  .zhino-assistant-soundbars span {
+    animation: none !important;
+    opacity: 0.6;
   }
 
   .zhino-assistant-typing span {
@@ -1008,6 +1300,10 @@
   .zhino-assistant-launcher:active,
   .zhino-assistant-chip:hover,
   .zhino-assistant-chip:active,
+  .zhino-assistant-voice:hover,
+  .zhino-assistant-voice:active,
+  .zhino-assistant-read:hover,
+  .zhino-assistant-read:active,
   .zhino-assistant-send:hover,
   .zhino-assistant-send:active,
   .zhino-assistant-ghost:hover,

@@ -252,6 +252,7 @@ if (!existsSync(assistantFn)) {
     'src/services/assistant/engine.ts',
     'src/services/assistant/client.ts',
     'src/components/assistant/useAssistantChat.ts',
+    'src/components/assistant/useAssistantSpeech.ts',
     'src/components/assistant/AssistantChat.tsx',
     'src/pages/AssistantPage.tsx',
   ];
@@ -279,6 +280,53 @@ if (!existsSync(assistantFn)) {
   }
   if (violations === 0) {
     ok('assistant front-end stays free of orders, service keys and model keys');
+  }
+
+  // Phase 8 — the voice layer must stay inside the browser. Reading an answer
+  // aloud uses the page's own speechSynthesis; it may never open a request,
+  // never use a cloud voice service and never hand the customer's own words
+  // to anything (only the assistant's answer is spoken, see smoke test 34b).
+  const speechPath = join(root, 'src', 'components', 'assistant', 'useAssistantSpeech.ts');
+  if (existsSync(speechPath)) {
+    const speech = readFileSync(speechPath, 'utf8');
+    const outsourced = [
+      ['fetch(', 'a network call'],
+      ['XMLHttpRequest', 'a network call'],
+      ['WebSocket', 'a socket'],
+      ['https?://', 'a hard-coded external service'],
+      ['navigator.mediaDevices', 'the microphone'],
+      ['getUserMedia', 'the microphone'],
+    ].filter(([needle]) => speech.includes(needle));
+    if (outsourced.length === 0) {
+      ok('assistant voice layer is browser-only (speechSynthesis, no service, no microphone)');
+    } else {
+      fail(`assistant voice layer must stay inside the browser, found: ${outsourced.map(([, label]) => label).join(', ')}`);
+    }
+    if (speech.includes('speechSynthesis')) ok('assistant voice layer uses the browser\'s own Text-to-Speech');
+    else fail('assistant voice layer must use window.speechSynthesis');
+  } else {
+    fail('src/components/assistant/useAssistantSpeech.ts is missing');
+  }
+
+  // Phase 8 — nothing technical is shown to a customer. Comments are stripped
+  // first (the source documents the rules it follows), and then the visible UI
+  // files must not contain a single internal word: those belong to the
+  // services layer, which keeps talking to the database and the model exactly
+  // as before — quietly.
+  const chatUiFiles = [
+    'src/components/assistant/AssistantChat.tsx',
+    'src/components/assistant/useAssistantChat.ts',
+    'src/pages/AssistantPage.tsx',
+  ];
+  const internalWords = ['دیتابیس', 'موتور محلی', 'کاتالوگ', 'سوپابیس', 'همگام‌سازی'];
+  for (const file of chatUiFiles) {
+    if (!existsSync(join(root, file))) continue;
+    const visible = readFileSync(join(root, file), 'utf8')
+      .replace(/\/\*[\s\S]*?\*\//g, ' ')
+      .replace(/(^|\n)\s*\/\/[^\n]*/g, '\n');
+    const leaks = internalWords.filter((word) => visible.includes(word));
+    if (leaks.length === 0) ok(`${file} shows no internal wording to customers`);
+    else fail(`${file} prints internal details to the customer: ${leaks.join(', ')}`);
   }
 
   // The grounding layer must read the shared storefront services, so the
