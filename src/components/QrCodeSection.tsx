@@ -74,8 +74,8 @@ export default function QrCodeSection() {
             thick, with the QR itself as the focal point. The inner
             padding keeps the quiet zone around the code for scanning. */}
         <div className="w-full max-w-[14.5rem] justify-self-center lg:justify-self-start">
-          <div className="rounded-2xl border border-espresso/10 bg-white p-[5px] shadow-[0_1px_2px_rgba(41,35,33,0.06),0_30px_60px_-38px_rgba(41,35,33,0.28)]">
-            <div className="rounded-[10px] border border-gold-500/40 bg-white p-3 sm:p-3.5">
+          <div className="qr-organic rounded-2xl border border-espresso/10 bg-white p-[5px] shadow-[0_1px_2px_rgba(41,35,33,0.06),0_30px_60px_-38px_rgba(41,35,33,0.28)]">
+            <div className="qr-glass rounded-[10px] border border-gold-500/40 bg-white p-3 sm:p-3.5">
               <div className="relative aspect-square w-full overflow-hidden bg-white">
                 {qrMissing ? (
                   <div className="flex h-full w-full flex-col items-center justify-center gap-2.5 rounded-lg border border-dashed border-espresso/20 bg-cream-50 px-3 text-center">
