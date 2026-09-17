@@ -1,19 +1,19 @@
 // ============================================================
 // ZHINO — admin: order management
-// Orders recorded by the existing checkout (frontend-only mode:
-// same browser). Simple six-state workflow, no customer CRM.
+// One list, two sources (the page does not care which is active):
+//   - connected: orders are read from the Supabase database
+//     (RLS: visible to this admin session only) and the status
+//     select updates the database row;
+//   - local/demo: the localStorage records the frontend-only
+//     checkout writes, managed exactly as before.
+// Simple six-state workflow, no customer CRM.
 // UI: one filter menu + one card per order; the primary action
 // is the status select on each order.
 // ============================================================
 
 import { useMemo, useState } from 'react';
-import {
-  ORDER_STATUSES,
-  updateOrderStatus,
-  useStoredOrders,
-  type OrderStatus,
-  type StoredOrder,
-} from '../../services/orderStore';
+import { ORDER_STATUSES, type OrderStatus, type StoredOrder } from '../../services/orderStore';
+import { updateOrderStatus, useOrders } from '../../services/orderSync';
 import { formatNumber, formatPrice } from '../../utils/format';
 import { formatDateTime } from '../format';
 import { EmptyState } from '../components/ui';
@@ -23,13 +23,16 @@ import { cn } from '../../utils/cn';
 type StatusFilter = OrderStatus | 'all';
 
 export default function AdminOrdersPage() {
-  const orders = useStoredOrders();
+  const { orders, state } = useOrders();
   const [filter, setFilter] = useState<StatusFilter>('all');
 
   const filtered = useMemo(
     () => (filter === 'all' ? orders : orders.filter((o) => o.status === filter)),
     [orders, filter],
   );
+
+  const remote = state.source === 'remote';
+  const loading = remote && state.phase === 'loading';
 
   return (
     <div>
@@ -53,12 +56,26 @@ export default function AdminOrdersPage() {
         </select>
       </div>
 
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div className="panel-lux rounded-2xl">
+          <EmptyState
+            icon={<IconOrders className="h-5 w-5" />}
+            title="در حال بارگذاری سفارش‌ها…"
+            text="سفارش‌ها از دیتابیس خوانده می‌شوند."
+          />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="panel-lux rounded-2xl">
           <EmptyState
             icon={<IconOrders className="h-5 w-5" />}
             title="سفارشی در این دسته دیده نمی‌شود"
-            text="سفارش‌هایی که از طریق تسویه‌حساب سایت ثبت می‌شوند (در حالت نمایشی: همین مرورگر) اینجا فهرست و مدیریت می‌شوند."
+            text={
+              remote
+                ? state.phase === 'error'
+                  ? `خواندن سفارش‌ها از دیتابیس ناموفق بود: ${state.error ?? 'خطای ناشناخته'}`
+                  : 'سفارش‌هایی که مشتریان از طریق تسویه‌حساب سایت ثبت می‌کنند اینجا فهرست و مدیریت می‌شوند.'
+                : 'سفارش‌هایی که از طریق تسویه‌حساب سایت ثبت می‌شوند (در حالت نمایشی: همین مرورگر) اینجا فهرست و مدیریت می‌شوند.'
+            }
           />
         </div>
       ) : (

@@ -1,7 +1,15 @@
 // ============================================================
 // ZHINO — checkout (customer -> address -> payment -> confirmation)
-// Works frontend-only today; redirects to the payment gateway once
-// VITE_API_BASE_URL is configured (see src/services/api.ts).
+// Order persistence, by configuration:
+//   - VITE_API_BASE_URL configured → the payment backend creates
+//     the order (src/services/api.ts) and redirects to the gateway.
+//   - Supabase configured → the order is registered with the
+//     database's create_order RPC (guest checkout; prices, shipping
+//     and stock are validated on the server, see
+//     src/services/supabaseOrders.ts).
+//   - neither → frontend-only demo: a denormalized snapshot is
+//     recorded in this browser (localStorage) and the admin panel
+//     manages it there.
 // ============================================================
 
 import { useEffect, useMemo, useState } from 'react';
@@ -10,6 +18,8 @@ import { useCartContext } from '../context/CartContext';
 import { getProductById, getVariantById } from '../services/catalog';
 import { getSettings } from '../services/settings';
 import { recordLocalOrder } from '../services/orderStore';
+import { describeCheckoutFailure, submitRemoteOrder } from '../services/supabaseOrders';
+import { isSupabaseConfigured } from '../services/supabaseClient';
 import { formatNumber, formatPrice } from '../utils/format';
 import { initiatePayment, verifyPayment } from '../services/api';
 import { soundService } from '../services/soundService';
@@ -59,6 +69,7 @@ export default function CheckoutPage() {
   const [orderId, setOrderId] = useState<string | null>(null);
 
   const apiConfigured = Boolean(import.meta.env.VITE_API_BASE_URL);
+  const dbConfigured = isSupabaseConfigured();
 
   const lines = useMemo(
     () =>
@@ -173,6 +184,26 @@ export default function CheckoutPage() {
       window.location.href = res.gatewayUrl;
     } catch (err) {
       if (err instanceof Error && err.message === 'PAYMENT_API_NOT_CONFIGURED') {
+        if (isSupabaseConfigured()) {
+          // Database mode: the create_order RPC validates the
+          // catalog/stock/shipping on the server, decrements
+          // inventory atomically and returns the authoritative
+          // id + amounts. On refusal the cart is kept as-is so
+          // the customer can adjust quantities and retry — and no
+          // local record is written, because the admin panel reads
+          // the database in this mode.
+          try {
+            const created = await submitRemoteOrder({ customer, address, items, shippingMethod });
+            setOrderId(created.id);
+            clearCart();
+            soundService.play('orderComplete');
+            setStep('confirmation');
+            window.scrollTo({ top: 0 });
+          } catch (orderErr) {
+            setGatewayError(describeCheckoutFailure(orderErr));
+          }
+          return;
+        }
         // Frontend-only mode: record the order locally and confirm.
         // The record is a denormalized snapshot (names/prices at
         // purchase time) managed by the admin panel's «سفارش‌ها»
@@ -487,7 +518,9 @@ export default function CheckoutPage() {
               <p className="rounded-xl bg-cream-100 px-4 py-3.5 text-xs leading-6 text-mocha ring-1 ring-espresso/8">
                 {apiConfigured
                   ? 'پس از ثبت سفارش، برای پرداخت امن به درگاه بانکی منتقل می‌شوید.'
-                  : 'درگاه پرداخت اینترنتی هنوز متصل نشده است؛ سفارش شما به‌صورت آزمایشی ثبت و نمایش داده می‌شود.'}
+                  : dbConfigured
+                    ? 'درگاه پرداخت اینترنتی هنوز متصل نشده است؛ سفارش شما در سایت ثبت می‌شود و پرداخت پس از هماهنگی با پشتیبانی انجام خواهد شد.'
+                    : 'درگاه پرداخت اینترنتی هنوز متصل نشده است؛ سفارش شما به‌صورت آزمایشی ثبت و نمایش داده می‌شود.'}
               </p>
 
               {gatewayError && (

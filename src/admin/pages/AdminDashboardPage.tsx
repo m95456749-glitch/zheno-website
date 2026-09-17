@@ -7,7 +7,7 @@
 
 import { Link } from 'react-router-dom';
 import { useCatalog } from '../../services/catalog';
-import { useStoredOrders } from '../../services/orderStore';
+import { useOrders } from '../../services/orderSync';
 import { getSettings } from '../../services/settings';
 import { formatNumber, formatPrice } from '../../utils/format';
 import { formatDate } from '../format';
@@ -16,7 +16,9 @@ import { IconOrders, IconInventory } from '../Icons';
 import { cn } from '../../utils/cn';
 
 export default function AdminDashboardPage() {
-  const orders = useStoredOrders();
+  // Orders come from the active source: the Supabase database when
+  // connected, the localStorage records in demo/local mode.
+  const { orders, state } = useOrders();
   const catalog = useCatalog();
   const settings = getSettings();
 
@@ -66,11 +68,19 @@ export default function AdminDashboardPage() {
             مشاهده همه
           </Link>
         </header>
-        {recent.length === 0 ? (
+        {state.source === 'remote' && state.phase === 'loading' ? (
+          <p className="px-5 py-8 text-center text-[0.75rem] font-bold text-mocha">
+            در حال بارگذاری سفارش‌ها از دیتابیس…
+          </p>
+        ) : recent.length === 0 ? (
           <EmptyState
             icon={<IconOrders className="h-5 w-5" />}
             title="هنوز سفارشی ثبت نشده است"
-            text="سفارش‌هایی که از طریق تسویه‌حساب سایت ثبت می‌شوند (در حالت نمایشی: همین مرورگر) اینجا فهرست می‌شوند."
+            text={
+              state.source === 'remote'
+                ? 'سفارش‌هایی که مشتریان از طریق تسویه‌حساب سایت ثبت می‌کنند اینجا فهرست می‌شوند.'
+                : 'سفارش‌هایی که از طریق تسویه‌حساب سایت ثبت می‌شوند (در حالت نمایشی: همین مرورگر) اینجا فهرست می‌شوند.'
+            }
           />
         ) : (
           <ul className="divide-y divide-espresso/6">
