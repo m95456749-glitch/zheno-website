@@ -257,10 +257,12 @@ async function waitNote(r, needle) {
     const innerGold = shadowEl?.querySelector(':scope > .border-gold-500\\/40') ??
       (shadowEl ? Array.from(shadowEl.children).find((c) => (c.className ?? '').includes('border-gold-500/40')) : null);
     expectCond('plate inner edge is a matte-gold hairline (border-gold-500/40)', !!innerGold);
-    // Quiet zone: inner padding between the gold hairline and the QR square.
+    // Quiet zone: balanced inner padding between the gold hairline and
+    // the QR square. The artwork itself carries a 3-module quiet zone, so
+    // the slimmer p-2 frame padding still completes ~6 calm modules total.
     expectCond(
-      'quiet zone preserved (padding between hairline and code)',
-      !!innerGold && ((innerGold.className ?? '').includes('p-3')),
+      'quiet zone preserved (balanced padding between hairline and code)',
+      !!innerGold && ((innerGold.className ?? '').includes('p-2')),
       innerGold ? `class="${innerGold.className}"` : 'no inner frame',
     );
     // The QR square slot (aspect-square) is the focal element inside.
