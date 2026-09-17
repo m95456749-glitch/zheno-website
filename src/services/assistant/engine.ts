@@ -11,6 +11,9 @@
 //   ۲) اگر داده‌ای در فروشگاه نباشد، پاسخ «نمی‌دانم» است —
 //      هیچ عدد، محصول یا دستوری از خودمان ساخته نمی‌شود.
 //   ۳) پرسش‌های بیرون از حوزهٔ ژینو با احترام و شفافیت رد می‌شوند.
+//   ۴) لحن پاسخ‌ها (فاز ۸): مهربان، خودمانی و کوتاه — مثل یک فروشندهٔ
+//      خوش‌برخورد. بدون توضیح فنی و بدون نام بردن از «دیتابیس»، «کاتالوگ»
+//      یا «موتور محلی»: مشتری فقط جوابش را می‌شنود.
 //
 // قابلیت‌های آمادهٔ امروز (و «ابزار»های آیندهٔ مدل هوش مصنوعی):
 //   راهنمای انتخاب، معرفی کاتالوگ، جست‌وجوی طعم، قیمت/موجودی،
@@ -28,7 +31,6 @@ import { formatNumber, formatPrice, toPersianDigits } from '../../utils/format';
 import {
   availableFlavors,
   cheapestVariant,
-  dataSourceLabel,
   describeProduct,
   freeShippingLine,
   isAvailable,
@@ -150,11 +152,11 @@ export const DEFAULT_SUGGESTIONS: AssistantSuggestion[] = [
 ];
 
 export const ASSISTANT_INTRO =
-  'سلام و درود! من «دستیار ژینو» هستم؛ راهنمای انتخاب محصول، دستور تهیهٔ ژله و کاستر، پیشنهاد دسر و پاسخ دربارهٔ قیمت و موجودی واقعی فروشگاه.';
+  'سلام، خوش اومدید. من دستیار ژینو هستم؛ طعم‌ها، قیمت و موجودی، دستور تهیهٔ ژله و کاستر و انتخاب دسر — هرچی لازم دارید بپرسید، کوتاه جواب می‌دم.';
 
 /** پیام وقتی گفتگو پاک می‌شود (شروع تازه) */
 export const ASSISTANT_RESTART =
-  'گفتگو پاک شد. در خدمتم — بپرسید یا یکی از پیشنهادهای پایین را انتخاب کنید.';
+  'گفتگو تازه شد. در خدمتم — بپرسید یا یکی از پیشنهادها را انتخاب کنید.';
 
 /**
  * «برآورد تقریبی» مقدار لازم برای هر نفر.
@@ -310,12 +312,12 @@ function reply(
 /* ── پاسخ‌های ثابت (بدون داده) ─────────────────────────────── */
 
 const SCOPE_REPLY = bubble(
-  'من دستیار ژینو هستم و فقط دربارهٔ محصولات ژینو، تهیهٔ ژله و کاستر، انتخاب دسر و سفارش‌های فروشگاه می‌توانم راهنمایی کنم.',
-  'خوشحال می‌شوم در همین موضوع‌ها کمکتان کنم — مثلاً انتخاب طعم، دستور تهیه یا پیشنهاد دسر برای مهمانی.',
+  'راستش من فقط دربارهٔ محصولات ژینو، تهیهٔ ژله و کاستر، انتخاب دسر و سفارش فروشگاه می‌تونم کمکتون کنم.',
+  'در همین موضوع‌ها بپرسید: انتخاب طعم، دستور تهیه، قیمت و موجودی، یا یه دسر برای مهمانی.',
 );
 
 const CLARIFY_REPLY = bubble(
-  'سؤال‌تان را کامل متوجه نشدم. اگر منظورتان محصول، دستور تهیه، قیمت و موجودی یا پیشنهاد دسر است، کوتاه‌تر بپرسید یا یکی از پیشنهادهای پایین را بزنید.',
+  'سؤال‌تان را کامل متوجه نشدم. کوتاه‌تر بپرسید — یا یکی از پیشنهادها را بزنید: قیمت و موجودی، دستور تهیه، یا پیشنهاد دسر.',
 );
 
 /* ── پرسش «اطلاعاتت را از کجا می‌آوری؟» ────────────────────── */
@@ -347,18 +349,13 @@ const SOURCE_INFO_KEYWORDS = [
 function sourceInfoReply(context: AssistantContext): LocalReply {
   const lines: string[] = [];
   if (context.dataSource === 'database') {
-    lines.push('بله — محصولات، طعم‌ها، قیمت، موجودی و دستورهای تهیه را همین حالا از دیتابیس فروشگاه می‌خوانم.');
-    if (context.dataUpdatedAt) {
-      const time = formatClock(context.dataUpdatedAt);
-      if (time) lines.push(`آخرین همگام‌سازی: ساعت ${time}.`);
-    }
+    // صادقانه، ولی بدون واژه‌های فنی: مشتری می‌فهمد عدد «همین حالا» گرفته شده
+    lines.push('بله — قیمت‌ها، موجودی، طعم‌ها و دستورهای تهیه را لحظه‌ای از خودِ فروشگاه می‌گیرم؛ همان چیزی که همین حالا در سایت ثبت شده.');
   } else {
-    lines.push(
-      'در این لحظه اتصال دیتابیس فروشگاه برقرار نیست، بنابراین از دادهٔ محلی خود فروشگاه پاسخ می‌دهم؛ همین داده هم همان محصولات، قیمت‌ها و دستورهای واقعی است.',
-    );
+    lines.push('قیمت‌ها، موجودی و دستورهای تهیه را از همان فهرست فروشگاه می‌گیرم، نه از حافظهٔ خودم.');
   }
-  lines.push(`سفارش‌های ارسال رایگان از ${formatPrice(context.settings.freeShippingThreshold)} محاسبه می‌شود.`);
-  lines.push('هیچ قیمت یا موجودی‌ای را از خودم نمی‌سازم؛ هر عددی که نگویم، در فهرست فروشگاه نبوده است.');
+  lines.push(`ارسال رایگان از ${formatPrice(context.settings.freeShippingThreshold)} شروع می‌شه؛ همان چیزی که در سبد خرید می‌بینید.`);
+  lines.push('هیچ عددی را از خودم نمی‌سازم؛ چیزی که نباشد، می‌گویم پیدا نمی‌کنم.');
 
   return reply(
     'catalog',
@@ -374,34 +371,22 @@ function sourceInfoReply(context: AssistantContext): LocalReply {
   );
 }
 
-/** ساعت محلی به فارسی — اگر مرورگر پشتیبانی نکرد، خط نمایش داده نمی‌شود */
-function formatClock(iso: string): string | null {
-  try {
-    const date = new Date(iso);
-    if (Number.isNaN(date.getTime())) return null;
-    return new Intl.DateTimeFormat('fa-IR', { hour: '2-digit', minute: '2-digit' }).format(date);
-  } catch {
-    return null;
-  }
-}
-
 /* ── قابلیت‌ها ─────────────────────────────────────────────── */
 
 function catalogReply(context: AssistantContext): LocalReply {
   const weights = new Set(context.products.flatMap((product) => product.variants.map((v) => v.weight)));
-  const weightLine = weights.size === 1 ? `همهٔ محصولات در بستهٔ ${[...weights][0]} عرضه می‌شوند.` : '';
+  const weightLine = weights.size === 1 ? `همه در بستهٔ ${[...weights][0]} عرضه می‌شه.` : '';
   const priceLine = context.priceRange
-    ? `قیمت‌ها از ${price(context.priceRange.min)} شروع می‌شود.`
+    ? `قیمت‌ها از ${price(context.priceRange.min)} شروع می‌شه.`
     : '';
   return reply(
     'catalog',
     bubble(
-      `فروشگاه ژینو الان ${fa(context.counts.total)} محصول دارد: ${fa(context.counts.jelly)} طعم پودر ژله و ${fa(context.counts.custard)} طعم پودر کاستر.`,
+      `الان ${fa(context.counts.total)} محصول داریم: ${fa(context.counts.jelly)} طعم پودر ژله و ${fa(context.counts.custard)} طعم پودر کاستر.`,
       weightLine,
       priceLine,
       freeShippingLine(context),
-      'قیمت و موجودی هر محصول در صفحهٔ همان محصول به‌روز است؛ از صفحهٔ محصولات شروع کنید.',
-      dataSourceNote(context),
+      'قیمت و موجودی هر محصول توی صفحهٔ خودش هست؛ از صفحهٔ محصولات شروع کنید.',
     ),
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
@@ -426,8 +411,8 @@ function flavorsReply(context: AssistantContext): LocalReply {
     return reply(
       'flavors',
       bubble(
-        'در فهرست فعلی فروشگاه، طعمی برای نمایش نیست؛ این یعنی محصول فعالی خوانده نشده است.',
-        'برای بررسی وضعیت، صفحهٔ محصولات را ببینید یا بعداً دوباره بپرسید.',
+        'الان طعم فعالی در فروشگاه نمی‌بینم؛ احتمالاً هنوز محصولی منتشر نشده است.',
+        'صفحهٔ محصولات را ببینید یا کمی بعد دوباره بپرسید.',
       ),
       {
         links: [link('مشاهدهٔ محصولات', '/products')],
@@ -447,10 +432,9 @@ function flavorsReply(context: AssistantContext): LocalReply {
   return reply(
     'flavors',
     bubble(
-      'طعم‌های موجود در فروشگاه ژینو همین حالا:',
+      'طعم‌های موجود در فروشگاه ژینو:',
       ...lines,
-      dataSourceNote(context),
-      'اگر طعم خاصی مدنظرتان است، نامش را بنویسید تا قیمت و موجودی همان را بگویم.',
+      'طعم خاصی مدنظرتان است؟ نامش را بنویسید تا قیمت و موجودی همان را بگویم.',
     ),
     {
       links: [link('همهٔ محصولات', '/products')],
@@ -467,11 +451,11 @@ function guideReply(context: AssistantContext): LocalReply {
   return reply(
     'guide',
     bubble(
-      'برای انتخاب، اول ببینید دسرتان سرد است یا گرم:',
-      '• «پودر ژله» ژینو: بافت لرزان و سبک — سرو سرد؛ مناسب مهمانی، دسر تابستانی و لایه‌های رنگی.',
-      '• «پودر کاستر» ژینو: بافت مخملی و خامه‌ای — سرو گرم یا سرد؛ مناسب روی میوه، لایهٔ میانی کیک و دسر خانگی.',
-      `اکنون در فروشگاه ${fa(context.counts.jelly)} طعم ژله و ${fa(context.counts.custard)} طعم کاستر فعال است.`,
-      'اگر تازه‌کار هستید با یک طعم آشنا شروع کنید و بعد سراغ طعم‌های خاص بروید.',
+      'اول ببینید دسرتان سرد می‌خواهید یا گرم:',
+      '• پودر ژله: سبک و لرزان، سرو سرد — مناسب مهمانی، تابستان و لایه‌های رنگی.',
+      '• پودر کاستر: مخملی و خامه‌ای، سرد یا گرم — روی میوه، لایهٔ میانی کیک و دسر خانگی.',
+      `الان ${fa(context.counts.jelly)} طعم ژله و ${fa(context.counts.custard)} طعم کاستر داریم.`,
+      'تازه‌کارید؟ با یک طعم آشنا شروع کنید، بعد سراغ طعم‌های خاص بروید.',
     ),
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
@@ -491,7 +475,7 @@ function flavorReply(context: AssistantContext, products: AssistantProductFact[]
     return reply(
       'flavor',
       bubble(
-        'این طعم را در فهرست فعلی فروشگاه ژینو نمی‌بینم؛ ترجیح می‌دهم چیزی از خودم اضافه نکنم.',
+        'این طعم را الان در فروشگاه نداریم؛ نمی‌خواهم چیزی از خودم اضافه کنم.',
         available.length > 0
           ? `طعم‌های موجود الان: ${available.join('، ')}${context.products.length > 4 ? ' و …' : ''}.`
           : null,
@@ -517,8 +501,8 @@ function flavorReply(context: AssistantContext, products: AssistantProductFact[]
       products.length === 1 ? 'این محصول در فروشگاه موجود است:' : 'این گزینه‌ها را در فروشگاه داریم:',
       ...lines,
       anyAvailable
-        ? 'قیمت و موجودی بالا همین حالا از صفحهٔ همین محصولات خوانده شده است.'
-        : 'این محصول(ها) الان در فهرست فروشگاه موجود نیستند.',
+        ? 'قیمت و موجودی بالا دقیق همونه؛ روی صفحهٔ محصول هم همین را می‌بینید.'
+        : 'این محصول الان توی فروشگاه موجود نیست.',
     ),
     {
       links: productLinks(products),
@@ -542,7 +526,7 @@ function priceStockReply(context: AssistantContext, products: AssistantProductFa
           : `موجود در انبار`;
       return `• ${product.shortName} — ${variant.weight}: ${price(variant.price)} — ${stock}`;
     });
-    return reply('price-stock', bubble('قیمت و موجودی روز فروشگاه:', ...lines), {
+    return reply('price-stock', bubble('قیمت و موجودی امروز:', ...lines), {
       links: [...productLinks(products), link('همهٔ محصولات', '/products')],
       grounded: true,
     });
@@ -552,8 +536,8 @@ function priceStockReply(context: AssistantContext, products: AssistantProductFa
   return reply(
     'price-stock',
     bubble(
-      'برای اینکه قیمت و موجودی دقیق را بگویم، اسم طعم یا محصول را بفرمایید (مثلاً «قیمت ژله انار»).',
-      cheapest ? `قیمت‌های فروشگاه از ${cheapest} شروع می‌شود و همه از همین کاتالوگ خوانده می‌شود.` : null,
+      'اسم طعم یا محصول را بفرمایید تا قیمت و موجودی همان را بگویم (مثلاً «قیمت ژله انار»).',
+      cheapest ? `قیمت‌ها از ${cheapest} شروع می‌شود.` : null,
       freeShippingLine(context),
     ),
     {
@@ -580,8 +564,8 @@ function recipeReply(
     return reply(
       category === 'custard' ? 'recipe-custard' : 'recipe-jelly',
       bubble(
-        'دستور رسمی این دسته الان در فهرست فروشگاه نیست؛ برای اینکه دستور اشتباهی به شما ندهم، از خودم چیزی نمی‌گویم.',
-        'صفحهٔ دستور تهیه را ببینید یا پشتیبانی ژینو را بپرسید.',
+        'دستور رسمی این دسته را الان ندارم؛ نمی‌خواهم دستور اشتباه به شما بدهم.',
+        'صفحهٔ دستور تهیه را ببینید یا با پشتیبانی ژینو در تماس باشید.',
       ),
       {
         links: [link('صفحهٔ دستور تهیه', '/recipes'), link('تماس با ژینو', '/contact')],
@@ -605,8 +589,8 @@ function recipeReply(
     category === 'custard' ? 'recipe-custard' : 'recipe-jelly',
     bubble(
       ...blocks,
-      'این‌ها همان دستور رسمی روی بستهٔ ژینو هستند؛ برای دیدن نسخهٔ کامل به صفحهٔ دستور تهیه سر بزنید.',
-      'برای لایه‌های رنگی، هر لایه را جدا آماده کنید و پیش از ریختن لایهٔ بعدی کمی در یخچال بگذارید تا ببندد.',
+      'همین دستوری است که روی بستهٔ ژینو نوشته شده.',
+      'برای لایه‌های رنگی، هر لایه را جدا درست کنید و کمی در یخچال بگذارید تا ببندد.',
     ),
     {
       links: [link('صفحهٔ دستور تهیه', '/recipes'), ...productLinks(relatedProducts, 2)],
@@ -652,8 +636,8 @@ function servingsReply(context: AssistantContext, people: number, category: Prod
     bubble(
       `برای ${fa(people)} نفر، برآورد تقریبی این مقدار است:`,
       ...lines,
-      'این یک «برآورد تقریبی» بر پایهٔ دستور رسمی روی بسته است (۳ قاشق پودر ژله برای ۱.۵ لیوان آب و ۱ قاشق پودر کاستر برای ۱ لیوان شیر)؛ با اندازهٔ کاسه‌ها و لایه‌ها کمی کم و زیاد می‌شود.',
-      'اگر هر دو دسر را سرو می‌کنید، برای هر نفر یک پرس از هر کدام در نظر بگیرید.',
+      'این برآورد تقریبی است — به اندازهٔ کاسه‌ها و لایه‌های شما کم و زیاد می‌شود.',
+      'هر دو دسر را سرو می‌کنید؟ برای هر نفر یک پرس از هر کدام کافی است.',
     ),
     {
       links: [...productLinks(usedProducts, 2), link('دستور تهیه', '/recipes')],
@@ -680,7 +664,7 @@ function budgetReply(context: AssistantContext, budget: number): LocalReply {
     return reply(
       'budget',
       bubble(
-        `با ${price(budget)}، هیچ محصولی از فهرست فعلی فروشگاه در سبد جا نمی‌شود.`,
+        `با ${price(budget)} فعلاً محصولی در فروشگاه جا نمی‌شود.`,
         cheapest
           ? `ارزان‌ترین گزینهٔ موجود ${price(cheapest)} است؛ اگر بودجه را کمی بالاتر ببرید، پیشنهاد بهتری دارم.`
           : 'فهرست محصولات را ببینید و اگر بودجه را بگویید، ترکیب پیشنهادی می‌سازم.',
@@ -735,9 +719,8 @@ function budgetReply(context: AssistantContext, budget: number): LocalReply {
       ),
       `جمع: ${price(total)}${remaining > 0 ? ` — ${price(remaining)} از بودجه باقی می‌ماند` : ''}`,
       remaining >= context.settings.standardShippingCost
-        ? 'با باقی‌ماندهٔ بودجه می‌توانید کرایهٔ ارسال را هم حساب کنید.'
+        ? 'با باقی‌ماندهٔ بودجه، کرایهٔ ارسال هم حساب می‌شه.'
         : freeShippingLine(context),
-      'همهٔ قیمت‌ها از کاتالوگ همین فروشگاه خوانده شده است.',
     ),
     {
       links: [...productLinks(picked.map((item) => item.product)), link('سبد خرید', '/cart')],
@@ -805,8 +788,8 @@ function pairingReply(context: AssistantContext, products: AssistantProductFact[
     return reply(
       'pairing',
       bubble(
-        'برای پیشنهاد ترکیب طعم، فعلاً محصول کافی در فهرست فروشگاه نمی‌بینم؛ ترجیح می‌دهم چیزی از خودم نسازم.',
-        'از صفحهٔ محصولات، طعم‌های موجود را ببینید.',
+        'برای پیشنهاد ترکیب، فعلاً محصول کافی در فروشگاه نمی‌بینم؛ ترجیح می‌دهم چیزی از خودم نسازم.',
+        'طعم‌های موجود را از صفحهٔ محصولات ببینید.',
       ),
       { links: [link('مشاهدهٔ محصولات', '/products')], grounded: true },
     );
@@ -818,7 +801,7 @@ function pairingReply(context: AssistantContext, products: AssistantProductFact[
       'این ترکیب را پیشنهاد می‌کنم:',
       ...suggestions.map((product) => `• ${describeProduct(product)}`),
       note,
-      'هر دو قلم را می‌توانید همان‌جا در سبد خرید بگذارید و به‌صورت یک دسر لایه‌ای سرو کنید.',
+      'هر دو را بگذارید در سبد و یک دسر لایه‌ای درست کنید.',
     ),
     {
       links: [...productLinks(suggestions, 3), link('سبد خرید', '/cart')],
@@ -855,8 +838,8 @@ function suggestionReply(context: AssistantContext, preferences: Preference[]): 
     return reply(
       'suggestion',
       bubble(
-        'برای اینکه پیشنهادم دقیق باشد، دو چیز را بگویید: دسر سرد می‌خواهید یا گرم، و شکلاتی دوست دارید یا میوه‌ای؟',
-        'بعد همان‌جا از بین محصولات موجود فروشگاه، ترکیب مناسب را با قیمت واقعی برایتان می‌چینم.',
+        'دو چیز بگویید تا دقیق پیشنهاد بدهم: سرد می‌خواهید یا گرم؟ شکلاتی یا میوه‌ای؟',
+        'بعد از محصولات موجود، ترکیب مناسب را با قیمت واقعی برایتان می‌چینم.',
       ),
       {
         suggestions: [
@@ -917,7 +900,6 @@ function suggestionReply(context: AssistantContext, preferences: Preference[]): 
     bubble(
       summary,
       ...picks.map((product, index) => `${fa(index + 1)}. ${describeProduct(product)} — ${reasons[index] ?? ''}`.trim()),
-      'قیمت و موجودی بالا از کاتالوگ فعلی فروشگاه خوانده شده است.',
     ),
     {
       links: [...productLinks(picks, 3), link('سبد خرید', '/cart')],
@@ -936,7 +918,7 @@ function shippingReply(context: AssistantContext): LocalReply {
     bubble(
       freeShippingLine(context),
       `کرایهٔ ارسال عادی ${price(context.settings.standardShippingCost)} و ارسال سریع ${price(context.settings.expressShippingCost)} است.`,
-      'مبلغ نهایی و وضعیت ارسال رایگان را در صفحهٔ سبد خرید و تسویه حساب می‌بینید.',
+      'مبلغ نهایی و ارسال رایگان را در سبد خرید و تسویه حساب می‌بینید.',
     ),
     {
       links: [link('سبد خرید', '/cart'), link('مشاهدهٔ محصولات', '/products')],
@@ -953,7 +935,7 @@ function orderHelpReply(): LocalReply {
       '۱. محصول را از صفحهٔ محصولات انتخاب و «افزودن به سبد خرید» را بزنید.',
       '۲. در سبد خرید تعداد را بررسی کنید.',
       '۳. در تسویه حساب مشخصات تحویل‌گیرنده را پر کنید و سفارش را ثبت کنید.',
-      'اگر جایی گیر کردید، همین‌جا بنویسید تا راهنمایی کنم.',
+      'جایی گیر کردید؟ همین‌جا بنویسید، با هم ردیفش می‌کنیم.',
     ),
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('سبد خرید', '/cart'), link('تسویه حساب', '/checkout')],
@@ -1126,7 +1108,7 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
       const amount = parseAmount(normalized);
       return amount !== null
         ? budgetReply(context, amount)
-        : reply('budget', 'بودجهٔ تقریبی‌تان را بفرمایید (مثلاً «۵۰۰ هزار تومان») تا ترکیب پیشنهادی از محصولات موجود بسازم.', {
+        : reply('budget', 'بودجهٔ تقریبی‌تان را بگویید (مثلاً «۵۰۰ هزار تومان») تا ترکیب پیشنهادی را از محصولات موجود بسازم.', {
             grounded: true,
             suggestions: [
               { label: '۳۰۰ هزار تومان', prompt: 'با ۳۰۰ هزار تومان چه ترکیبی بگیرم؟' },
@@ -1190,9 +1172,9 @@ export function answerLocally(question: string, context: AssistantContext): Assi
   return { ...resolveAnswer(question, context), dataSource: context.dataSource };
 }
 
-/** یادداشت شفاف منبع داده — برای نمایش زیر پاسخ‌های مهم */
-export function dataSourceNote(context: AssistantContext): string {
-  return context.dataSource === 'database'
-    ? 'این پاسخ از دادهٔ زندهٔ دیتابیس فروشگاه (محصولات، قیمت، موجودی و دستورها) خوانده شده است.'
-    : `این پاسخ از ${dataSourceLabel(context.dataSource)} ساخته شده است؛ اتصال دیتابیس فروشگاه در این لحظه فعال نیست.`;
-}
+/*
+ * فاز ۸: «منبع داده» دیگر هیچ‌وقت داخل پاسخ به مشتری گفته نمی‌شود.
+ * اتصال دیتابیس و Fallback محلی دقیقاً مثل قبل در پشت صحنه کار می‌کنند
+ * (knowledge.ts همان کارت اطلاعات زنده را می‌سازد و engine.ts همان
+ * قیمت/موجودی/دستور واقعی را می‌خواند)؛ فقط متن فنی از حباب پاسخ حذف شده.
+ */

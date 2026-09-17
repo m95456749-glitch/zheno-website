@@ -1,34 +1,31 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۷) — محیط چت تمام‌صفحه
+// ZHINO — «دستیار ژینو» (فاز ۷ و ۸) — محیط چت تمام‌صفحه
 //
-// صفحهٔ /assistant دیگر شبیه یک صفحهٔ معمولی سایت نیست:
+// صفحهٔ /assistant شبیه یک صفحهٔ معمولی سایت نیست:
 //
 //   • فوتر، منوها، پرچم‌ها، بخش معرفی قابلیت‌ها و ستون کنار حذف
 //     شده‌اند (Layout روی همین مسیر هدر/فوتر فروشگاه را رندر نمی‌کند).
 //   • صفحه دقیقاً هم‌قد دید کاربر است و فقط فهرست پیام‌ها اسکرول
 //     می‌شود؛ کادر نوشتن پیام همیشه پایین می‌ماند (الگوی ChatGPT).
 //   • سربرگ خیلی ساده و Premium: نشان کوچک ژینو، عنوان «دستیار ژینو»،
-//     پیل ظریف وضعیت/منبع داده، «گفتگوی تازه» و دکمهٔ ظریف
-//     «بازگشت به فروشگاه».
+//     «گفتگوی تازه» و دکمهٔ ظریف «بازگشت به فروشگاه».
 //
-// هیچ قابلیت فنی‌ای اینجا نیست: منطق گفتگو، اتصال دیتابیس، مدل
-// هوش مصنوعی، fallback محلی و قیمت/موجودی/دستور تهیه همچنان از
-// همان لایه‌های قبلی می‌آید (useAssistantChat + services/assistant).
-// Routing فروشگاه، سبد خرید، API و Edge Function دست‌نخورده‌اند و
-// «بازگشت به فروشگاه» به صفحهٔ اصلی (/) می‌رود؛ مسیر هم با push در
-// تاریخچه ثبت می‌شود، پس دکمهٔ Back مرورگر مثل قبل کار می‌کند.
+// فاز ۸: پیل وضعیت هم از سربرگ برداشته شد. «دیتابیس وصل است / نیست»،
+// «مدل هوشمند فعال است / نیست» و «منبع داده» حرف‌های داخلی ماست؛ مشتری
+// فقط چت را می‌بیند. اتصال دیتابیس، مدل هوش مصنوعی و Fallback محلی
+// پشت صحنه دقیقاً مثل قبل کار می‌کنند (useAssistantChat +
+// services/assistant) — فقط هیچ‌جا در این صفحه نوشته نمی‌شوند.
+// هیچ قابلیت فنی‌ای اینجا حذف نشده و قیمت/موجودی/دستور تهیه همچنان از
+// دادهٔ واقعی فروشگاه می‌آید. «بازگشت به فروشگاه» به صفحهٔ اصلی (/)
+// می‌رود؛ مسیر هم با push در تاریخچه ثبت می‌شود، پس دکمهٔ Back مرورگر
+// مثل قبل کار می‌کند.
 // ============================================================
 
 import { useNavigate } from 'react-router-dom';
 import AssistantAvatar from '../components/assistant/AssistantAvatar';
 import AssistantChat from '../components/assistant/AssistantChat';
-import {
-  connectionLabel,
-  connectionNote,
-  useAssistantChat,
-} from '../components/assistant/useAssistantChat';
+import { useAssistantChat } from '../components/assistant/useAssistantChat';
 import { ASSISTANT_NAME } from '../components/assistant/assistantData';
-import { cn } from '../utils/cn';
 
 /** آیکن فروشگاه برای دکمهٔ «بازگشت به فروشگاه» */
 function StoreIcon() {
@@ -68,7 +65,7 @@ export default function AssistantPage() {
 
   return (
     <div className="zhino-assistant-page">
-      {/* ── سربرگ بسیار ساده: نشان، عنوان، وضعیت، گفتگوی تازه، بازگشت ── */}
+      {/* ── سربرگ بسیار ساده: نشان، عنوان، گفتگوی تازه، بازگشت ── */}
       <header className="zhino-assistant-topbar">
         <span className="zhino-assistant-brand">
           <span className="zhino-assistant-brand-mark">
@@ -77,17 +74,6 @@ export default function AssistantPage() {
           <span className="zhino-assistant-brand-text">
             <span className="zhino-assistant-brand-name">Zhino</span>
             <span className="zhino-assistant-brand-title">{ASSISTANT_NAME}</span>
-          </span>
-        </span>
-
-        {/* دو «حقیقت» جدا و ظریف: منبع پاسخ (مدل/محلی) و منبع داده (دیتابیس/فروشگاه) */}
-        <span
-          className={cn('zhino-assistant-status', `is-${chat.connection}`)}
-          title={connectionNote(chat.connection, chat.dataSource)}
-        >
-          <span className="zhino-assistant-status-dot" aria-hidden="true" />
-          <span className="zhino-assistant-status-text">
-            {connectionLabel(chat.connection, chat.dataSource)}
           </span>
         </span>
 
@@ -113,7 +99,9 @@ export default function AssistantPage() {
         </button>
       </header>
 
-      {/* ── محیط گفتگو — تمام‌قد، بدون هیچ بخش اضافی ── */}
+      {/* ── محیط گفتگو — تمام‌قد، بدون هیچ بخش اضافی ──
+          «گفتگوی تازه» به chat.clear وصل است: گفتگو با همان پیام
+          خوشامد و پیشنهادهای پیش‌فرض از نو شروع می‌شود. */}
       <AssistantChat chat={chat} />
     </div>
   );

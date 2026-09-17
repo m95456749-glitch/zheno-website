@@ -93,25 +93,11 @@ export type AssistantRemoteErrorKind =
   /** پاسخ سرور شکل معتبری نداشت */
   | 'invalid';
 
-/** پیام فارسی هر نوع خطا — یک‌جا، تا UI و لاگ هم‌پیام باشند */
-export function assistantErrorNote(kind: AssistantRemoteErrorKind): string {
-  switch (kind) {
-    case 'unconfigured':
-      return 'دستیار هوشمند روی سرور فعال نشده است؛ این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-    case 'timeout':
-      return 'پاسخ دستیار هوشمند دیر شد؛ این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-    case 'rate-limited':
-      return 'تعداد پرسش‌ها زیاد شد؛ چند دقیقه بعد دوباره امتحان کنید. این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-    case 'rejected':
-      return 'درخواست پذیرفته نشد؛ این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-    case 'invalid':
-      return 'پاسخ دستیار هوشمند خوانا نبود؛ این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-    case 'network':
-    case 'server':
-    default:
-      return 'ارتباط با دستیار هوشمند برقرار نشد؛ این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-  }
-}
+// توجه (فاز ۸): اینجا پیش‌تر یک پیام فارسی برای هر نوع خطا ساخته می‌شد
+// (`assistantErrorNote`) تا در رابط کاربری نشان داده شود. آن متن‌ها حذف
+// شدند، چون به مشتری نباید گفته شود اتصال مدل یا دیتابیس در کار است:
+// خطا بی‌صدا به Fallback محلی می‌رسد و نوع خطا فقط برای شمارندهٔ داخلی
+// و تصمیم Fallback نگه داشته می‌شود.
 
 export class AssistantRemoteError extends Error {
   readonly kind: AssistantRemoteErrorKind;

@@ -1868,12 +1868,58 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
 
 
 // ════════════════════════════════════════════════════════════
-// ASSISTANT SUITE (phase 5 → 7): the standalone /assistant page rendered
+// ASSISTANT SUITE (phase 5 → ): the standalone /assistant page rendered
 // as an immersive, ChatGPT-style chat environment (no storefront
 // header/footer), the floating launcher → route (no popup),
 // «بازگشت به فروشگاه», the browser back button, and the chat itself —
 // offline (local grounded engine) and connected (AI proxy, mocked).
+//
+// Phase 8 adds the customer-experience contract: nothing technical is ever
+// shown (database / local engine / catalog / AI model), the ready-made
+// questions are compact chips that collapse once the chat starts, answers
+// can be read aloud with the browser's own speech synthesis (never a third
+// party service, never the customer's own text) and the builder's small
+// signature sits under the composer.
 // ════════════════════════════════════════════════════════════
+
+/** Words that belong to our infrastructure, never to a customer's screen. */
+const ASSISTANT_INTERNAL_WORDS = [
+  'دیتابیس',
+  'دادهٔ زندهٔ دیتابیس',
+  'موتور محلی',
+  'کاتالوگ',
+  'همگام‌سازی',
+  'مدل هوشمند',
+  'هوش مصنوعی',
+  'سوپابیس',
+  'Edge Function',
+  'پاسخ محلی داده شد',
+  'تعداد پرسش‌ها زیاد شد',
+  'ارتباط با دستیار هوشمند',
+];
+
+/**
+ * The chat page must not print a single internal word — text and attributes
+ * alike. Only the rendered #root is scanned: the jsdom <body> also holds the
+ * injected app script, and that bundle contains every string in the whole
+ * storefront (the admin panel talks about the database, on purpose).
+ */
+function expectNoInternalWording(label, dom) {
+  const root = dom.window.document.getElementById('root');
+  const html = root ? root.innerHTML : '';
+  const leaked = ASSISTANT_INTERNAL_WORDS.filter((word) => html.includes(word));
+  if (leaked.length === 0) ok(`${label} — no technical wording anywhere on screen`);
+  else fail(`${label} — internal wording is visible to the customer: ${leaked.join(' | ')}`);
+}
+
+/** The topbar status pill was removed on purpose in phase 8. */
+function expectNoStatusPill(label, dom) {
+  if (dom.window.document.querySelector('.zhino-assistant-status')) {
+    fail(`${label} — the technical status pill is still rendered`);
+  } else {
+    ok(`${label} — no status pill (database/AI state stays behind the scenes)`);
+  }
+}
 
 const OFFLINE_FETCH = () => Promise.reject(new Error('offline (smoke test)'));
 
@@ -1894,6 +1940,9 @@ async function sendChatMessage(dom, waitFor, text) {
  * old capability column, so that is what we wait for.
  */
 const ASSISTANT_WELCOME_HEADING = 'سلام! من دستیار ژینو هستم.';
+
+/** Phase 8 — the small builder signature at the bottom of the chat */
+const SIGNATURE_TEXT = 'ساخته شده توسط m.azizi';
 
 async function openAssistantFromStore(dom, waitFor, text) {
   const launcher = dom.window.document.querySelector('a.zhino-assistant-launcher');
@@ -1922,8 +1971,46 @@ async function openAssistantFromStore(dom, waitFor, text) {
     expectNotContains('assistant page', body, 'توانایی‌های دستیار');
     expectNotContains('assistant page', body, 'شفاف و بی‌ادعا');
     expectNotContains('assistant page', body, '🇮🇷');
-    // honest disclosure: no AI backend in this build, but the data source is named
-    expectContains('assistant page', body, 'بدون مدل هوشمند');
+    // Phase 8 — the customer never sees our internals: no status pill and not
+    // one sentence about the database, the local engine or the AI model. The
+    // connection and the fallback still run — silently, behind the scenes.
+    expectNoStatusPill('assistant page', dom);
+    expectNoInternalWording('assistant page', dom);
+    if (dom.window.document.querySelector('.zhino-assistant-banner')) {
+      fail('assistant page — a connection banner is still shown to the customer');
+    } else {
+      ok('assistant page — no error banner about the AI connection');
+    }
+    // ready-made questions are compact chips, centred in the welcome state
+    const welcomeChips = dom.window.document.querySelectorAll(
+      '.zhino-assistant-welcome-chips .zhino-assistant-chip',
+    );
+    if (welcomeChips.length >= 4) {
+      ok(`assistant page — ${welcomeChips.length} suggestion chips sit under the welcome line`);
+    } else {
+      fail(`assistant page — only ${welcomeChips.length} chips in the welcome area`);
+    }
+    // …and nothing crowds the composer before the chat has started
+    if (dom.window.document.querySelector('.zhino-assistant-ideas-toggle')) {
+      fail('assistant page — the ideas row is rendered before the chat starts');
+    } else {
+      ok('assistant page — the composer stays clean while the chat is fresh');
+    }
+    // the voice control exists even where speech synthesis is missing (jsdom)
+    const voiceButton = dom.window.document.querySelector('button.zhino-assistant-voice');
+    if (voiceButton && voiceButton.getAttribute('aria-pressed') === 'false') {
+      ok('assistant page — a voice toggle exists and reading is off by default');
+    } else {
+      fail('assistant page — the voice toggle is missing or on by default');
+    }
+    // the builder's signature: present, but only one small line
+    expectContains('assistant page', body, SIGNATURE_TEXT);
+    const signature = dom.window.document.querySelector('.zhino-assistant-signature');
+    if (signature && signature.tagName === 'P') {
+      ok('assistant page — the signature is a quiet line inside the chat shell');
+    } else {
+      fail('assistant page — the signature is missing or is not a simple line');
+    }
     // the floating launcher must not be duplicated on its own page
     const launchers = dom.window.document.querySelectorAll('.zhino-assistant-launcher').length;
     if (launchers === 0) ok('assistant page — floating launcher is not duplicated');
@@ -2085,6 +2172,7 @@ async function openAssistantFromStore(dom, waitFor, text) {
     else fail('assistant chat — no grounded price answer: ' + text().slice(-220));
     expectContains('assistant chat', text(), 'ژله توت فرنگی');
 
+
     // the user's own message is rendered (RTL, right-aligned bubble)
     if (dom.window.document.querySelector('.zhino-assistant-row.is-user')) {
       ok('assistant chat — the user message is rendered');
@@ -2092,11 +2180,24 @@ async function openAssistantFromStore(dom, waitFor, text) {
       fail('assistant chat — user message bubble missing');
     }
 
-    // a ready-made suggestion answers with the official on-pack recipe
-    clickButtonByContains(dom, 'طرز تهیه ژله');
-    const recipe = await waitFor(() => text().includes('۱.۵ لیوان آب'));
-    if (recipe) ok('assistant chat — suggestion answers with the official recipe');
-    else fail('assistant chat — recipe answer missing: ' + text().slice(-220));
+    // a ready-made suggestion answers with the official on-pack recipe —
+    // phase 8: the row is quiet after the chat started, so it is opened first
+    // and the chip inside it is clicked (exactly what a customer does).
+    const toggleAgain = dom.window.document.querySelector('.zhino-assistant-ideas-toggle');
+    if (!toggleAgain) fail('assistant chat — the ideas row vanished between two answers');
+    else toggleAgain.click();
+    const findRecipeChip = () =>
+      Array.from(dom.window.document.querySelectorAll('.zhino-assistant-ideas-body .zhino-assistant-chip')).find(
+        (chip) => (chip.textContent ?? '').includes('طرز تهیه ژله'),
+      );
+    const chipFound = await waitFor(() => Boolean(findRecipeChip()));
+    if (!chipFound) fail('assistant chat — the recipe suggestion is not offered in the ideas row');
+    else {
+      findRecipeChip().click();
+      const recipe = await waitFor(() => text().includes('۱.۵ لیوان آب'));
+      if (recipe) ok('assistant chat — suggestion answers with the official recipe');
+      else fail('assistant chat — recipe answer missing: ' + text().slice(-220));
+    }
 
     // budget capability, computed from real prices only
     await sendChatMessage(dom, waitFor, 'با ۳۰۰ هزار تومان چه ترکیبی بگیرم؟');
@@ -2110,9 +2211,288 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (scoped) ok('assistant chat — unrelated questions get the honest scope answer');
     else fail('assistant chat — scope answer missing: ' + text().slice(-220));
 
+    // Phase 8 — an answer never carries a technical footnote, and the
+    // suggestions step aside instead of stacking boxes over the chat.
+    expectNoInternalWording('assistant chat', dom);
+    expectNoStatusPill('assistant chat', dom);
+    const ideasToggle = dom.window.document.querySelector('.zhino-assistant-ideas-toggle');
+    if (!ideasToggle) {
+      fail('assistant chat — the collapsed suggestions row is missing');
+    } else if (ideasToggle.getAttribute('aria-expanded') !== 'false') {
+      fail('assistant chat — the suggestions row should start collapsed after a question');
+    } else if (dom.window.document.querySelector('.zhino-assistant-ideas-body .zhino-assistant-chip')) {
+      fail('assistant chat — the collapsed suggestions row still shows its chips');
+    } else {
+      ok('assistant chat — suggestions collapse into a quiet row once the chat starts');
+      ideasToggle.click();
+    }
+    const opened = await waitFor(() =>
+      Boolean(dom.window.document.querySelector('.zhino-assistant-ideas-body .zhino-assistant-chip')),
+    );
+    if (!opened) fail('assistant chat — the suggestions row does not open');
+    else {
+      ok('assistant chat — opening the row reveals the ready-made questions');
+      // clicking a chip sends that question, exactly like typing it
+      const before = dom.window.document.querySelectorAll('.zhino-assistant-row.is-user').length;
+      dom.window.document
+        .querySelectorAll('.zhino-assistant-ideas-body .zhino-assistant-chip')[0]
+        .click();
+      const sent = await waitFor(
+        () => dom.window.document.querySelectorAll('.zhino-assistant-row.is-user').length > before,
+      );
+      if (sent) ok('assistant chat — a suggestion chip sends its question');
+      else fail('assistant chat — clicking a suggestion chip did not send anything');
+    }
+
     expectNoErrors('assistant chat', errors);
   } finally {
     dom.window.close();
+  }
+}
+
+// ── 34b. Phase 8 — reading the answer aloud with the browser's own TTS ──
+// A fake Web Speech API is installed inside jsdom and every utterance is
+// recorded. The rules this checks: reading is switched OFF until the customer
+// asks, the assistant's answer is what gets spoken (never the customer's own
+// question), the utterance is marked Persian, the stop control works, and not
+// a single network request is made for speech — no third-party voice service.
+{
+  const spoken = [];
+  let cancels = 0;
+  const requests = [];
+  const voiceFetch = (input, init) => {
+    requests.push(typeof input === 'string' ? input : input.url);
+    return Promise.reject(new Error('offline (smoke test)'));
+  };
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: voiceFetch },
+    appSource: appCode,
+    seed: (window) => {
+      window.localStorage.removeItem('zhino_assistant_voice_v1');
+      window.SpeechSynthesisUtterance = class FakeUtterance {
+        constructor(uttered) {
+          this.text = uttered;
+          this.lang = '';
+          this.voice = null;
+        }
+      };
+      const voices = [{ lang: 'fa-IR', name: 'ژینو فارسی' }];
+      // هر تکه مثل مرورگر واقعی در صف می‌ماند و با onend تمام می‌شود؛
+      // cancel() همهٔ صف را لغو می‌کند.
+      const pending = [];
+      window.speechSynthesis = {
+        speaking: false,
+        paused: false,
+        getVoices: () => voices,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        speak(utterance) {
+          const row = { utterance, dropped: false };
+          pending.push(row);
+          spoken.push({ text: utterance.text, lang: utterance.lang });
+          setTimeout(() => {
+            if (row.dropped) return;
+            row.dropped = true;
+            if (typeof utterance.onend === 'function') utterance.onend();
+          }, 900);
+        },
+        cancel() {
+          cancels += 1;
+          pending.forEach((row) => {
+            row.dropped = true;
+          });
+        },
+        pause: () => {},
+        resume: () => {},
+      };
+    },
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant voice — the chat console never rendered');
+
+    const toggle = dom.window.document.querySelector('button.zhino-assistant-voice');
+    if (!toggle) {
+      fail('assistant voice — the sound button is missing from the composer');
+    } else if (toggle.getAttribute('aria-pressed') !== 'false') {
+      fail('assistant voice — reading must start switched off (never intrusive)');
+    } else {
+      ok('assistant voice — a small sound switch sits in the composer, off by default');
+    }
+
+    if (toggle) {
+      toggle.click();
+      const on = await waitFor(
+        () => dom.window.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'true',
+      );
+      if (!on) fail('assistant voice — the switch does not turn reading on');
+      else ok('assistant voice — the switch turns reading on');
+      if (dom.window.localStorage.getItem('zhino_assistant_voice_v1') === '1') {
+        ok('assistant voice — the choice is remembered for the next visit');
+      } else {
+        fail('assistant voice — the choice is not remembered');
+      }
+    }
+
+    await sendChatMessage(dom, waitFor, 'قیمت ژله توت فرنگی چند است؟');
+    const read = await waitFor(() => spoken.length > 0, 9000);
+    if (!read) {
+      fail('assistant voice — the answer was never read aloud: ' + text().slice(-160));
+    } else {
+      // «۲۰۰٬۰۰۰ تومان» — ساخته‌شده از رقم‌های فارسی، تا خودِ تست هم
+      // به یک متن کپی‌شده وابسته نماند
+      const PRICE = '\u06f2\u06f0\u06f0\u066c\u06f0\u06f0\u06f0 \u062a\u0648\u0645\u0627\u0646';
+      const said = spoken.map((item) => item.text).join(' ');
+      const answer = Array.from(dom.window.document.querySelectorAll('.zhino-assistant-bubble.is-bot')).pop()?.textContent ?? '';
+      if (said.includes(PRICE)) ok('assistant voice — the real price is spoken, not a generic line');
+      else fail('assistant voice — the spoken text has no price: ' + said.slice(0, 160));
+      // هر تکه‌ای که خوانده می‌شود باید بخشی از همان پاسخ روی صفحه باشد
+      // (نشانه‌های فهرست و خط‌جدید پیش از خواندن عوض می‌شوند، پس هر دو
+      // طرف یکسان صاف می‌شوند: فقط «کلمات» مقایسه می‌شوند)
+      const flat = (value) =>
+        value
+          .replace(/[\u2022\u25aa\u25e6]/g, '')
+          .replace(/[\u060c\u061b\u066b\u066c.,:!?\u061f]/g, '')
+          .replace(/\s+/g, ' ')
+          .trim();
+      const flatAnswer = flat(answer);
+      const invented = spoken.filter((item) => !flatAnswer.includes(flat(item.text)));
+      if (invented.length === 0) ok('assistant voice — the speech is exactly the text on screen, nothing invented');
+      else fail('assistant voice — spoken text is not the displayed answer: ' + invented[0].text.slice(0, 80));
+      if (said.includes('قیمت ژله توت فرنگی چند است')) {
+        fail('assistant voice — the customer question was handed to the speech engine');
+      } else {
+        ok('assistant voice — only the assistant answer is spoken, never the customer question');
+      }
+      if (spoken.every((item) => /^fa/i.test(item.lang))) ok('assistant voice — the utterance is marked Persian (fa)');
+      else fail('assistant voice — wrong utterance language: ' + spoken.map((item) => item.lang).join(', '));
+    }
+
+    // while reading, a stop control is offered — and it really stops
+    await sleep(80);
+    const stop = dom.window.document.querySelector('button.zhino-assistant-stop');
+    if (!stop) fail('assistant voice — no stop control while reading');
+    else {
+      stop.click();
+      const stopped = await waitFor(() => !dom.window.document.querySelector('button.zhino-assistant-stop'));
+      if (!stopped) fail('assistant voice — the stop button does not end reading');
+      else if (cancels === 0) fail('assistant voice — speechSynthesis.cancel() was never called');
+      else ok('assistant voice — the stop control ends reading at once');
+    }
+
+    if (requests.length === 0) ok('assistant voice — reading the answer sends nothing over the network');
+    else fail(`assistant voice — ${requests.length} request(s) for speech: ${requests.join(', ')}`);
+
+    // turning it off again is always possible, and the preference follows
+    if (toggle) {
+      dom.window.document.querySelector('button.zhino-assistant-voice').click();
+      const off = await waitFor(
+        () => dom.window.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'false',
+      );
+      if (!off) fail('assistant voice — the customer cannot switch reading off');
+      else if (dom.window.localStorage.getItem('zhino_assistant_voice_v1') !== '0') {
+        fail('assistant voice — switching off is not remembered');
+      } else {
+        ok('assistant voice — the customer can switch reading off and it stays off');
+      }
+    }
+    // reading never breaks the chat itself
+    expectContains('assistant voice', text(), 'ژله توت فرنگی');
+    expectNoErrors('assistant voice', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34c. No speech support / no Persian voice → the chat is untouched ──
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+    seed: (window) => window.localStorage.setItem('zhino_assistant_voice_v1', '1'),
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant without speech — the chat console never rendered');
+
+    // a stored "voice on" preference must not throw when speechSynthesis is missing
+    const toggle = dom.window.document.querySelector('button.zhino-assistant-voice');
+    if (!toggle) fail('assistant without speech — the sound switch disappeared');
+    else {
+      if (toggle.getAttribute('aria-pressed') !== 'false') {
+        fail('assistant without speech — a missing speech engine must not report voice as on');
+      } else {
+        ok('assistant without speech — reading stays off when the browser cannot speak');
+      }
+      toggle.click();
+      const explained = await waitFor(() => text().includes('این مرورگر خواندن با صدا را ندارد'));
+      if (!explained) fail('assistant without speech — the customer is left with a dead button');
+      else ok('assistant without speech — the button explains itself in one friendly line');
+    }
+    if (dom.window.document.querySelectorAll('.zhino-assistant-read').length !== 0) {
+      fail('assistant without speech — per-answer read buttons are shown although nothing can speak');
+    } else {
+      ok('assistant without speech — no read buttons where reading is impossible');
+    }
+
+    // and the conversation itself is untouched
+    await sendChatMessage(dom, waitFor, 'طرز تهیه ژله چطور است؟');
+    const answered = await waitFor(() => text().includes('۱.۵ لیوان آب'), 9000);
+    if (!answered) fail('assistant without speech — the answer never arrived: ' + text().slice(-180));
+    else ok('assistant without speech — the answer is displayed as text, exactly as before');
+    expectNoErrors('assistant without speech', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34d. Phase 8 — the chat CSS keeps the mobile promises ───────────────
+// jsdom cannot lay the page out, so the rules that protect small screens are
+// read straight from the stylesheet: wrapping chips that never overflow, a
+// composer row that stays centred, and a signature that stays visually tiny.
+{
+  const cssPath = join(root, 'src', 'components', 'assistant', 'assistant.css');
+  const css = readFileSync(cssPath, 'utf8');
+  // the rule that *starts* with this exact selector (a descendant selector
+  // like `.a .b { … }` must not be mistaken for `.b { … }`)
+  const rule = (selector) => {
+    const found = new RegExp('\\n\\s*' + selector.replace(/[.\\]]/g, '\\$&') + '\\s*\\{').exec(css);
+    if (!found) return '';
+    const at = found.index + found[0].length;
+    return css.slice(at, css.indexOf('}', at));
+  };
+
+  const list = rule('.zhino-assistant-ideas-list');
+  if (list.includes('flex-wrap: wrap')) ok('assistant css — suggestions wrap instead of overflowing on mobile');
+  else fail('assistant css — the suggestion row must wrap (found: ' + (list || 'no rule') + ')');
+
+  const chip = rule('.zhino-assistant-chip');
+  if (chip.includes('max-width: 100%')) ok('assistant css — a chip can never be wider than the screen');
+  else fail('assistant css — chips have no max-width and can overflow small screens');
+  if (!chip.includes('white-space: nowrap')) ok('assistant css — long suggestions wrap inside the chip');
+  else fail('assistant css — chips still use white-space: nowrap');
+  if (chip.includes('border-radius') && chip.includes('border: 1px solid')) {
+    ok('assistant css — chips keep the soft corners and the fine brand border');
+  } else {
+    fail('assistant css — chips lost their soft corners / subtle border');
+  }
+
+  const signature = rule('.zhino-assistant-signature');
+  if (/font-size: 0?\.5\drem/.test(signature)) ok('assistant css — the signature is deliberately tiny');
+  else fail('assistant css — the signature is not small: ' + (signature || 'no rule'));
+  if (signature.includes('mocha-light') && signature.includes('opacity')) {
+    ok('assistant css — the signature is low-contrast but readable');
+  } else {
+    fail('assistant css — the signature must be muted yet legible');
+  }
+
+  const voice = rule('.zhino-assistant-voice');
+  if (voice.includes('2.35rem')) ok('assistant css — the sound switch is a proper round touch target');
+  else fail('assistant css — the sound switch is too small for a finger');
+
+  for (const dead of ['.zhino-assistant-status', '.zhino-assistant-banner', '.zhino-assistant-welcome-note']) {
+    if (css.includes(dead)) fail(`assistant css — ${dead} is still styled (technical UI left-overs)`);
+    else ok(`assistant css — ${dead} is gone (nothing technical is drawn)`);
   }
 }
 
@@ -2144,9 +2524,15 @@ async function openAssistantFromStore(dom, waitFor, text) {
   try {
     const rendered = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
     if (!rendered) fail('assistant AI — the chat console never rendered');
-    const online = await waitFor(() => text().includes('متصل به دستیار هوشمند'));
-    if (online) ok('assistant AI — the connection state becomes «متصل» after the health check');
-    else fail('assistant AI — connection state never became online: ' + text().slice(0, 200));
+    // Phase 8 — the health check still runs (it decides whether to ask the
+    // model), but nothing about it is printed on the screen.
+    expectNoStatusPill('assistant AI', dom);
+    expectNoInternalWording('assistant AI', dom);
+    const answeredAfterProbe = await waitFor(() =>
+      Boolean(dom.window.document.querySelector('#zhino-assistant-input')),
+    );
+    if (answeredAfterProbe) ok('assistant AI — the chat stays usable while the connection is probed');
+    else fail('assistant AI — the console disappeared during the health check');
 
     await sendChatMessage(dom, waitFor, 'یک دسر سرد پیشنهاد بده');
     const answered = await waitFor(() => text().includes('پاسخ آزمایشی از مدل زبانی ژینو'));
@@ -2297,9 +2683,11 @@ function makeAssistantDbStub({ seen = [] } = {}) {
     const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
     if (!ready) fail('assistant database — the chat console never rendered');
 
-    const liveBadge = await waitFor(() => text().includes('دادهٔ زندهٔ دیتابیس'));
-    if (liveBadge) ok('assistant database — the status badge names the live database as the data source');
-    else fail('assistant database — the badge never reported «دادهٔ زندهٔ دیتابیس»');
+    // Phase 8 — the database is still the source of truth, but the page says
+    // nothing about it: no badge, no note. The proof is the data itself — the
+    // ۱۸۷٬۰۰۰ price below exists only in the stubbed database rows.
+    expectNoStatusPill('assistant database', dom);
+    expectNoInternalWording('assistant database', dom);
 
     // ۱) price + stock straight from the database rows
     await sendChatMessage(dom, waitFor, 'قیمت ژله انار چنده؟');
@@ -2320,21 +2708,21 @@ function makeAssistantDbStub({ seen = [] } = {}) {
     if (recipe) ok('assistant database — recipe text comes from the recipes table');
     else fail('assistant database — database recipe missing: ' + text().slice(-200));
 
-    // ۴) honesty about the source
+    // ۴) honesty about the source — in the customer's own language
     await sendChatMessage(dom, waitFor, 'اطلاعاتت رو از کجا میاری؟');
-    const source = await waitFor(() => text().includes('از دیتابیس فروشگاه می‌خوانم'));
-    if (source) ok('assistant database — the assistant says it reads the store database');
+    const source = await waitFor(() => text().includes('لحظه‌ای از خودِ فروشگاه می‌گیرم'));
+    if (source) ok('assistant database — the assistant says its numbers come from the shop itself, live');
     else fail('assistant database — source answer missing: ' + text().slice(-200));
 
-    // ۵) اتصال مدل برقرار نیست (تابع مستقر نشده) → همان‌جا صادقانه گفته می‌شود
-    const fallbackNote = await waitFor(
-      () => text().includes('ارتباط با دستیار هوشمند برقرار نشد'),
-      4000,
-    );
-    if (fallbackNote) {
-      ok('assistant database — an unreachable AI proxy is disclosed and answered locally');
+    // ۵) اتصال مدل برقرار نیست (تابع مستقر نشده) → همان‌جا پاسخ داده می‌شود،
+    //    بی‌صدا و بدون هیچ خبر فنی برای مشتری
+    const quiet = await waitFor(() => !dom.window.document.querySelector('.zhino-assistant-typing'), 8000);
+    if (!quiet) {
+      fail('assistant database — the chat is still thinking after the unreachable proxy');
+    } else if (/ارتباط با دستیار هوشمند|دادهٔ واقعی فروشگاه|پاسخ محلی داده شد/.test(text())) {
+      fail('assistant database — the fallback is announced to the customer with internal wording');
     } else {
-      fail('assistant database — the local fallback note never appeared');
+      ok('assistant database — an unreachable AI proxy is answered locally and silently');
     }
 
     // ۶) the storefront still works from the same database snapshot
@@ -2474,13 +2862,14 @@ function makeAssistantDbStub({ seen = [] } = {}) {
       const answered = await waitFor(() => text().includes('۲۰۰٬۰۰۰ تومان'), 8000);
       if (answered) ok('assistant fallback — a server error still gets a grounded local answer');
       else fail('assistant fallback — no local answer after the server error: ' + text().slice(-200));
-      const retry = await waitFor(
-        () => Boolean(Array.from(dom.window.document.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes('تلاش دوباره'))),
-        4000,
-      );
-      if (retry) ok('assistant fallback — the retry control appears for a real failure');
-      else fail('assistant fallback — retry control missing');
-      expectContains('assistant fallback', text(), 'ارتباط با دستیار هوشمند برقرار نشد');
+      // Phase 8 — a broken model is our problem, not the customer's: the
+      // answer arrives from the real shop data and nothing is said about it.
+      if (/تلاش دوباره|ارتباط با دستیار هوشمند/.test(text())) {
+        fail('assistant fallback — a connection failure is still shown to the customer');
+      } else {
+        ok('assistant fallback — the failure is handled silently (no banner, no retry noise)');
+      }
+      expectNoInternalWording('assistant fallback', dom);
 
       // پیام دوم: پس از دو خطای پشت‌سرهم، دیگر منتظر Endpoint خراب نمی‌مانیم
       await sendChatMessage(dom, waitFor, 'چه طعم‌هایی دارید؟');
@@ -2503,9 +2892,18 @@ function makeAssistantDbStub({ seen = [] } = {}) {
       const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
       if (!ready) fail('assistant rate limit — the chat console never rendered');
       await sendChatMessage(dom, waitFor, 'سلام، راهنمایی می‌کنید؟');
-      const noticed = await waitFor(() => text().includes('تعداد پرسش‌ها زیاد شد'), 8000);
-      if (noticed) ok('assistant rate limit — the 429 answer is explained to the customer');
-      else fail('assistant rate limit — rate-limit note missing: ' + text().slice(-200));
+      const answered = await waitFor(
+        () => dom.window.document.querySelectorAll('.zhino-assistant-row').length >= 3 &&
+          !dom.window.document.querySelector('.zhino-assistant-typing'),
+        8000,
+      );
+      if (!answered) {
+        fail('assistant rate limit — the customer never got an answer: ' + text().slice(-200));
+      } else if (text().includes('تعداد پرسش‌ها زیاد شد')) {
+        fail('assistant rate limit — the quota error is printed to the customer');
+      } else {
+        ok('assistant rate limit — a 429 still ends in a normal answer, without any technical noise');
+      }
       expectNoErrors('assistant rate limit', errors);
     } finally {
       dom.window.close();
@@ -2525,9 +2923,14 @@ function makeAssistantDbStub({ seen = [] } = {}) {
       const answered = await waitFor(() => text().includes('پاسخ مدل بدون داده.'), 8000);
       if (answered) ok('assistant knowledge — a model answer is rendered');
       else fail('assistant knowledge — model answer missing: ' + text().slice(-200));
-      const warned = await waitFor(() => text().includes('دادهٔ فروشگاه در اختیارش نبود'), 4000);
-      if (warned) ok('assistant knowledge — a model answer without store data is flagged honestly');
-      else fail('assistant knowledge — grounding warning missing');
+      const warned = await waitFor(() => text().includes('از فهرست فروشگاه نبود'), 4000);
+      if (warned) ok('assistant knowledge — a model answer without store data is still flagged, in plain words');
+      else fail('assistant knowledge — grounding warning missing: ' + text().slice(-200));
+      if (/دیتابیس|کاتالوگ|مدل/.test(dom.window.document.querySelector('.zhino-assistant-note')?.textContent ?? '')) {
+        fail('assistant knowledge — the honesty note leaks internal wording to the customer');
+      } else {
+        ok('assistant knowledge — the honesty note stays free of internal wording');
+      }
       expectNoErrors('assistant knowledge', errors);
     } finally {
       dom.window.close();
@@ -2915,10 +3318,22 @@ async function loadAssistantEdgeFunction(env, marker) {
     if (found === 0) {
       ok(`production bundle carries no API key or secret (${bundle.length} characters scanned)`);
     }
-    // and the Phase 6 wording really is in the shipped artifact
-    for (const needle of ['دادهٔ زندهٔ دیتابیس', 'بدون مدل هوشمند', 'catalogSource']) {
+    // …and the Phase 8 copy really is in the shipped artifact
+    for (const needle of ['catalogSource', SIGNATURE_TEXT]) {
       if (bundle.includes(needle)) ok(`production bundle contains «${needle}»`);
       else fail(`production bundle is missing «${needle}»`);
+    }
+    // the internal sentences must be gone from the shipped bundle entirely —
+    // not merely hidden — so no customer can ever dig them out of the artifact
+    for (const gone of [
+      'بدون مدل هوشمند',
+      'متصل به دستیار هوشمند',
+      'ارتباط با دستیار هوشمند برقرار نشد',
+      'تعداد پرسش‌ها زیاد شد',
+      'دستیار هوشمند روی سرور فعال نشده است',
+    ]) {
+      if (bundle.includes(gone)) fail(`production bundle still ships internal wording: «${gone}»`);
+      else ok(`production bundle no longer ships «${gone}»`);
     }
   }
 }

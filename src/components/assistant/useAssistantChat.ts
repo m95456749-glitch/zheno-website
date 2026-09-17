@@ -1,21 +1,24 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۵ تا ۷) — منطق گفتگو
+// ZHINO — «دستیار ژینو» (فاز ۵ تا ۸) — منطق گفتگو
 //
-// در فاز ۷ فقط «نمایش» صفحه عوض شده است (محیط چت تمام‌صفحه شبیه
-// ChatGPT)؛ منطق این فایل، منابع پاسخ و منبع داده دست‌نخورده‌اند.
+// فاز ۸ فقط «حرف‌های فنی» را از رابط کاربری برداشت: هیچ متن
+// «دیتابیس / موتور محلی / کاتالوگ / متصل یا قطع بودن مدل» دیگر به
+// مشتری نشان داده نمی‌شود. هر دو لایه پشت صحنه دقیقاً مثل قبل کار
+// می‌کنند — کارت اطلاعات زنده از knowledge.ts، پرسش از مدل از
+// client.ts، و Fallback محلی از engine.ts.
 //
-// یک هوک، دو منبع پاسخ و دو «حقیقت» جدا که هرگز با هم قاطی نمی‌شوند:
+// دو «حقیقت» که همچنان جدا نگه داشته می‌شوند (فقط دیگر در UI نیستند):
 //
-//   ۱) منبع داده (dataSource): آیا کاتالوگ/قیمت/موجودی از دیتابیس
-//      واقعی سوپابیس خوانده شده یا از دادهٔ محلی خود سایت؟
+//   ۱) منبع داده (dataSource): کاتالوگ/قیمت/موجودی از دیتابیس واقعی
+//      سوپابیس خوانده شده یا از دادهٔ خود فروشگاه؟
 //      (خوانده‌شده از src/services/assistant/knowledge.ts)
 //
-//   ۲) منبع پاسخ (connection): آیا مدل زبانی پشت سرور پاسخ می‌دهد
-//      یا موتور محلی فروشگاه؟ اگر مدل در دسترس نباشد، Fallback محلی
-//      با یادداشت شفاف فعال می‌شود.
+//   ۲) منبع پاسخ (connection): مدل زبانی پشت سرور پاسخ می‌دهد یا موتور
+//      محلی؟ اگر مدل در دسترس نباشد، Fallback محلی بی‌صدا فعال می‌شود
+//      تا مشتری هرگز «پاسخ خطا» نبیند.
 //
-// رابط کاربری فقط وضعیت همین هوک را نشان می‌دهد؛ پس افزودن قابلیت
-// تازه یا تعویض مدل، این فایل و UI را دست‌نخورده می‌گذارد.
+// افزودن قابلیت تازه، تعویض مدل یا فعال‌کردن Backend — هیچ‌کدام این
+// فایل و UI را دست‌نخورده می‌گذارند.
 // ============================================================
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -24,10 +27,8 @@ import { useRemoteSiteData } from '../../services/siteDataSync';
 import {
   AssistantRemoteError,
   askRemoteAssistant,
-  assistantErrorNote,
   isAssistantRemoteConfigured,
   probeAssistantRemote,
-  type AssistantRemoteErrorKind,
 } from '../../services/assistant/client';
 import { DEFAULT_SUGGESTIONS, answerLocally } from '../../services/assistant/engine';
 import { buildAssistantContext, getAssistantDataSource } from '../../services/assistant/knowledge';
@@ -45,64 +46,22 @@ export const ASSISTANT_MAX_LENGTH = 600;
 /**
  * بعد از این تعداد خطای پشت‌سرهم، دستیار دیگر برای هر پیام سراغ مدل
  * نمی‌رود و مستقیم محلی پاسخ می‌دهد (کاربر معطل یک Endpoint خراب
- * نمی‌ماند). دکمهٔ «تلاش دوباره» این شمارنده را صفر می‌کند.
+ * نمی‌ماند). این شمارنده در همین نشست گفتگو نگه داشته می‌شود.
  */
 const MAX_REMOTE_FAILURES = 2;
 
 /**
- * یادداشت شفاف وضعیت اتصال — زیر پیام خوش‌آمد.
- * هر دو حقیقت را جدا می‌گوید: مدل هوشمند و منبع داده.
- */
-export function connectionNote(connection: AssistantConnection, dataSource: AssistantDataSource): string {
-  const dataLine =
-    dataSource === 'database'
-      ? 'محصولات، قیمت، موجودی و دستورها همین حالا از دیتابیس فروشگاه خوانده می‌شود.'
-      : 'محصولات، قیمت، موجودی و دستورها از دادهٔ خودِ فروشگاه خوانده می‌شود (اتصال دیتابیس در این لحظه فعال نیست).';
-
-  switch (connection) {
-    case 'online':
-      return `پاسخ‌ها از دستیار هوشمند ژینو می‌آید و ${dataLine}`;
-    case 'checking':
-      return `در حال بررسی اتصال به دستیار هوشمند… ${dataLine}`;
-    case 'error':
-      return `دستیار هوشمند پاسخ نداد؛ ${dataLine} برای همین، پاسخ‌ها از موتور محلی فروشگاه ساخته می‌شود.`;
-    case 'unconfigured':
-    default:
-      return `${dataLine} دستیار هوشمند روی سرور فعال نشده است، پس پاسخ‌ها از موتور محلی همین فروشگاه ساخته می‌شود.`;
-  }
-}
-
-/**
- * برچسب کوتاه وضعیت — برای نشان (پیل) سربرگ صفحه.
- * «متصل» فقط وقتی گفته می‌شود که مدل واقعاً پاسخ می‌دهد.
- */
-export function connectionLabel(connection: AssistantConnection, dataSource: AssistantDataSource): string {
-  const dataLabel = dataSource === 'database' ? 'دادهٔ زندهٔ دیتابیس' : 'دادهٔ فروشگاه';
-  switch (connection) {
-    case 'online':
-      return `متصل به دستیار هوشمند — ${dataLabel}`;
-    case 'checking':
-      return `در حال بررسی اتصال… (${dataLabel})`;
-    case 'error':
-      return `بدون مدل هوشمند (خطای اتصال) — ${dataLabel}`;
-    case 'unconfigured':
-    default:
-      return `بدون مدل هوشمند — ${dataLabel}`;
-  }
-}
-
-/**
- * پیام خوش‌آمد — کوتاه، فارسی و دوستانه (فاز ۷).
- * همان متن در دو جا دیده می‌شود: عنوان/زیرعنوان حالت خوشامد
- * (AssistantChat) و حباب اول گفتگو پس از شروع چت.
+ * پیام خوش‌آمد — کوتاه، فارسی و دوستانه.
+ * همان متن در دو جا دیده می‌شود: حالت خوشامد (AssistantChat) و حباب
+ * اول گفتگو پس از شروع چت.
  */
 export const ASSISTANT_WELCOME_TITLE = 'سلام! من دستیار ژینو هستم.';
 export const ASSISTANT_WELCOME_SUB =
-  'دربارهٔ طعم‌ها، قیمت و موجودی، دستور تهیهٔ ژله و کاستر یا انتخاب دسر بپرسید.';
+  'طعم‌ها، قیمت و موجودی، دستور تهیهٔ ژله و کاستر یا انتخاب دسر — هرچی لازم دارید بپرسید، کوتاه جواب می‌دم.';
 
 const WELCOME_TEXT = `${ASSISTANT_WELCOME_TITLE} ${ASSISTANT_WELCOME_SUB}`;
 
-/** پیام اول گفتگو — با یادداشت زندهٔ وضعیت اتصال زیر آن */
+/** پیام اول گفتگو */
 function welcomeMessage(): AssistantChatMessage {
   return { id: 1, from: 'bot', text: WELCOME_TEXT, welcome: true };
 }
@@ -112,14 +71,16 @@ export interface UseAssistantChatResult {
   draft: string;
   setDraft: (value: string) => void;
   thinking: boolean;
+  /**
+   * وضعیت اتصال به مدل — فقط برای مصرف داخلی (تصمیم Fallback و تست‌ها).
+   * از فاز ۸ هیچ متن فنی از این وضعیت در رابط کاربری نمایش داده نمی‌شود.
+   */
   connection: AssistantConnection;
-  /** منبع دادهٔ همین لحظه (دیتابیس واقعی یا دادهٔ محلی فروشگاه) */
+  /** منبع دادهٔ همین لحظه (دیتابیس واقعی یا دادهٔ فروشگاه) — داخلی */
   dataSource: AssistantDataSource;
   suggestions: AssistantSuggestion[];
   send: (text?: string) => void;
   clear: () => void;
-  retry: () => void;
-  canRetry: boolean;
 }
 
 export function useAssistantChat(): UseAssistantChatResult {
@@ -130,8 +91,8 @@ export function useAssistantChat(): UseAssistantChatResult {
     isAssistantRemoteConfigured() ? 'checking' : 'unconfigured',
   );
   // منبع داده از همان لایهٔ اطلاعات فروشگاه خوانده می‌شود؛ هرگز حدسی نیست.
-  // اشتراک روی وضعیت همگام‌سازی باعث می‌شود پیل وضعیت همان لحظه‌ای که
-  // snapshot دیتابیس می‌رسد (یا خطا می‌دهد) به‌روز شود.
+  // اشتراک روی وضعیت همگام‌سازی باعث می‌شود لحظه‌ای که snapshot دیتابیس
+  // می‌رسد (یا خطا می‌دهد) کارت اطلاعات و پاسخ‌های بعدی به‌روز شوند.
   const catalogSync = useCatalogSync();
   const siteDataSync = useRemoteSiteData();
   const dataSource: AssistantDataSource = useMemo(
@@ -142,7 +103,6 @@ export function useAssistantChat(): UseAssistantChatResult {
   const [suggestions, setSuggestions] = useState<AssistantSuggestion[]>(() =>
     DEFAULT_SUGGESTIONS.slice(0, 4),
   );
-  const [failedPrompt, setFailedPrompt] = useState<string | null>(null);
 
   const nextId = useRef(2);
   const busy = useRef(false);
@@ -185,7 +145,7 @@ export function useAssistantChat(): UseAssistantChatResult {
   }, []);
 
   // بررسی یک‌بارهٔ آماده‌بودن Endpoint (فقط اگر پیکربندی شده باشد).
-  // پاسخ GET هم وضعیت مدل و هم وضعیت خواندن دیتابیس را می‌گوید.
+  // نتیجه فقط تعیین می‌کند پرسش‌ها به مدل بروند یا نه — جایی نمایش داده نمی‌شود.
   useEffect(() => {
     if (!isAssistantRemoteConfigured()) return;
     const controller = new AbortController();
@@ -203,7 +163,6 @@ export function useAssistantChat(): UseAssistantChatResult {
       if (clean.length === 0 || busy.current) return;
 
       busy.current = true;
-      setFailedPrompt(null);
       setDraft('');
       push({ from: 'user', text: clean });
       setThinking(true);
@@ -216,32 +175,24 @@ export function useAssistantChat(): UseAssistantChatResult {
         }));
 
       /** پاسخ محلی — با تأخیر طبیعی، از کارت اطلاعات همین لحظه */
-      const finishLocally = async (note?: string) => {
+      const finishLocally = async () => {
         await sleep(420 + Math.round(Math.random() * 240));
         if (!mounted.current) return;
         const context = buildAssistantContext();
         const answer = answerLocally(clean, context);
-        push({ from: 'bot', text: answer.text, links: answer.links, note, source: 'local' });
+        push({ from: 'bot', text: answer.text, links: answer.links, source: 'local' });
         setSuggestions(answer.suggestions ?? DEFAULT_SUGGESTIONS);
         setThinking(false);
         busy.current = false;
       };
 
       const run = async () => {
-        let fallbackNote: string | undefined;
         const remoteConfigured = isAssistantRemoteConfigured();
         const mayAskModel = remoteConfigured && remoteFailures.current < MAX_REMOTE_FAILURES;
 
-        // مدل پیکربندی شده اما چند بار پشت‌سرهم پاسخ نداده: به‌جای معطل‌کردن
-        // کاربر، مستقیم محلی پاسخ می‌دهیم و همان‌جا دلیلش را می‌گوییم.
-        if (remoteConfigured && !mayAskModel) {
-          fallbackNote =
-            'دستیار هوشمند در این لحظه پاسخ نمی‌دهد؛ این پاسخ از دادهٔ واقعی فروشگاه ساخته شده است.';
-          // دکمهٔ «تلاش دوباره» روی همان پیام می‌ماند تا کاربر بتواند
-          // دستی را مدل را دوباره امتحان کند
-          setFailedPrompt(clean);
-        }
-
+        // اگر مدل پیکربندی شده اما چند بار پشت‌سرهم پاسخ نداده، بی‌صدا
+        // محلی پاسخ می‌دهیم تا کاربر معطل یک Endpoint خراب نشود —
+        // و هیچ پیام فنی‌ای هم به مشتری نمی‌رسد.
         if (mayAskModel) {
           const controller = new AbortController();
           abortRef.current = controller;
@@ -256,10 +207,12 @@ export function useAssistantChat(): UseAssistantChatResult {
             if (!mounted.current) return;
             remoteFailures.current = 0;
             setConnection('online');
-            // اگر مدل هیچ دادهٔ فروشگاهی نداشته، صادقانه هشدار می‌دهیم
+            // تنها «یادداشت»ی که به مشتری گفته می‌شود: اگر دادهٔ فروشگاه
+            // در اختیار مدل نبوده، صادقانه و بدون اصطلاح فنی هشدار می‌دهیم
+            // که عدد قیمت/موجودی را دوباره بپرسد.
             const note =
               reply.knowledgeSource === 'none'
-                ? 'این پاسخ از دستیار هوشمند است، اما دادهٔ فروشگاه در اختیارش نبود؛ برای قیمت و موجودی، همین‌جا دوباره بپرسید تا از دیتابیس پاسخ بگیرید.'
+                ? 'این پاسخ را خودم گفتم و از فهرست فروشگاه نبود. دربارهٔ قیمت یا موجودی یک بار دیگر بپرسید تا دقیق نگاه کنم.'
                 : undefined;
             push({ from: 'bot', text: reply.text, links: reply.links, source: 'ai', note });
             setSuggestions(reply.suggestions ?? DEFAULT_SUGGESTIONS);
@@ -269,31 +222,22 @@ export function useAssistantChat(): UseAssistantChatResult {
           } catch (error) {
             abortRef.current = null;
             if (!mounted.current) return;
-            const kind: AssistantRemoteErrorKind =
-              error instanceof AssistantRemoteError ? error.kind : 'network';
             remoteFailures.current += 1;
-            setConnection(kind === 'unconfigured' ? 'unconfigured' : 'error');
-            // «unconfigured» خطای کاربر نیست: سرور عمداً مدل ندارد، پس
-            // دکمهٔ «تلاش دوباره» هم نمایش داده نمی‌شود.
-            setFailedPrompt(kind === 'unconfigured' ? null : clean);
-            fallbackNote = assistantErrorNote(kind);
+            setConnection(
+              error instanceof AssistantRemoteError && error.kind === 'unconfigured'
+                ? 'unconfigured'
+                : 'error',
+            );
           }
         }
 
-        await finishLocally(fallbackNote);
+        await finishLocally();
       };
 
       void run();
     },
     [draft, messages, push, sleep],
   );
-
-  const retry = useCallback(() => {
-    // تلاش دوباره یعنی «دوباره سراغ مدل برو»، حتی اگر دفعهٔ قبل چند بار
-    // پشت‌سرهم خطا داده باشد.
-    remoteFailures.current = 0;
-    if (failedPrompt) send(failedPrompt);
-  }, [failedPrompt, send]);
 
   const clear = useCallback(() => {
     // درخواست در پرواز لغو می‌شود تا پاسخ دیرهنگام روی گفتگوی تازه ننشیند
@@ -304,7 +248,6 @@ export function useAssistantChat(): UseAssistantChatResult {
     busy.current = false;
     remoteFailures.current = 0;
     setThinking(false);
-    setFailedPrompt(null);
     setDraft('');
     // بازگشت به همان حالت خوشامد اولیه: پیام تازه، وسط صفحه، با
     // پیشنهادهای پیش‌فرض — دقیقاً مثل اولین ورود به صفحهٔ دستیار.
@@ -322,7 +265,5 @@ export function useAssistantChat(): UseAssistantChatResult {
     suggestions,
     send,
     clear,
-    retry,
-    canRetry: failedPrompt !== null,
   };
 }
