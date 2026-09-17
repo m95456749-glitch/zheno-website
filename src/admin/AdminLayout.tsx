@@ -11,6 +11,7 @@ import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { useAdminAuth } from './auth/AuthContext';
+import { startOrderSync } from '../services/orderSync';
 import { SyncErrorBanner, SyncStatusBadge } from './components/ui';
 import { ADMIN_NAV } from './nav';
 import { IconExternal, IconLogout, IconMenu } from './Icons';
@@ -81,6 +82,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     window.scrollTo(0, 0);
     setDrawerOpen(false);
   }, [pathname]);
+
+  // The panel only renders behind a verified admin session, so this is
+  // the right place to start reading orders from the database (no-op in
+  // local/demo mode; follows sign-in/sign-out while mounted).
+  useEffect(() => startOrderSync(), []);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {

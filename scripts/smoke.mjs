@@ -437,10 +437,20 @@ function expectNoErrors(label, errors) {
 }
 
 // ── 9. Checkout with empty cart redirects to cart ───────────
+// Poll for the redirected cart content: the <Navigate> flushes in
+// the next React scheduler turn, so a single synchronous snapshot
+// of the first paint could race the redirect under load.
 {
-  const { text, errors } = await render('/zheno-website/checkout');
-  expectContains('empty checkout guard', text, 'سبد خرید شما خالی است');
-  expectNoErrors('empty checkout guard', errors);
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/checkout', {
+    stub: { fetchImpl: () => Promise.reject(new Error('offline (smoke test)')) },
+    appSource: appCode,
+  });
+  const redirected = await waitFor(() => text().includes('سبد خرید شما خالی است'));
+  if (redirected) ok('empty checkout guard renders «سبد خرید شما خالی است»');
+  else fail('empty checkout guard MISSING «سبد خرید شما خالی است»');
+  if (errors.length === 0) ok('empty checkout guard — no runtime errors');
+  else fail('empty checkout guard runtime errors:\n    - ' + errors.join('\n    - '));
+  dom.window.close();
 }
 
 // ── 10. Checkout with items renders form + free shipping ────
@@ -1026,8 +1036,20 @@ function expectNoErrors(label, errors) {
 }
 
 /* ── shared Supabase stub (Auth + PostgREST) for the security tests ── */
-function makeSupabaseStub({ isAdmin = true, activeById = {}, stock = 25, rows } = {}) {
+// `orders` / `orderItems` seed the admin order reads; `createOrder`
+// controls the guest checkout RPC ('accept' | 'reject-stock').
+function makeSupabaseStub({
+  isAdmin = true,
+  activeById = {},
+  stock = 25,
+  rows,
+  orders = [],
+  orderItems = [],
+  createOrder = 'accept',
+} = {}) {
   const calls = [];
+  const createdOrderPayloads = [];
+  const orderStatusPatches = [];
   const jwt = [
     Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
     Buffer.from(
@@ -1098,6 +1120,23 @@ function makeSupabaseStub({ isAdmin = true, activeById = {}, stock = 25, rows } 
     if (url.includes('/rest/v1/rpc/set_inventory_stock')) {
       return json([{ variant_id: 'jelly-strawberry-250', current_stock: stock, active: true }]);
     }
+    if (url.includes('/rest/v1/rpc/create_order')) {
+      const payload = JSON.parse(body || '{}');
+      createdOrderPayloads.push(payload);
+      if (createOrder === 'reject-stock') {
+        return json({ message: 'insufficient_stock', details: null, hint: null }, 400);
+      }
+      return json([
+        { order_id: 'ZH-SMOKE0R1', subtotal: 600000, shipping_cost: 50000, total: 650000 },
+      ]);
+    }
+    if (url.includes('/rest/v1/order_items') && method === 'GET') return json(orderItems);
+    if (url.includes('/rest/v1/orders') && method === 'GET') return json(orders);
+    if (url.includes('/rest/v1/orders') && method === 'PATCH') {
+      const payload = JSON.parse(body || '{}');
+      orderStatusPatches.push({ url, payload, headers });
+      return new globalThis.Response(null, { status: 204 });
+    }
     if (url.includes('/rest/v1/products') && method === 'PATCH') {
       return new globalThis.Response(null, { status: 204 });
     }
@@ -1120,7 +1159,7 @@ function makeSupabaseStub({ isAdmin = true, activeById = {}, stock = 25, rows } 
     return json([]);
   };
 
-  return { fetchImpl, calls, jwt };
+  return { fetchImpl, calls, jwt, createdOrderPayloads, orderStatusPatches };
 }
 
 /** Render a route in a jsdom with a stubbed network + optional seed. */
@@ -1366,6 +1405,416 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   if (res.errors.some((e) => /https/i.test(e))) ok('insecure endpoint — the refusal is logged explicitly');
   else fail('insecure endpoint — the non-https URL was accepted silently');
   expectContains('insecure endpoint build', res.text, 'ژله توت فرنگی');
+}
+
+// ════════════════════════════════════════════════════════════
+// ORDER SUITE (phase 2): the checkout writes real orders to the
+// database and the admin panel manages them there. Guest checkout
+// goes through the create_order RPC; the panel reads/updates with
+// the admin JWT. In every scenario the storefront never reads
+// orders anonymously and the demo/local behaviour is untouched.
+// ════════════════════════════════════════════════════════════
+
+const PUBLISHABLE_KEY = 'sb_publishable_smoke_test_key';
+
+/** React-compatible value setter for inputs (native setter + input event). */
+function typeInto(dom, selector, value) {
+  const el = dom.window.document.querySelector(selector);
+  if (!el) throw new Error('form field not found: ' + selector);
+  const proto =
+    el.tagName === 'TEXTAREA' ? dom.window.HTMLTextAreaElement.prototype : dom.window.HTMLInputElement.prototype;
+  Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, value);
+  el.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+}
+
+/** Click the first button whose visible text contains `needle`. */
+function clickButtonByContains(dom, needle) {
+  const doc = dom.window.document;
+  const btn = Array.from(doc.querySelectorAll('button')).find((b) => (b.textContent ?? '').includes(needle));
+  if (!btn) throw new Error('button not found: ' + needle);
+  btn.click();
+  return btn;
+}
+
+/** Drive the checkout form through customer → address → payment. */
+async function driveCheckoutToPayment(dom, waitFor, text) {
+  const customerReady = await waitFor(() => text().includes('مشخصات تحویل‌گیرنده'));
+  if (!customerReady) throw new Error('checkout form did not render: ' + text().slice(0, 200));
+  typeInto(dom, '#firstName', 'سارا');
+  typeInto(dom, '#lastName', 'محمدی');
+  typeInto(dom, '#phone', '09120000000');
+  clickButtonByContains(dom, 'ادامه به مرحله نشانی');
+  const addressReady = await waitFor(() => text().includes('نشانی ارسال'));
+  if (!addressReady) throw new Error('address step did not render');
+  typeInto(dom, '#province', 'تهران');
+  typeInto(dom, '#city', 'تهران');
+  typeInto(dom, '#street', 'خیابان نمونه، پلاک ۱');
+  typeInto(dom, '#postalCode', '1234567890');
+  clickButtonByContains(dom, 'ادامه به مرحله پرداخت');
+  const paymentReady = await waitFor(() => text().includes('روش ارسال و پرداخت'));
+  if (!paymentReady) throw new Error('payment step did not render');
+}
+
+// ── 27. Guest checkout registers the order in the database ──
+// A connected build, no login at all: the guest fills the checkout
+// form and the order must be created through the create_order RPC
+// with variant ids + quantities only (the database computes prices,
+// shipping and totals), the confirmation shows the server id, the
+// cart is cleared, and no localStorage order record is written.
+{
+  const stub = makeSupabaseStub({ isAdmin: false });
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/checkout', {
+    stub,
+    appSource: appCodeWithDb,
+    seed: (window) =>
+      window.localStorage.setItem(
+        'zhino_cart',
+        JSON.stringify([{ productId: 'jelly-strawberry', variantId: 'jelly-strawberry-250', quantity: 3 }]),
+      ),
+  });
+
+  try {
+    await driveCheckoutToPayment(dom, waitFor, text);
+    clickButtonByContains(dom, 'پرداخت و ثبت سفارش');
+    const confirmed = await waitFor(() => text().includes('ZH-SMOKE0R1'));
+    if (confirmed) ok('checkout — the confirmation shows the server-generated order id');
+    else fail('checkout — the confirmation never showed the server order id: ' + text().slice(0, 200));
+    expectContains('checkout confirmation', text(), 'سفارش شما با موفقیت ثبت شد');
+
+    if (stub.createdOrderPayloads.length === 1) {
+      const payload = stub.createdOrderPayloads[0];
+      ok('checkout — exactly one create_order RPC call was made');
+      const itemsOk =
+        JSON.stringify(payload.p_items) ===
+        JSON.stringify([{ variant_id: 'jelly-strawberry-250', quantity: 3 }]);
+      if (itemsOk) ok('checkout — items send variant_id + quantity only (no client-side prices)');
+      else fail(`checkout — unexpected items payload: ${JSON.stringify(payload.p_items)}`);
+      const customerOk = JSON.stringify(payload.p_customer) ===
+        JSON.stringify({ firstName: 'سارا', lastName: 'محمدی', phone: '09120000000', email: '' });
+      if (customerOk) ok('checkout — customer info is complete and trimmed');
+      else fail(`checkout — unexpected customer payload: ${JSON.stringify(payload.p_customer)}`);
+      const shippingOk =
+        payload.p_shipping.province === 'تهران' &&
+        payload.p_shipping.city === 'تهران' &&
+        payload.p_shipping.address === 'خیابان نمونه، پلاک ۱' &&
+        payload.p_shipping.postalCode === '1234567890' &&
+        payload.p_shipping_method === 'standard';
+      if (shippingOk) ok('checkout — address + shipping method payload is correct');
+      else fail(`checkout — unexpected shipping payload: ${JSON.stringify(payload.p_shipping)}`);
+    } else {
+      fail(`checkout — expected 1 create_order call, saw ${stub.createdOrderPayloads.length}`);
+    }
+
+    // credential hygiene of the guest write: publishable key only,
+    // never a service/secret key, and the request runs unauthenticated
+    // (anon role — the RPC is the only guest write path, RLS-gated).
+    const rpcCall = stub.calls.find((c) => c.url.includes('/rest/v1/rpc/create_order'));
+    if (rpcCall) {
+      const bearer = (rpcCall.headers?.authorization ?? rpcCall.headers?.Authorization ?? '').replace(/^Bearer /i, '');
+      const apikey = rpcCall.headers?.apikey ?? rpcCall.headers?.ApiKey ?? '';
+      if (bearer === PUBLISHABLE_KEY && apikey === PUBLISHABLE_KEY) {
+        ok('checkout — the guest order write uses the publishable key only (no session, no secret)');
+      } else {
+        fail(`checkout — unexpected guest write credentials: bearer=${bearer} apikey=${apikey}`);
+      }
+    } else {
+      fail('checkout — no create_order request was captured');
+    }
+    if (!JSON.stringify(stub.calls).includes('sb_secret') && !JSON.stringify(stub.calls).includes('service_role')) {
+      ok('checkout — no secret/service_role material in any request');
+    } else {
+      fail('checkout — a secret/service_role value appeared in a request');
+    }
+
+    // the storefront never reads order rows anonymously
+    const anonOrderReads = stub.calls.filter((c) => c.method === 'GET' && c.url.includes('/rest/v1/orders'));
+    if (anonOrderReads.length === 0) ok('checkout — the storefront never read orders anonymously');
+    else fail(`checkout — unexpected anonymous order reads: ${anonOrderReads.length}`);
+
+    // cart cleared + no demo-mode local record in connected mode
+    const cartRaw = dom.window.localStorage.getItem('zhino_cart');
+    let cartOk = false;
+    try {
+      cartOk = JSON.parse(cartRaw ?? '[]').length === 0;
+    } catch {
+      cartOk = false;
+    }
+    if (cartOk) ok('checkout — the cart was cleared after a successful database order');
+    else fail(`checkout — cart not cleared after success: ${cartRaw}`);
+    if (dom.window.localStorage.getItem('zhino_admin_orders_v1') === null) {
+      ok('checkout — no localStorage order record was written (the database is the source)');
+    } else {
+      fail('checkout — a local order record was written in connected mode');
+    }
+
+    if (errors.length === 0) ok('checkout flow — no runtime errors');
+    else fail('checkout flow runtime errors:\n    - ' + errors.join('\n    - '));
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 28. A refused order keeps the cart and shows a real error ──
+// The database rejects the order (insufficient stock): the checkout
+// must surface a Persian error, stay on the payment step, keep the
+// cart untouched (so the customer can retry) and must NOT write a
+// local fallback record.
+{
+  const stub = makeSupabaseStub({ isAdmin: false, createOrder: 'reject-stock' });
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/checkout', {
+    stub,
+    appSource: appCodeWithDb,
+    seed: (window) =>
+      window.localStorage.setItem(
+        'zhino_cart',
+        JSON.stringify([{ productId: 'jelly-strawberry', variantId: 'jelly-strawberry-250', quantity: 3 }]),
+      ),
+  });
+
+  try {
+    await driveCheckoutToPayment(dom, waitFor, text);
+    clickButtonByContains(dom, 'پرداخت و ثبت سفارش');
+    const refused = await waitFor(() => text().includes('موجودی کافی برای این سفارش'));
+    if (refused) ok('checkout refusal — the customer sees a clear stock error');
+    else fail('checkout refusal — no error shown: ' + text().slice(0, 220));
+    if (text().includes('روش ارسال و پرداخت')) ok('checkout refusal — still on the payment step (retry possible)');
+    else fail('checkout refusal — left the payment step unexpectedly');
+    if (!text().includes('سفارش شما با موفقیت ثبت شد')) ok('checkout refusal — no false confirmation');
+    else fail('checkout refusal — a confirmation was shown for a refused order');
+    const cartRaw = dom.window.localStorage.getItem('zhino_cart') ?? '[]';
+    let cart = [];
+    try {
+      cart = JSON.parse(cartRaw);
+    } catch { /* fail below */ }
+    if (cart.length === 1 && cart[0].quantity === 3) ok('checkout refusal — the cart was kept intact for the retry');
+    else fail(`checkout refusal — cart changed after a refused order: ${cartRaw}`);
+    if (dom.window.localStorage.getItem('zhino_admin_orders_v1') === null) {
+      ok('checkout refusal — no local order record was written');
+    } else {
+      fail('checkout refusal — a local order record was written for a refused order');
+    }
+    if (errors.length === 0) ok('checkout refusal flow — no runtime errors');
+    else fail('checkout refusal flow runtime errors:\n    - ' + errors.join('\n    - '));
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 29. Connected admin: the orders page is database-backed ──
+// The signed-in admin (is_admin() true) sees the database orders on
+// the dashboard and the orders page, and changing a status sends an
+// authenticated PATCH with the DATABASE enum value (UI «processing»
+// → DB «preparing»). The publishable key is the only apikey anywhere.
+{
+  const orders = [
+    {
+      id: 'ZH-ADM1001',
+      status: 'new',
+      customer_first_name: 'سارا',
+      customer_last_name: 'محمدی',
+      customer_phone: '09120000000',
+      customer_email: null,
+      shipping_province: 'تهران',
+      shipping_city: 'تهران',
+      shipping_address: 'خیابان نمونه، پلاک ۱',
+      shipping_postal_code: '1234567890',
+      shipping_method: 'standard',
+      subtotal: 600000,
+      shipping_cost: 50000,
+      total: 650000,
+      created_at: '2026-09-16T09:00:00.000Z',
+    },
+    {
+      id: 'ZH-ADM1002',
+      status: 'shipped',
+      customer_first_name: 'رضا',
+      customer_last_name: 'کریمی',
+      customer_phone: '09120000001',
+      customer_email: 'reza@example.com',
+      shipping_province: 'اصفهان',
+      shipping_city: 'اصفهان',
+      shipping_address: 'خیابان چهارباغ',
+      shipping_postal_code: '8123456789',
+      shipping_method: 'express',
+      subtotal: 300000,
+      shipping_cost: 100000,
+      total: 400000,
+      created_at: '2026-09-16T08:00:00.000Z',
+    },
+  ];
+  const orderItems = [
+    {
+      order_id: 'ZH-ADM1001',
+      product_id: 'jelly-strawberry',
+      variant_id: 'jelly-strawberry-250',
+      product_name: 'ژله توت فرنگی',
+      weight: '۲۵۰ گرم',
+      quantity: 3,
+      unit_price: 200000,
+    },
+    {
+      order_id: 'ZH-ADM1002',
+      product_id: 'jelly-strawberry',
+      variant_id: 'jelly-strawberry-250',
+      product_name: 'ژله توت فرنگی',
+      weight: '۲۵۰ گرم',
+      quantity: 2,
+      unit_price: 150000,
+    },
+  ];
+  const stub = makeSupabaseStub({ isAdmin: true, orders, orderItems });
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/login', {
+    stub,
+    appSource: appCodeConnected,
+  });
+
+  const setReactValue = (input, value) => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+
+  try {
+    const loginReady = await waitFor(() => document.querySelector('input[autocomplete="username"]'));
+    if (!loginReady) {
+      fail('admin orders — login form did not render');
+    } else {
+      setReactValue(document.querySelector('input[autocomplete="username"]'), 'admin@example.com');
+      setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
+      document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+      const onDashboard = await waitFor(() => text().includes('سفارش‌های در انتظار'));
+      if (onDashboard) {
+        ok('admin orders — the panel opened for the verified admin session');
+        // the dashboard already proves the remote source:
+        expectContains('admin dashboard (remote)', text(), 'ZH-ADM1001');
+        expectContains('admin dashboard (remote)', text(), '۱٬۰۵۰٬۰۰۰ تومان');
+      } else {
+        fail('admin orders — login did not reach the dashboard: ' + text().slice(0, 200));
+      }
+
+      // navigate to the orders page through the panel nav. Wait for an
+      // orders-page-only marker (the status filter select — the dashboard
+      // does not have one), because the dashboard already shows both ids.
+      const ordersLink = Array.from(document.querySelectorAll('a')).find((a) =>
+        (a.getAttribute('href') ?? '').endsWith('/admin/orders'),
+      );
+      if (ordersLink) ordersLink.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+      const onOrdersPage = await waitFor(() => document.getElementById('order-status-filter'));
+      if (onOrdersPage) ok('admin orders — the orders page was reached through the panel nav');
+      else fail('admin orders — the orders page did not render: ' + text().slice(0, 220));
+      const bothListed = text().includes('ZH-ADM1001') && text().includes('ZH-ADM1002');
+      if (bothListed) ok('admin orders — both database orders are listed');
+      else fail('admin orders — the orders page did not list the database orders: ' + text().slice(0, 220));
+      expectContains('admin orders — items', text(), 'ژله توت فرنگی');
+      expectContains('admin orders — customer', text(), 'سارا محمدی');
+      expectContains('admin orders — address', text(), 'اصفهان');
+      expectContains('admin orders — totals', text(), '۶۵۰٬۰۰۰ تومان');
+      expectContains('admin orders — totals', text(), '۴۰۰٬۰۰۰ تومان');
+
+      // change the newest order's status: UI «processing» → DB «preparing»
+      const select = Array.from(document.querySelectorAll('select.adm-status-select')).find(
+        (s) => s.value === 'new',
+      );
+      if (!select) {
+        fail('admin orders — the status select of the new order was not found');
+      } else {
+        const setSelectValue = (el, value) => {
+          Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, 'value').set.call(el, value);
+          el.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        };
+        setSelectValue(select, 'processing');
+        const patched = await waitFor(() => stub.orderStatusPatches.length === 1);
+        if (!patched) {
+          fail('admin orders — the status change did not reach the database');
+        } else {
+          const patch = stub.orderStatusPatches[0];
+          if (patch.url.includes('id=eq.ZH-ADM1001')) ok('admin orders — the PATCH targets the right order (id=eq.…);');
+          else fail(`admin orders — unexpected PATCH target: ${patch.url}`);
+          if (patch.payload.status === 'preparing') {
+            ok('admin orders — UI «processing» is translated to the DB enum «preparing»');
+          } else {
+            fail(`admin orders — unexpected status payload: ${JSON.stringify(patch.payload)}`);
+          }
+          const bearer = (patch.headers?.authorization ?? patch.headers?.Authorization ?? '').replace(/^Bearer /i, '');
+          const apikey = patch.headers?.apikey ?? patch.headers?.ApiKey ?? '';
+          let role = null;
+          try {
+            role = JSON.parse(Buffer.from(bearer.split('.')[1], 'base64url')).role;
+          } catch { /* fail below */ }
+          if (role === 'authenticated' && apikey === PUBLISHABLE_KEY) {
+            ok('admin orders — the status write is authenticated (admin JWT + publishable apikey)');
+          } else {
+            fail(`admin orders — unexpected write credentials: role=${role} apikey=${apikey}`);
+          }
+          if (!JSON.stringify(stub.orderStatusPatches).includes('sb_secret')) {
+            ok('admin orders — no secret material in the status write');
+          } else {
+            fail('admin orders — a secret value appeared in the status write');
+          }
+        }
+      }
+
+      // after the update the panel re-reads the authoritative rows
+      const orderReads = stub.calls.filter((c) => c.method === 'GET' && c.url.includes('/rest/v1/orders')).length;
+      if (orderReads >= 2) ok('admin orders — the authoritative re-read happened after the write');
+      else fail(`admin orders — expected ≥2 orders reads, saw ${orderReads}`);
+    }
+
+    if (errors.length === 0) ok('admin orders flow — no runtime errors');
+    else fail('admin orders flow runtime errors:\n    - ' + errors.join('\n    - '));
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 30. Local/demo mode is byte-for-byte the old behaviour ──────
+// Without Supabase configured, a placed order must still land in the
+// localStorage record (zhino_admin_orders_v1) — the original flow,
+// untouched by the database connection.
+{
+  const spyCalls = [];
+  const spy = () => {
+    spyCalls.push('called');
+    return Promise.resolve(new globalThis.Response('[]', { status: 200, headers: { 'Content-Type': 'application/json' } }));
+  };
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/checkout', {
+    stub: { fetchImpl: spy },
+    appSource: appCode,
+    seed: (window) =>
+      window.localStorage.setItem(
+        'zhino_cart',
+        JSON.stringify([{ productId: 'jelly-strawberry', variantId: 'jelly-strawberry-250', quantity: 3 }]),
+      ),
+  });
+
+  try {
+    await driveCheckoutToPayment(dom, waitFor, text);
+    clickButtonByContains(dom, 'پرداخت و ثبت سفارش');
+    const confirmed = await waitFor(() => text().includes('سفارش شما با موفقیت ثبت شد'));
+    if (confirmed) ok('local checkout — the demo confirmation still works');
+    else fail('local checkout — confirmation never appeared: ' + text().slice(0, 220));
+    const localRaw = dom.window.localStorage.getItem('zhino_admin_orders_v1');
+    let localOk = false;
+    try {
+      const rec = JSON.parse(localRaw ?? '[]');
+      localOk =
+        Array.isArray(rec) &&
+        rec.length === 1 &&
+        rec[0].status === 'new' &&
+        rec[0].total === 650000 &&
+        rec[0].customer.firstName === 'سارا' &&
+        rec[0].items.length === 1 &&
+        rec[0].items[0].quantity === 3;
+    } catch { /* fail below */ }
+    if (localOk) ok('local checkout — the order is recorded in localStorage exactly as before');
+    else fail(`local checkout — unexpected local record: ${localRaw}`);
+    if (spyCalls.length === 0) ok('local checkout — zero network requests (no Supabase configured)');
+    else fail(`local checkout — ${spyCalls.length} unexpected request(s)`);
+    if (errors.length === 0) ok('local checkout flow — no runtime errors');
+    else fail('local checkout flow runtime errors:\n    - ' + errors.join('\n    - '));
+  } finally {
+    dom.window.close();
+  }
 }
 
 renderStatusSummary();
