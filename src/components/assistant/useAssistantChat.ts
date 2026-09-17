@@ -1,5 +1,8 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۵ و ۶) — منطق گفتگو
+// ZHINO — «دستیار ژینو» (فاز ۵ تا ۷) — منطق گفتگو
+//
+// در فاز ۷ فقط «نمایش» صفحه عوض شده است (محیط چت تمام‌صفحه شبیه
+// ChatGPT)؛ منطق این فایل، منابع پاسخ و منبع داده دست‌نخورده‌اند.
 //
 // یک هوک، دو منبع پاسخ و دو «حقیقت» جدا که هرگز با هم قاطی نمی‌شوند:
 //
@@ -88,9 +91,16 @@ export function connectionLabel(connection: AssistantConnection, dataSource: Ass
   }
 }
 
-/** پیام خوش‌آمد ثابت دستیار — پیش از هر پاسخی نمایش داده می‌شود */
-const WELCOME_TEXT =
-  'سلام و درود! من «دستیار ژینو» هستم؛ راهنمای انتخاب محصول، دستور تهیهٔ ژله و کاستر، پیشنهاد دسر و پاسخ دربارهٔ قیمت و موجودی واقعی فروشگاه.';
+/**
+ * پیام خوش‌آمد — کوتاه، فارسی و دوستانه (فاز ۷).
+ * همان متن در دو جا دیده می‌شود: عنوان/زیرعنوان حالت خوشامد
+ * (AssistantChat) و حباب اول گفتگو پس از شروع چت.
+ */
+export const ASSISTANT_WELCOME_TITLE = 'سلام! من دستیار ژینو هستم.';
+export const ASSISTANT_WELCOME_SUB =
+  'دربارهٔ طعم‌ها، قیمت و موجودی، دستور تهیهٔ ژله و کاستر یا انتخاب دسر بپرسید.';
+
+const WELCOME_TEXT = `${ASSISTANT_WELCOME_TITLE} ${ASSISTANT_WELCOME_SUB}`;
 
 /** پیام اول گفتگو — با یادداشت زندهٔ وضعیت اتصال زیر آن */
 function welcomeMessage(): AssistantChatMessage {
@@ -296,14 +306,9 @@ export function useAssistantChat(): UseAssistantChatResult {
     setThinking(false);
     setFailedPrompt(null);
     setDraft('');
-    setMessages([
-      {
-        id: 1,
-        from: 'bot',
-        text: 'گفتگو پاک شد. در خدمتم — بپرسید یا یکی از پیشنهادهای پایین را انتخاب کنید.',
-        welcome: true,
-      },
-    ]);
+    // بازگشت به همان حالت خوشامد اولیه: پیام تازه، وسط صفحه، با
+    // پیشنهادهای پیش‌فرض — دقیقاً مثل اولین ورود به صفحهٔ دستیار.
+    setMessages([welcomeMessage()]);
     setSuggestions(DEFAULT_SUGGESTIONS.slice(0, 4));
   }, []);
 
