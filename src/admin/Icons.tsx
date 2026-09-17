@@ -39,6 +39,26 @@ export function IconProducts({ className = 'h-5 w-5' }: IconProps) {
   );
 }
 
+export function IconPrice({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M3.5 5.5 10 3l6.5 2.5v5L10 17l-6.5-6.5v-5Z" />
+      <circle cx="7.1" cy="7.2" r="1" />
+      <path d="m8.7 12.3 2.8-2.8M8.7 9.5l2.8 2.8" />
+    </svg>
+  );
+}
+
+export function IconImage({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <rect x="3" y="3.5" width="14" height="13" rx="1.5" />
+      <circle cx="7.2" cy="7.4" r="1.2" />
+      <path d="m4.5 14 3.7-3.7 2.6 2.3 1.8-1.7 2.9 3.1" />
+    </svg>
+  );
+}
+
 export function IconOrders({ className = 'h-5 w-5' }: IconProps) {
   return (
     <svg {...svgProps(className)}>

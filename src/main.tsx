@@ -10,6 +10,7 @@ import { CartProvider } from './context/CartContext';
 import ErrorBoundary from './components/ErrorBoundary';
 import { getSiteBase } from './utils/siteBase';
 import { startCatalogSync } from './services/catalogSync';
+import { startSiteDataSync } from './services/siteDataSync';
 import './index.css';
 import './admin/admin.css';
 
@@ -26,8 +27,9 @@ const basename = getSiteBase();
 // network) nothing changes and the storefront keeps working.
 try {
   startCatalogSync();
+  startSiteDataSync();
 } catch (err) {
-  console.warn('[zhino] catalog sync not started:', err);
+  console.warn('[zhino] remote sync not started:', err);
 }
 
 const rootElement = document.getElementById('root');

@@ -1,6 +1,6 @@
 // ============================================================
-// ZHINO — admin navigation (single source for sidebar, drawer
-// and page titles)
+// ZHINO — admin navigation (single source for sidebar, mobile
+// circular navigation and page titles)
 // Each entry carries a one-line purpose text shown under the
 // page title, so every screen states what it is for.
 // ============================================================

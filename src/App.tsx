@@ -27,6 +27,7 @@ import AboutPage from './pages/AboutPage';
 import ContactPage from './pages/ContactPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { useRemoteCatalog } from './services/catalogSync';
+import { useRemoteSiteData } from './services/siteDataSync';
 import { AdminAuthProvider } from './admin/auth/AuthContext';
 import AdminGate from './admin/AdminGate';
 import AdminLoginPage from './admin/pages/AdminLoginPage';
@@ -65,6 +66,10 @@ export default function App() {
   // without this the first paint would keep showing the base data until
   // some unrelated state change happened.
   useRemoteCatalog();
+  // Settings, recipes and editable copy share the same remote snapshot;
+  // subscribing here keeps existing storefront pages reactive without
+  // rebuilding their layout or adding duplicate data fetching.
+  useRemoteSiteData();
 
   return (
     <AdminAuthProvider>

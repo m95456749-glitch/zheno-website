@@ -10,8 +10,8 @@
 // Admin call sites: settings page (write), dashboard/inventory
 // (low-stock threshold).
 //
-// Future backend: saveSettings/resetSettings become API calls;
-// getSettings can hydrate from the same backend.
+// Supabase is the primary connected source; localStorage remains the
+// deliberate offline/demo fallback.
 // ============================================================
 
 import {
@@ -19,7 +19,9 @@ import {
   SHIPPING_COST_EXPRESS,
   SHIPPING_COST_STANDARD,
 } from '../data/products';
-import { createLocalStore } from './localStore';
+import { createLocalStore, useLocalStore } from './localStore';
+import { getRemoteSiteData, runRemoteSiteWrite, useRemoteSiteData, pushRemoteSettings } from './siteDataSync';
+import { getSupabase } from './supabaseClient';
 
 export interface SiteSettings {
   /** minimum cart subtotal for free shipping (Tomans) */
@@ -60,15 +62,35 @@ const store = createLocalStore<SiteSettings>(
   sanitize,
 );
 
-/** Read current settings (defaults + any admin override). Cheap — safe in render. */
+/** Read current settings from Supabase when available, otherwise the local overlay. */
 export function getSettings(): SiteSettings {
-  return store.get();
+  return getRemoteSiteData()?.settings ?? store.get();
 }
 
 export function saveSettings(next: SiteSettings): void {
+  if (!Number.isSafeInteger(next.freeShippingThreshold) || next.freeShippingThreshold < 0) return;
+  if (!Number.isSafeInteger(next.standardShippingCost) || next.standardShippingCost < 0) return;
+  if (!Number.isSafeInteger(next.expressShippingCost) || next.expressShippingCost < 0) return;
+  if (!Number.isSafeInteger(next.lowStockThreshold) || next.lowStockThreshold < 0) return;
+
+  if (getSupabase()) {
+    runRemoteSiteWrite('ذخیره تنظیمات', () => pushRemoteSettings(next));
+    return;
+  }
   store.set(next);
 }
 
 export function resetSettings(): void {
+  if (getSupabase()) {
+    runRemoteSiteWrite('بازنشانی تنظیمات', () => pushRemoteSettings(DEFAULT_SITE_SETTINGS));
+    return;
+  }
   store.reset();
+}
+
+/** React binding used by dashboard/storefront surfaces that must refresh after a save. */
+export function useSettings(): SiteSettings {
+  const local = useLocalStore(store);
+  const remote = useRemoteSiteData();
+  return remote?.settings ?? local;
 }

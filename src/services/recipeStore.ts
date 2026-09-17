@@ -6,13 +6,22 @@
 // localStorage overlay: per-recipe overrides, new recipes, and
 // removals. Identical output until an admin changes something.
 //
-// Future backend: upsertRecipe/removeRecipe/resetRecipes become
-// API calls; getActiveRecipes hydrates from the backend.
+// Supabase is the primary connected source; localStorage remains the
+// deliberate offline/demo fallback.
 // ============================================================
 
 import { RECIPES } from '../data/recipes';
 import type { Recipe } from '../data/recipes';
 import { createLocalStore, useLocalStore } from './localStore';
+import {
+  getRemoteSiteData,
+  pushRemoteRecipe,
+  resetRemoteRecipes,
+  runRemoteSiteWrite,
+  setRemoteRecipeActive,
+  useRemoteSiteData,
+} from './siteDataSync';
+import { getSupabase } from './supabaseClient';
 
 interface RecipeOverlay {
   /** full replacement of a base (or added) recipe */
@@ -80,13 +89,20 @@ function mergedList(overlay: RecipeOverlay): Recipe[] {
   return list;
 }
 
-/** Recipes shown by the site (base + admin changes). */
+/** Recipes shown by the site (database snapshot when connected, otherwise local overlay). */
 export function getActiveRecipes(): Recipe[] {
+  const remote = getRemoteSiteData();
+  if (remote) return remote.recipes.filter((recipe) => remote.recipeActive[recipe.id] !== false);
   return mergedList(store.get());
 }
 
-/** Edit an existing recipe or add a new one (same shape either way). */
+/** Edit an existing recipe or add a new one. Database writes stay under RLS. */
 export function upsertRecipe(recipe: Recipe): void {
+  if (getSupabase()) {
+    runRemoteSiteWrite('ذخیره دستور تهیه', () => pushRemoteRecipe(recipe, true));
+    return;
+  }
+
   const overlay = store.get();
   const isBase = RECIPES.some((r) => r.id === recipe.id);
   const additions = overlay.additions.filter((r) => r.id !== recipe.id);
@@ -106,6 +122,11 @@ export function upsertRecipe(recipe: Recipe): void {
 }
 
 export function removeRecipe(id: string): void {
+  if (getSupabase()) {
+    runRemoteSiteWrite('پنهان‌کردن دستور تهیه', () => setRemoteRecipeActive(id, false));
+    return;
+  }
+
   const overlay = store.get();
   const overrides = { ...overlay.overrides };
   delete overrides[id];
@@ -116,13 +137,19 @@ export function removeRecipe(id: string): void {
   });
 }
 
-/** Discard every recipe change (back to the two official methods). */
+/** Reset is non-destructive in Supabase: official rows are restored and additions hidden. */
 export function resetRecipes(): void {
+  if (getSupabase()) {
+    runRemoteSiteWrite('بازنشانی دستورها', () => resetRemoteRecipes(RECIPES));
+    return;
+  }
   store.reset();
 }
 
-/** Recipes as a hook (admin pages). */
+/** Recipes as a hook (admin/storefront pages). */
 export function useActiveRecipes(): Recipe[] {
   const overlay = useLocalStore(store);
+  const remote = useRemoteSiteData();
+  if (remote) return remote.recipes.filter((recipe) => remote.recipeActive[recipe.id] !== false);
   return mergedList(overlay);
 }

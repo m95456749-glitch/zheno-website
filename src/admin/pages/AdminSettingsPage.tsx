@@ -6,12 +6,13 @@
 // UI: one form, one primary «ذخیره» button, quiet «بازنشانی».
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DEFAULT_SITE_SETTINGS,
   getSettings,
   resetSettings,
   saveSettings,
+  useSettings,
   type SiteSettings,
 } from '../../services/settings';
 import { Field, SavedFlash } from '../components/ui';
@@ -52,9 +53,14 @@ const FIELDS: NumericField[] = [
 ];
 
 export default function AdminSettingsPage() {
+  const liveSettings = useSettings();
   const [form, setForm] = useState<SiteSettings>(() => getSettings());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setForm(liveSettings);
+  }, [liveSettings]);
 
   const changed = FIELDS.some((f) => form[f.key] !== DEFAULT_SITE_SETTINGS[f.key]);
 
@@ -62,8 +68,8 @@ export default function AdminSettingsPage() {
     const next: Record<string, string> = {};
     for (const f of FIELDS) {
       const v = form[f.key];
-      if (!Number.isInteger(v) || v < 0) {
-        next[f.key] = 'مقدار صحیح (عدد منفی یا بزرگ‌تر) وارد کنید';
+      if (!Number.isSafeInteger(v) || v < 0) {
+        next[f.key] = 'یک عدد صحیحِ صفر یا بزرگ‌تر وارد کنید';
       }
     }
     setErrors(next);
@@ -83,6 +89,7 @@ export default function AdminSettingsPage() {
             <input
               type="number"
               min={0}
+              max={Number.MAX_SAFE_INTEGER}
               step={field.step}
               dir="ltr"
               className={cn('adm-input', errors[field.key] && 'err')}

@@ -6,12 +6,13 @@
 // UI: one form, one primary «ذخیره» button, quiet «بازنشانی».
 // ============================================================
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DEFAULT_SITE_CONTENT,
   getSiteContent,
   resetSiteContent,
   saveSiteContent,
+  useSiteContent,
   type SiteContent,
 } from '../../services/siteContent';
 import { Field, SavedFlash } from '../components/ui';
@@ -48,8 +49,13 @@ const FIELDS: Array<{ key: keyof SiteContent; label: string; hint: string; multi
 ];
 
 export default function AdminSiteContentPage() {
+  const liveContent = useSiteContent();
   const [form, setForm] = useState<SiteContent>(() => getSiteContent());
   const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    setForm(liveContent);
+  }, [liveContent]);
 
   const changed = FIELDS.some((f) => form[f.key] !== DEFAULT_SITE_CONTENT[f.key]);
 
