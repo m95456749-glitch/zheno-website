@@ -3419,6 +3419,503 @@ async function loadAssistantEdgeFunction(env, marker) {
   }
 }
 
+// ── 39b. Phase 9 — the VOICE Edge Function (zhino-voice) ──────────
+// The same treatment for the Persian voice proxy: the provider key stays
+// on the server, the customer's text is escaped before it becomes SSML,
+// the audio comes back as audio/mpeg, and every failure mode is honest.
+async function loadVoiceEdgeFunction(env, marker) {
+  const code = buildSync({
+    entryPoints: ['supabase/functions/zhino-voice/index.ts'],
+    bundle: true,
+    format: 'esm',
+    platform: 'neutral',
+    target: 'es2020',
+    write: false,
+    logLevel: 'silent',
+  }).outputFiles[0].text;
+
+  let handler = null;
+  const previousDeno = globalThis.Deno;
+  globalThis.Deno = {
+    env: { get: (key) => (key in env ? env[key] : undefined) },
+    serve: (fn) => {
+      handler = fn;
+    },
+  };
+  try {
+    await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}#${marker}`);
+  } finally {
+    globalThis.Deno = previousDeno;
+  }
+  if (!handler) throw new Error('the voice Edge Function did not register a handler');
+  return handler;
+}
+
+{
+  // Assembled at runtime so this fixture never looks like a committed key.
+  const SPEECH_KEY_VALUE = ['smoke', 'speech', 'key', 'placeholder'].join('-');
+  const VOICE_ENDPOINT = 'https://smoke-test.supabase.co/functions/v1/zhino-voice';
+  const PERSIAN_VOICE = 'fa-IR-DilaraNeural';
+
+  const voiceEnv = {
+    AZURE_SPEECH_KEY: SPEECH_KEY_VALUE,
+    AZURE_SPEECH_REGION: 'westeurope',
+    AZURE_SPEECH_VOICE: PERSIAN_VOICE,
+    TTS_ALLOWED_ORIGINS: '*',
+  };
+
+  /** every call the function made to the provider */
+  let providerCalls = [];
+  let failProvider = false;
+  let providerStatus = 500;
+
+  const voiceFetch = async (input, init = {}) => {
+    const url = typeof input === 'string' ? input : input.url;
+    const headers = init.headers
+      ? Object.fromEntries(new globalThis.Headers(init.headers).entries())
+      : {};
+
+    if (url.includes('/cognitiveservices/voices/list')) {
+      return new globalThis.Response(
+        JSON.stringify([{ ShortName: PERSIAN_VOICE }, { ShortName: 'en-US-JennyNeural' }]),
+        { status: 200, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
+    if (url.includes('/cognitiveservices/v1')) {
+      providerCalls.push({ url, headers, body: String(init.body ?? '') });
+      if (failProvider) {
+        return new globalThis.Response('provider boom: key xyz leaked here', { status: providerStatus });
+      }
+      // an ID3-prefixed byte blob stands in for the real MP3
+      const mp3 = new Uint8Array(256);
+      mp3[0] = 0x49;
+      mp3[1] = 0x44;
+      mp3[2] = 0x33;
+      return new globalThis.Response(mp3, {
+        status: 200,
+        headers: { 'Content-Type': 'audio/mpeg' },
+      });
+    }
+
+    return new globalThis.Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } });
+  };
+
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = voiceFetch;
+  try {
+    const handler = await loadVoiceEdgeFunction(voiceEnv, 'voice-configured');
+
+    // (الف) سلامت‌سنجی: آماده است، بدون افشای کلید یا ناحیه
+    const health = await handler(new Request(VOICE_ENDPOINT, { method: 'GET' }));
+    const healthBody = await health.json();
+    if (health.status === 200 && healthBody.configured === true && healthBody.ready === true) {
+      ok('voice function — the health check reports the Persian voice is ready');
+    } else {
+      fail(`voice function — health check wrong: ${JSON.stringify(healthBody)}`);
+    }
+    const healthText = JSON.stringify(healthBody);
+    if (!healthText.includes(SPEECH_KEY_VALUE) && !healthText.includes('westeurope')) {
+      ok('voice function — the health response leaks neither the key nor the region');
+    } else {
+      fail('voice function — the health response leaked server configuration');
+    }
+
+    // (ب) ساخت صدا: خروجی باینری audio/mpeg
+    providerCalls = [];
+    const spoken = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'ژله توت فرنگی ۲۰۰٬۰۰۰ تومان است.' }),
+      }),
+    );
+    if (spoken.status === 200 && (spoken.headers.get('content-type') ?? '').includes('audio/mpeg')) {
+      ok('voice function — a POST returns real audio (audio/mpeg)');
+    } else {
+      fail(`voice function — synthesis failed (status ${spoken.status}, type ${spoken.headers.get('content-type')})`);
+    }
+    const audioBytes = new Uint8Array(await spoken.arrayBuffer());
+    if (audioBytes.byteLength > 0) ok(`voice function — the audio body is non-empty (${audioBytes.byteLength} bytes)`);
+    else fail('voice function — the audio body was empty');
+
+    // (ج) کلید فقط سمت سرور و در هدر درست
+    if (providerCalls.length === 1) {
+      const call = providerCalls[0];
+      if (call.headers['ocp-apim-subscription-key'] === SPEECH_KEY_VALUE) {
+        ok('voice function — the key is sent to the provider from the server only');
+      } else {
+        fail('voice function — the provider call is missing its server-side key');
+      }
+      if (call.url.includes('westeurope.tts.speech.microsoft.com')) {
+        ok('voice function — the configured region endpoint is used');
+      } else {
+        fail(`voice function — wrong provider endpoint: ${call.url}`);
+      }
+      if (call.body.includes(PERSIAN_VOICE) && call.body.includes('xml:lang="fa-IR"')) {
+        ok('voice function — the request asks for the Persian voice (fa-IR)');
+      } else {
+        fail(`voice function — the SSML does not request Persian: ${call.body.slice(0, 160)}`);
+      }
+    } else {
+      fail(`voice function — expected exactly one provider call, saw ${providerCalls.length}`);
+    }
+
+    // (د) متن کاربر پیش از SSML کاملاً escape می‌شود (تزریق تگ ممکن نیست)
+    providerCalls = [];
+    await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          text: '</voice><voice name="en-US-JennyNeural">hijacked</voice><!--',
+        }),
+      }),
+    );
+    const injected = providerCalls[0]?.body ?? '';
+    const voiceTags = (injected.match(/<voice\b/g) ?? []).length;
+    if (voiceTags === 1 && injected.includes('&lt;/voice&gt;')) {
+      ok('voice function — a reply cannot inject SSML tags (text is escaped)');
+    } else {
+      fail(`voice function — SSML injection was possible: ${injected.slice(0, 200)}`);
+    }
+    // The injected name may survive as ESCAPED TEXT (it is then simply read
+    // aloud, which is correct); what must never happen is it becoming a real
+    // attribute that switches the engine away from the Persian voice.
+    const attributeNames = Array.from(injected.matchAll(/name="([^"]*)"/g)).map((m) => m[1]);
+    if (attributeNames.length === 1 && attributeNames[0] === PERSIAN_VOICE) {
+      ok('voice function — an injected voice name can never become the speaking voice');
+    } else {
+      fail(`voice function — the voice was switchable by the text: ${JSON.stringify(attributeNames)}`);
+    }
+
+    // (ه) متن خالی رد می‌شود
+    const empty = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: '   ' }),
+      }),
+    );
+    if (empty.status === 400) ok('voice function — empty text is rejected (400)');
+    else fail(`voice function — empty text was not rejected (status ${empty.status})`);
+
+    // (و) بدنهٔ بزرگ رد می‌شود
+    const huge = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'content-length': '90000' },
+        body: JSON.stringify({ text: 'x'.repeat(50) }),
+      }),
+    );
+    if (huge.status === 413) ok('voice function — an oversized request is rejected (413)');
+    else fail(`voice function — oversized request was not rejected (status ${huge.status})`);
+
+    // (ز) خطای سرویس‌دهنده: ۵۰۲ بدون افشای متن خام خطا یا کلید
+    failProvider = true;
+    providerStatus = 500;
+    const broken = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    const brokenBody = await broken.text();
+    if (broken.status === 502) ok('voice function — a provider failure returns 502');
+    else fail(`voice function — provider failure returned ${broken.status}`);
+    if (!brokenBody.includes('provider boom') && !brokenBody.includes(SPEECH_KEY_VALUE)) {
+      ok('voice function — the error response leaks neither the raw upstream error nor the key');
+    } else {
+      fail('voice function — the error response leaked upstream detail');
+    }
+
+    // (ح) سهمیهٔ سرویس‌دهنده (۴۲۹) به همان ۴۲۹ نگاشت می‌شود
+    providerStatus = 429;
+    const throttled = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    if (throttled.status === 429) ok('voice function — a provider quota error is reported as 429');
+    else fail(`voice function — quota error returned ${throttled.status}`);
+    failProvider = false;
+
+    // (ط) متد نادرست
+    const wrongMethod = await handler(new Request(VOICE_ENDPOINT, { method: 'DELETE' }));
+    if (wrongMethod.status === 405) ok('voice function — an unsupported method is refused (405)');
+    else fail(`voice function — DELETE returned ${wrongMethod.status}`);
+
+    // (ی) بدون Secret: ۵۰۱ و هیچ تماسی با سرویس‌دهنده
+    providerCalls = [];
+    const bare = await loadVoiceEdgeFunction({}, 'voice-unconfigured');
+    const unconfigured = await bare(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    const unconfiguredBody = await unconfigured.json();
+    if (unconfigured.status === 501 && unconfiguredBody.error === 'not_configured') {
+      ok('voice function — without secrets it answers 501 not_configured');
+    } else {
+      fail(`voice function — unconfigured answer wrong (${unconfigured.status})`);
+    }
+    if (providerCalls.length === 0) ok('voice function — no provider call is attempted without a key');
+    else fail('voice function — it called the provider without a key');
+
+    const bareHealth = await bare(new Request(VOICE_ENDPOINT, { method: 'GET' }));
+    const bareHealthBody = await bareHealth.json();
+    if (bareHealthBody.configured === false && bareHealthBody.ready === false) {
+      ok('voice function — the health check is honest when nothing is configured');
+    } else {
+      fail(`voice function — unconfigured health check wrong: ${JSON.stringify(bareHealthBody)}`);
+    }
+
+    // (ک) CORS: مبدأ ناشناس رد می‌شود
+    const strict = await loadVoiceEdgeFunction(
+      { ...voiceEnv, TTS_ALLOWED_ORIGINS: 'https://zheno.devs.surf' },
+      'voice-strict-origin',
+    );
+    const foreign = await strict(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', origin: 'https://evil.example' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    if (foreign.status === 403) ok('voice function — a foreign origin is refused (403)');
+    else fail(`voice function — a foreign origin was served (status ${foreign.status})`);
+
+    const friendly = await strict(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', origin: 'https://zheno.devs.surf' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    if (
+      friendly.status === 200 &&
+      friendly.headers.get('access-control-allow-origin') === 'https://zheno.devs.surf'
+    ) {
+      ok('voice function — the configured origin is allowed and echoed back');
+    } else {
+      fail(`voice function — allowed origin failed (status ${friendly.status})`);
+    }
+
+    // (ل) preflight مرورگر باید بدون کلید و بدون تماس با سرویس‌دهنده پاسخ بگیرد،
+    // وگرنه هیچ درخواست POST از مرورگر اصلاً به تابع نمی‌رسد.
+    providerCalls = [];
+    const preflight = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'OPTIONS',
+        headers: { origin: 'https://zheno.devs.surf' },
+      }),
+    );
+    if (preflight.status === 204 && preflight.headers.get('access-control-allow-origin')) {
+      ok('voice function — the browser preflight (OPTIONS) is answered');
+    } else {
+      fail(`voice function — preflight failed (status ${preflight.status})`);
+    }
+    if (providerCalls.length === 0) {
+      ok('voice function — a preflight costs nothing (no provider call)');
+    } else {
+      fail('voice function — the preflight reached the provider');
+    }
+
+    // (م) JSON خراب نباید تابع را بشکند یا به سرویس‌دهنده برسد
+    providerCalls = [];
+    const brokenJson = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: '{ this is not json',
+      }),
+    );
+    if (brokenJson.status === 400 && providerCalls.length === 0) {
+      ok('voice function — malformed JSON is rejected (400) and never reaches the provider');
+    } else {
+      fail(`voice function — malformed JSON handling wrong (status ${brokenJson.status})`);
+    }
+
+    // (ن) سقف طول متن: پاسخ بلندتر از سقف باید بریده شود، نه اینکه رد شود
+    // یا کامل برود. (مرورگر خودش متن را تکه می‌کند؛ این آخرین خط دفاع است.)
+    providerCalls = [];
+    const longText = 'ژله توت فرنگی ژینو با عصارهٔ طبیعی میوه تهیه می‌شود. '.repeat(60);
+    const longReply = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: longText }),
+      }),
+    );
+    const sentSsml = providerCalls[0]?.body ?? '';
+    const spokenPart = sentSsml.replace(/^[\s\S]*<prosody[^>]*>/, '').replace(/<\/prosody>[\s\S]*$/, '');
+    if (longReply.status === 200 && spokenPart.length > 0 && spokenPart.length <= 1200) {
+      ok(`voice function — an over-long text is capped at the limit, not refused (${spokenPart.length} chars)`);
+    } else {
+      fail(`voice function — over-long text handling wrong (status ${longReply.status}, ${spokenPart.length} chars)`);
+    }
+
+    // (س) هدر X-Zhino-Voice می‌گوید کدام صدا واقعاً خوانده است — مرورگر و
+    // پشتیبانی با همین می‌فهمند صدای فارسی فعال بوده یا نه.
+    const voiceHeaderResponse = await handler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    if (voiceHeaderResponse.headers.get('x-zhino-voice') === PERSIAN_VOICE) {
+      ok('voice function — the response names the Persian voice that spoke');
+    } else {
+      fail(`voice function — wrong voice header: ${voiceHeaderResponse.headers.get('x-zhino-voice')}`);
+    }
+
+    // (ع) صوت خالی از سرویس‌دهنده نباید به‌عنوان «موفق» پخش شود، وگرنه
+    // کاربر یک پخش بی‌صدا می‌بیند و فکر می‌کند سایت خراب است.
+    const emptyAudioHandler = await loadVoiceEdgeFunction(voiceEnv, 'voice-empty-audio');
+    const keptFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/cognitiveservices/v1')) {
+        return new globalThis.Response(new Uint8Array(0), {
+          status: 200,
+          headers: { 'Content-Type': 'audio/mpeg' },
+        });
+      }
+      return voiceFetch(input, init);
+    };
+    let emptyAudio;
+    try {
+      emptyAudio = await emptyAudioHandler(
+        new Request(VOICE_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: 'سلام' }),
+        }),
+      );
+    } finally {
+      globalThis.fetch = keptFetch;
+    }
+    if (emptyAudio.status === 502) {
+      ok('voice function — silent (empty) audio is treated as a failure, not played');
+    } else {
+      fail(`voice function — empty audio returned ${emptyAudio.status} instead of 502`);
+    }
+
+    // (ف) تایم‌اوت سرویس‌دهنده نباید درخواست را برای همیشه باز نگه دارد
+    const timeoutHandler = await loadVoiceEdgeFunction(voiceEnv, 'voice-timeout');
+    const beforeTimeoutFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/cognitiveservices/v1')) {
+        // exactly what an aborted upstream call looks like in Deno
+        const abortError = new Error('The signal has been aborted');
+        abortError.name = 'AbortError';
+        throw abortError;
+      }
+      return voiceFetch(input, init);
+    };
+    let timedOut;
+    try {
+      timedOut = await timeoutHandler(
+        new Request(VOICE_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: 'سلام' }),
+        }),
+      );
+    } finally {
+      globalThis.fetch = beforeTimeoutFetch;
+    }
+    const timedOutBody = await timedOut.json().catch(() => ({}));
+    if (timedOut.status === 502 && !JSON.stringify(timedOutBody).includes('timeout')) {
+      ok('voice function — an upstream timeout ends as a clean 502 with no internal detail');
+    } else {
+      fail(`voice function — timeout handling wrong (status ${timedOut.status})`);
+    }
+
+    // (ص) محدودیت نرخ واقعاً اعمال می‌شود. این ادعا در SECURITY-AUDIT.md هست،
+    // پس باید اثبات شود: بعد از سقف مجاز، درخواست بعدی ۴۲۹ می‌گیرد و دیگر
+    // هیچ تماسی با سرویس‌دهنده (و هیچ هزینه‌ای) رخ نمی‌دهد.
+    const limitHandler = await loadVoiceEdgeFunction(voiceEnv, 'voice-rate-limit');
+    const askOnce = () =>
+      limitHandler(
+        new Request(VOICE_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.7' },
+          body: JSON.stringify({ text: 'سلام' }),
+        }),
+      );
+    let lastStatus = 0;
+    for (let i = 0; i < 40; i += 1) lastStatus = (await askOnce()).status;
+    if (lastStatus === 200) {
+      ok('voice function — the first 40 requests from one IP are served');
+    } else {
+      fail(`voice function — a request inside the allowance failed (status ${lastStatus})`);
+    }
+    providerCalls = [];
+    const blocked = await askOnce();
+    const blockedBody = await blocked.json().catch(() => ({}));
+    if (blocked.status === 429 && blockedBody.error === 'rate_limited') {
+      ok('voice function — request 41 from the same IP is rate limited (429)');
+    } else {
+      fail(`voice function — the rate limit did not trigger (status ${blocked.status})`);
+    }
+    if (providerCalls.length === 0) {
+      ok('voice function — a rate-limited request costs no provider quota');
+    } else {
+      fail('voice function — a rate-limited request still called the provider');
+    }
+    // A different visitor must not be punished for someone else's traffic.
+    const otherVisitor = await limitHandler(
+      new Request(VOICE_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '198.51.100.4' },
+        body: JSON.stringify({ text: 'سلام' }),
+      }),
+    );
+    if (otherVisitor.status === 200) {
+      ok('voice function — the rate limit is per visitor, not global');
+    } else {
+      fail(`voice function — another visitor was blocked too (status ${otherVisitor.status})`);
+    }
+
+    // (ق) اگر ناحیهٔ Azure صدای فارسی نداشته باشد، سلامت‌سنجی باید صادقانه
+    // ready:false بدهد تا سایت بی‌صدا به موتور گوشی برگردد.
+    const noPersianHandler = await loadVoiceEdgeFunction(voiceEnv, 'voice-no-persian');
+    const beforeListFetch = globalThis.fetch;
+    globalThis.fetch = async (input, init = {}) => {
+      const url = typeof input === 'string' ? input : input.url;
+      if (url.includes('/cognitiveservices/voices/list')) {
+        return new globalThis.Response(JSON.stringify([{ ShortName: 'en-US-JennyNeural' }]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      return voiceFetch(input, init);
+    };
+    let noPersianHealth;
+    try {
+      noPersianHealth = await noPersianHandler(new Request(VOICE_ENDPOINT, { method: 'GET' }));
+    } finally {
+      globalThis.fetch = beforeListFetch;
+    }
+    const noPersianBody = await noPersianHealth.json();
+    if (noPersianBody.configured === true && noPersianBody.ready === false) {
+      ok('voice function — a region without the Persian voice honestly reports ready:false');
+    } else {
+      fail(`voice function — dishonest health check: ${JSON.stringify(noPersianBody)}`);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+}
+
 // ── 40. Storefront + admin routes are untouched by the assistant ──
 // One router, one history: opening /assistant and coming back must not
 // change any other route's behaviour.

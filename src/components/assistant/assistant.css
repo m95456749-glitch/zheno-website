@@ -1170,6 +1170,17 @@
   opacity: 0.45;
 }
 
+/* حین آماده‌سازی صدا: همان قاب، بدون دکمه — چیدمان تکان نمی‌خورد */
+.zhino-assistant-ctl.is-waiting {
+  cursor: default;
+  opacity: 0.75;
+}
+
+.zhino-assistant-playback.is-preparing .zhino-assistant-soundbars span {
+  animation-duration: 1.4s;
+  opacity: 0.5;
+}
+
 /* راهنمای کوتاه و انسانی وقتی دستگاه صدای فارسی ندارد */
 .zhino-assistant-voice-notes {
   display: block;

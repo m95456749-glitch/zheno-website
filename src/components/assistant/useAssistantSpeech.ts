@@ -41,6 +41,7 @@
 // ============================================================
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { splitForSpeech } from './speechText';
 
 const VOICE_PREF_KEY = 'zhino_assistant_voice_v1';
 
@@ -68,8 +69,6 @@ export interface AssistantSpeech {
 }
 
 /* ── ثوابت زمان‌بندی (همه با رفتار واقعی Chrome Android وزن‌بندی شده‌اند) ── */
-/** طول بیشینهٔ هر تکه: زیر آستانهٔ قفل ~۱۴ ثانیه‌ای Chrome */
-const MAX_CHUNK = 140;
 /** اگر onstart اینقدر آسمی‌نرسد، موتور صدا را شروع نکرده است */
 const START_TIMEOUT_MS = 3000;
 /** سقف پخش هر تکه؛ بیشتر از این یعنی تکه قفل شده (stall) */
@@ -140,82 +139,6 @@ function findPersianVoice(
 
 function hasPersianVoice(voices: SpeechSynthesisVoice[]): boolean {
   return voices.some(isPersian);
-}
-
-function splitForSpeech(text: string, maxChunk = MAX_CHUNK): string[] {
-  const flat = text
-    .replace(/[•▪◦]+/g, '، ')
-    .replace(/([^\n.!?؟؛:])\s*\n+\s*/g, '$1. ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-  if (flat.length === 0) return [];
-
-  const sentences: string[] = [];
-  let buffer = '';
-  for (const char of flat) {
-    buffer += char;
-    if ('.!?؟'.includes(char)) {
-      const done = buffer.trim();
-      if (done.length > 0) sentences.push(done);
-      buffer = '';
-    }
-  }
-  if (buffer.trim().length > 0) sentences.push(buffer.trim());
-
-  const chunks: string[] = [];
-  let current = '';
-  for (const piece of sentences.flatMap((sentence) =>
-    sentence.length > maxChunk ? breakLong(sentence, maxChunk) : [sentence],
-  )) {
-    if (piece.length === 0) continue;
-    if (current.length > 0 && current.length + piece.length + 1 > maxChunk) {
-      chunks.push(current);
-      current = piece;
-    } else {
-      current = current.length > 0 ? `${current} ${piece}` : piece;
-    }
-  }
-  if (current.length > 0) chunks.push(current);
-  return chunks;
-}
-
-function breakLong(sentence: string, maxChunk: number): string[] {
-  const parts = sentence
-    .split(/[،,]\s*/)
-    .map((part) => part.trim())
-    .filter(Boolean);
-  const out: string[] = [];
-  let line = '';
-  for (const part of parts) {
-    if (part.length > maxChunk) {
-      if (line.length > 0) {
-        out.push(line);
-        line = '';
-      }
-      out.push(...cutOnSpaces(part, maxChunk));
-      continue;
-    }
-    line = line.length > 0 ? `${line}، ${part}` : part;
-    if (line.length >= maxChunk) {
-      out.push(line);
-      line = '';
-    }
-  }
-  if (line.length > 0) out.push(line);
-  return out;
-}
-
-function cutOnSpaces(part: string, maxChunk: number): string[] {
-  const out: string[] = [];
-  let rest = part;
-  while (rest.length > maxChunk) {
-    const at = rest.lastIndexOf(' ', maxChunk);
-    const cut = at > 40 ? at : maxChunk;
-    out.push(rest.slice(0, cut).trim());
-    rest = rest.slice(cut).trim();
-  }
-  if (rest.length > 0) out.push(rest);
-  return out;
 }
 
 type PlayState = 'idle' | 'playing' | 'paused';
