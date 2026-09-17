@@ -2211,6 +2211,10 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (scoped) ok('assistant chat — unrelated questions get the honest scope answer');
     else fail('assistant chat — scope answer missing: ' + text().slice(-220));
 
+    // let React flush the passive collapse-effect of the answer commit
+    // before asserting the suggestions row state (avoids a click/effect race)
+    await sleep(400);
+
     // Phase 8 — an answer never carries a technical footnote, and the
     // suggestions step aside instead of stacking boxes over the chat.
     expectNoInternalWording('assistant chat', dom);
@@ -2290,6 +2294,11 @@ async function openAssistantFromStore(dom, waitFor, text) {
           const row = { utterance, dropped: false };
           pending.push(row);
           spoken.push({ text: utterance.text, lang: utterance.lang });
+          // مثل مرورگر واقعی: اول onstart، بعد onend
+          setTimeout(() => {
+            if (row.dropped) return;
+            if (typeof utterance.onstart === 'function') utterance.onstart();
+          }, 40);
           setTimeout(() => {
             if (row.dropped) return;
             row.dropped = true;
@@ -2399,6 +2408,205 @@ async function openAssistantFromStore(dom, waitFor, text) {
     // reading never breaks the chat itself
     expectContains('assistant voice', text(), 'ژله توت فرنگی');
     expectNoErrors('assistant voice', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34e. Phase 9 — the device has no Persian voice (typical Android) ──
+// When getVoices() answers with only English voices, the app must never
+// hand anything to the speech engine, the customer sees one short clear
+// line (instead of silence or a stuck «reading…» state), and the chat is
+// untouched.
+{
+  const spoken = [];
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+    seed: (window) => {
+      window.localStorage.removeItem('zhino_assistant_voice_v1');
+      window.SpeechSynthesisUtterance = class FakeUtterance {
+        constructor(uttered) {
+          this.text = uttered;
+          this.lang = '';
+          this.voice = null;
+        }
+      };
+      // A typical Android phone: the only installed voice is English.
+      const voices = [{ lang: 'en-US', name: 'Google US English' }];
+      window.speechSynthesis = {
+        speaking: false,
+        paused: false,
+        getVoices: () => voices,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        speak(utterance) {
+          spoken.push(utterance.text);
+        },
+        cancel() {},
+        pause: () => {},
+        resume: () => {},
+      };
+    },
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('no Persian voice — the chat console never rendered');
+
+    const toggle = dom.window.document.querySelector('button.zhino-assistant-voice');
+    if (!toggle) {
+      fail('no Persian voice — the sound switch is missing');
+    } else {
+      toggle.click();
+      const explained = await waitFor(() => text().includes('صدای فارسی روی این دستگاه نیست'));
+      if (!explained) fail('no Persian voice — toggling with no Persian voice left a dead button');
+      else ok('no Persian voice — a short, clear line explains the situation');
+      if (dom.window.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'false') {
+        ok('no Persian voice — reading is not switched on when nothing can speak');
+      } else {
+        fail('no Persian voice — reading switched on although nothing can speak');
+      }
+    }
+
+    // A new answer arrives: reading must never be attempted, chat untouched
+    await sendChatMessage(dom, waitFor, 'قیمت ژله توت فرنگی چند است؟');
+    const answered = await waitFor(() => text().includes('\u06f2\u06f0\u06f0\u066c\u06f0\u06f0\u06f0 \u062a\u0648\u0645\u0627\u0646'));
+    if (!answered) fail('no Persian voice — the answer never arrived: ' + text().slice(-180));
+    else ok('no Persian voice — the answer is displayed as text, exactly as before');
+    await sleep(400);
+    if (spoken.length === 0) ok('no Persian voice — nothing was handed to the speech engine');
+    else fail(`no Persian voice — the engine was asked to speak: ${spoken.join(' | ').slice(0, 120)}`);
+
+    // The read button under the answer must be honest as well
+    const readButton = dom.window.document.querySelector('button.zhino-assistant-read');
+    if (!readButton) {
+      fail('no Persian voice — the read button disappeared');
+    } else {
+      readButton.click();
+      const explainedAgain = await waitFor(() => text().includes('صدای فارسی روی این دستگاه نیست'));
+      if (!explainedAgain) fail('no Persian voice — the read button did not explain itself');
+      else ok('no Persian voice — the read button explains itself too');
+      await sleep(300);
+      if (spoken.length === 0) ok('no Persian voice — the read button still speaks nothing');
+      else fail('no Persian voice — the read button sent text to the engine');
+    }
+
+    expectNoInternalWording('no Persian voice', dom);
+    expectNoErrors('no Persian voice', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34f. Phase 9 — play / pause / resume / stop all work ──────────
+// The mobile TTS fix: pause and resume are app-level (synth.pause() is
+// broken on Chrome Android), the queue is really cancelled on pause,
+// resume re-speaks the same chunk, and stop ends everything at once.
+{
+  const spoken = [];
+  let cancels = 0;
+  const pending = [];
+  const voiceFetch = (input, init) => {
+    return Promise.reject(new Error('offline (smoke test)'));
+  };
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: voiceFetch },
+    appSource: appCode,
+    seed: (window) => {
+      window.localStorage.removeItem('zhino_assistant_voice_v1');
+      window.SpeechSynthesisUtterance = class FakeUtterance {
+        constructor(uttered) {
+          this.text = uttered;
+          this.lang = '';
+          this.voice = null;
+        }
+      };
+      const voices = [{ lang: 'fa-IR', name: 'ژینو فارسی' }];
+      window.speechSynthesis = {
+        speaking: false,
+        paused: false,
+        getVoices: () => voices,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        speak(utterance) {
+          const row = { utterance, dropped: false };
+          pending.push(row);
+          spoken.push({ text: utterance.text, lang: utterance.lang });
+          setTimeout(() => {
+            if (!row.dropped && typeof utterance.onstart === 'function') utterance.onstart();
+          }, 40);
+          setTimeout(() => {
+            if (row.dropped) return;
+            row.dropped = true;
+            if (typeof utterance.onend === 'function') utterance.onend();
+          }, 900);
+        },
+        cancel() {
+          cancels += 1;
+          pending.forEach((row) => {
+            row.dropped = true;
+          });
+        },
+        pause: () => {},
+        resume: () => {},
+      };
+    },
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('playback controls — the chat console never rendered');
+
+    // switch reading on, then ask a long question (recipe = many chunks)
+    dom.window.document.querySelector('button.zhino-assistant-voice').click();
+    await waitFor(
+      () => dom.window.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'true',
+    );
+    await sendChatMessage(dom, waitFor, 'طرز تهیه ژله چطوره؟');
+    const started = await waitFor(() => spoken.length > 0, 9000);
+    if (!started) fail('playback controls — reading never started: ' + text().slice(-160));
+
+    const pauseBtn = () => dom.window.document.querySelector('button[aria-label="مکث خواندن"]');
+    const resumeBtn = () => dom.window.document.querySelector('button[aria-label="ادامه خواندن"]');
+    const stopBtn = () => dom.window.document.querySelector('button.zhino-assistant-stop');
+    const barShown = await waitFor(() => Boolean(pauseBtn()) && Boolean(stopBtn()));
+    if (!barShown) fail('playback controls — the pause/stop row did not appear while reading');
+    else ok('playback controls — pause + stop appear while reading');
+
+    // pause: the queue is really cancelled and the row offers «ادامه»
+    const cancelsBefore = cancels;
+    pauseBtn().click();
+    const pausedShown = await waitFor(() => Boolean(resumeBtn()));
+    if (!pausedShown) fail('playback controls — pause did not switch the row to resume');
+    else ok('playback controls — pause switches the row to «ادامه»');
+    if (dom.window.document.querySelector('.zhino-assistant-playback.is-paused')) {
+      ok('playback controls — the row is marked as paused (sound bars freeze)');
+    } else {
+      fail('playback controls — the row is not marked as paused');
+    }
+    if (cancels > cancelsBefore) ok('playback controls — pause really cancelled the queue');
+    else fail('playback controls — pause did not cancel the queue');
+
+    // resume: the same chunk is spoken again
+    const spokenBefore = spoken.length;
+    resumeBtn().click();
+    const resumed = await waitFor(() => spoken.length > spokenBefore, 6000);
+    if (!resumed) fail('playback controls — resume did not speak again');
+    else ok('playback controls — resume speaks the same chunk again');
+    const pauseBack = await waitFor(() => Boolean(pauseBtn()));
+    if (!pauseBack) fail('playback controls — the row did not return to «مکث» after resume');
+    else ok('playback controls — the row returns to «مکث» after resume');
+
+    // stop: no more speech, the row disappears
+    const spokenAtStop = spoken.length;
+    stopBtn().click();
+    const barGone = await waitFor(() => !stopBtn());
+    if (!barGone) fail('playback controls — stop did not remove the row');
+    else ok('playback controls — stop removes the row');
+    await sleep(1500);
+    if (spoken.length === spokenAtStop) ok('playback controls — nothing is spoken after stop');
+    else fail('playback controls — speech continued after stop');
+
+    expectNoErrors('playback controls', errors);
   } finally {
     dom.window.close();
   }

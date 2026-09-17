@@ -1130,7 +1130,51 @@
   }
 }
 
+/* ── کنترل‌های پخش: مکث/ادامه + توقف — فقط وقتی خواندن فعال است ── */
+.zhino-assistant-playback {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.zhino-assistant-ctl {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(113, 49, 59, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 0.24rem 0.6rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  line-height: 1.7;
+  color: var(--color-mocha);
+  cursor: pointer;
+  transition:
+    background-color 0.25s ease,
+    border-color 0.25s ease,
+    color 0.25s ease;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-ctl:hover {
+    background: #ffffff;
+    border-color: rgba(113, 49, 59, 0.4);
+    color: var(--color-wine-800);
+  }
+}
+
+/* در حالت مکث، نوارها متوقف می‌مانند و ردیف در جای خود می‌ماند */
+.zhino-assistant-playback.is-paused .zhino-assistant-soundbars span {
+  animation: none;
+  opacity: 0.45;
+}
+
 /* راهنمای کوتاه و انسانی وقتی دستگاه صدای فارسی ندارد */
+.zhino-assistant-voice-notes {
+  display: block;
+}
+
 .zhino-assistant-voice-note {
   display: block;
   margin-top: 0.4rem;
@@ -1139,6 +1183,13 @@
   line-height: 1.9;
   color: var(--color-gold-700);
   animation: zhino-assistant-rise 0.3s ease both;
+}
+
+/* خط راهنمای دوم (مثلاً جای نصب صدای فارسی در تنظیمات اندروید) */
+.zhino-assistant-voice-note-hint {
+  margin-top: 0.1rem;
+  font-size: 0.58rem;
+  color: var(--color-mocha-light);
 }
 
 /* ── امضای کوچک سازنده — بسیار کم‌رنگ، خوانا، بی‌مزاحمت ── */
@@ -1199,6 +1250,13 @@
   .zhino-assistant-voice {
     width: 2.2rem;
     height: 2.2rem;
+  }
+
+  /* کنترل‌های پخش در صفحهٔ باریک جمع‌وجور می‌شوند تا هرگز جا نمانند */
+  .zhino-assistant-ctl,
+  .zhino-assistant-stop {
+    padding: 0.22rem 0.5rem;
+    font-size: 0.62rem;
   }
 
   .zhino-assistant-signature {
@@ -1302,6 +1360,8 @@
   .zhino-assistant-chip:active,
   .zhino-assistant-voice:hover,
   .zhino-assistant-voice:active,
+  .zhino-assistant-ctl:hover,
+  .zhino-assistant-ctl:active,
   .zhino-assistant-read:hover,
   .zhino-assistant-read:active,
   .zhino-assistant-send:hover,
