@@ -12,7 +12,8 @@
     "verify:data": "node scripts/verify-data.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:admin": "node scripts/verify-admin.mjs",
-    "smoke": "node scripts/smoke.mjs"
+    "smoke": "node scripts/smoke.mjs",
+    "test:voice-android": "node scripts/tts-android-sim.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
