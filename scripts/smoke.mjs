@@ -2191,7 +2191,12 @@ async function openAssistantFromStore(dom, waitFor, text) {
         (chip) => (chip.textContent ?? '').includes('طرز تهیه ژله'),
       );
     const chipFound = await waitFor(() => Boolean(findRecipeChip()));
-    if (!chipFound) fail('assistant chat — the recipe suggestion is not offered in the ideas row');
+    if (!chipFound) {
+      const labels = Array.from(
+        dom.window.document.querySelectorAll('.zhino-assistant-ideas-body .zhino-assistant-chip'),
+      ).map((c) => c.textContent);
+      fail('assistant chat — the recipe suggestion is not offered in the ideas row (chips: ' + JSON.stringify(labels) + ')');
+    }
     else {
       findRecipeChip().click();
       const recipe = await waitFor(() => text().includes('۱.۵ لیوان آب'));
@@ -2249,6 +2254,177 @@ async function openAssistantFromStore(dom, waitFor, text) {
     }
 
     expectNoErrors('assistant chat', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34a. فروش از داخل گفتگو: کارت محصول + تأیید صریح پیش از سبد ──
+// سه قاعدهٔ قطعی این بخش:
+//   ۱) قیمت و موجودی کارت از دادهٔ واقعی کاتالوگ می‌آید.
+//   ۲) هیچ‌چیز بدون تأیید مشتری به سبد اضافه نمی‌شود.
+//   ۳) افزودن به سبد هرگز به تسویه‌حساب یا پرداخت خودکار نمی‌رسد.
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+    seed: (window) => window.localStorage.removeItem('zhino_cart'),
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant shop — the chat console never rendered');
+
+    await sendChatMessage(dom, waitFor, 'ژله توت فرنگی را به سبد خرید اضافه کن');
+
+    // the answer arrives with a real product card (price from the catalog)
+    const cards = await waitFor(
+      () => dom.window.document.querySelectorAll('.zhino-assistant-product').length > 0,
+      5000,
+    );
+    if (cards) ok('assistant shop — the answer carries a product card');
+    else fail('assistant shop — no product card was rendered: ' + text().slice(-200));
+    if (text().includes('۲۰۰٬۰۰۰ تومان')) ok('assistant shop — the card price comes from the real catalog');
+    else fail('assistant shop — the product card has no real price: ' + text().slice(-200));
+
+    // an explicit confirm gate stands between the answer and the cart
+    const confirm = await waitFor(() =>
+      Boolean(dom.window.document.querySelector('.zhino-assistant-cart-confirm')),
+    );
+    if (confirm) ok('assistant shop — an explicit confirm gate appears before adding');
+    else fail('assistant shop — no confirm gate: ' + text().slice(-200));
+
+    const cartOf = () => {
+      try {
+        return JSON.parse(dom.window.localStorage.getItem('zhino_cart') || '[]');
+      } catch {
+        return [];
+      }
+    };
+
+    if (cartOf().length === 0) ok('assistant shop — nothing is added to the cart before the customer confirms');
+    else fail('assistant shop — something reached the cart without confirmation');
+
+    // «نه» → the cart stays untouched
+    const decline = dom.window.document.querySelector('.zhino-assistant-cart-no');
+    if (!decline) fail('assistant shop — the decline button is missing');
+    else {
+      decline.click();
+      const declined = await waitFor(() => text().includes('چیزی به سبد اضافه نکردم'));
+      if (declined && cartOf().length === 0) ok('assistant shop — declining leaves the cart empty');
+      else fail('assistant shop — declining changed the cart: ' + JSON.stringify(cartOf()));
+    }
+
+    // a fresh ask, then «بله، اضافه کن» → the very same storefront cart
+    await sendChatMessage(dom, waitFor, 'ژله توت فرنگی را به سبد خرید اضافه کن');
+    const yes = await waitFor(() => Boolean(dom.window.document.querySelector('.zhino-assistant-cart-yes')), 5000);
+    if (!yes) fail('assistant shop — the confirm button never came back');
+    else {
+      dom.window.document.querySelector('.zhino-assistant-cart-yes').click();
+      const added = await waitFor(() => text().includes('به سبد خرید اضافه شد'));
+      if (added) ok('assistant shop — after confirmation the item is added');
+      else fail('assistant shop — no confirmation message after accepting: ' + text().slice(-200));
+      const lines = cartOf();
+      if (lines.length === 1 && lines[0].productId === 'jelly-strawberry' && lines[0].quantity === 1) {
+        ok('assistant shop — the storefront cart (localStorage) received exactly one line');
+      } else {
+        fail('assistant shop — unexpected cart content: ' + JSON.stringify(lines));
+      }
+      if (text().includes('ثبت سفارش و پرداخت با خودتان است')) {
+        ok('assistant shop — the assistant states that payment stays with the customer');
+      } else {
+        fail('assistant shop — no clear "payment is yours" note after adding');
+      }
+    }
+
+    // no automatic checkout: still on the assistant page, no checkout screen
+    if (dom.window.location.pathname.endsWith('/assistant')) ok('assistant shop — still on the assistant page (no redirect)');
+    else fail('assistant shop — unexpected URL after adding: ' + dom.window.location.pathname);
+    // «تسویه حساب» عنوان صفحهٔ Checkout است؛ در گفتگو هیچ‌وقت چاپ نمی‌شود
+    if (!text().includes('تسویه حساب') && !text().includes('مراحل تسویه')) {
+      ok('assistant shop — no checkout/payment screen was opened automatically');
+    } else {
+      fail('assistant shop — a checkout screen appeared by itself');
+    }
+
+    expectNoInternalWording('assistant shop', dom);
+    expectNoErrors('assistant shop', errors);
+  } finally {
+    dom.window.close();
+  }
+}
+
+// ── 34c. محصول ناموجود: کارت صادقانه، دکمهٔ غیرفعال، بدون پیشنهاد سبد ──
+{
+  const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
+    stub: { fetchImpl: OFFLINE_FETCH },
+    appSource: appCode,
+    seed: (window) => {
+      window.localStorage.removeItem('zhino_cart');
+      // همان انبار فروشگاه (overlay مدیر) با موجودی صفر برای یک محصول
+      window.localStorage.setItem(
+        'zhino_admin_catalog_v1',
+        JSON.stringify({
+          upserts: {
+            'jelly-strawberry': {
+              id: 'jelly-strawberry',
+              category: 'jelly',
+              flavorId: 'strawberry-j',
+              name: 'پودر ژله توت فرنگی ژینو',
+              shortName: 'ژله توت فرنگی',
+              categoryLabel: 'پودر ژله',
+              imageUrl: 'images/products/jelly-strawberry.jpg',
+              featured: true,
+              variants: [
+                {
+                  id: 'jelly-strawberry-250',
+                  productId: 'jelly-strawberry',
+                  weight: '۲۵۰ گرم',
+                  weightGrams: 250,
+                  price: 200000,
+                  sku: 'ZJ-STR-250',
+                  stock: 0,
+                  available: true,
+                },
+              ],
+            },
+          },
+          removed: [],
+          meta: {},
+        }),
+      );
+    },
+  });
+  try {
+    const ready = await waitFor(() => Boolean(dom.window.document.querySelector('#zhino-assistant-input')));
+    if (!ready) fail('assistant out-of-stock — the chat console never rendered');
+
+    await sendChatMessage(dom, waitFor, 'ژله توت فرنگی را به سبد خرید اضافه کن');
+
+    const honest = await waitFor(() => text().includes('ناموجود'), 6000);
+    if (honest) ok('assistant out-of-stock — the assistant says the item is unavailable');
+    else fail('assistant out-of-stock — no honest "ناموجود" answer: ' + text().slice(-200));
+
+    if (dom.window.document.querySelector('.zhino-assistant-cart-confirm')) {
+      fail('assistant out-of-stock — a cart offer was made for an unavailable product');
+    } else {
+      ok('assistant out-of-stock — nothing is offered to the cart');
+    }
+
+    const emptyCart = dom.window.localStorage.getItem('zhino_cart');
+    if (emptyCart === null || emptyCart === '[]') ok('assistant out-of-stock — the cart stayed empty');
+    else fail('assistant out-of-stock — the cart changed: ' + emptyCart);
+
+    // a card for another (available) product still offers the button
+    await sendChatMessage(dom, waitFor, 'قیمت ژله هلو چند است؟');
+    const card = await waitFor(
+      () => Boolean(dom.window.document.querySelector('.zhino-assistant-add:not(:disabled)')),
+      6000,
+    );
+    if (card) ok('assistant out-of-stock — an available product still gets a working add button');
+    else fail('assistant out-of-stock — no enabled add button for an available product');
+
+    expectNoInternalWording('assistant out-of-stock', dom);
+    expectNoErrors('assistant out-of-stock', errors);
   } finally {
     dom.window.close();
   }

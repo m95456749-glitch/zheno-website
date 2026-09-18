@@ -30,6 +30,7 @@ import { probeCloudVoiceHealth, type CloudVoiceHealth } from '../../services/ass
 import { useAssistantSpeech, type AssistantVoiceProblem } from '../../components/assistant/useAssistantSpeech';
 import { useAdminAuth } from '../auth/AuthContext';
 import { Field, SavedFlash, Toggle } from '../components/ui';
+import { IconAssistant, IconDashboard, IconSettings } from '../Icons';
 import { cn } from '../../utils/cn';
 
 const TEST_LINE = 'سلام! من ژینو هستم، دستیار فروشگاه ژینو؛ از شیرینی‌هامون چی دوست داری؟';
@@ -52,38 +53,47 @@ const PROBLEM_TEXT: Record<Exclude<AssistantVoiceProblem, null>, string> = {
 function Accordion({
   title,
   desc,
+  icon: Icon,
   defaultOpen = false,
   children,
 }: {
   title: string;
   desc: string;
+  icon: typeof IconSettings;
   defaultOpen?: boolean;
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <section className="panel-lux rounded-2xl">
+    <section className="adm-acc panel-lux rounded-2xl">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        className="flex w-full items-center gap-3 rounded-2xl px-5 py-4 text-right transition hover:bg-cream-50/60 sm:px-6"
+        className="flex w-full items-center gap-3.5 rounded-2xl px-5 py-4 text-right transition hover:bg-cream-50/70 sm:px-6"
       >
-        <span
-          aria-hidden="true"
-          className={cn(
-            'inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[0.7rem] text-wine-900 ring-1 ring-espresso/15 transition-transform',
-            open && 'rotate-90',
-          )}
-        >
-          ◂
+        <span aria-hidden="true" className="adm-acc-icon">
+          <Icon className="h-[1.15rem] w-[1.15rem]" />
         </span>
         <span className="min-w-0 flex-1">
-          <span className="block text-[0.92rem] font-extrabold text-wine-950">{title}</span>
-          <span className="mt-0.5 block text-[0.68rem] leading-5 text-mocha-light">{desc}</span>
+          <span className="block text-[0.95rem] font-extrabold text-wine-950">{title}</span>
+          <span className="mt-1 block text-[0.69rem] leading-6 text-mocha-light">{desc}</span>
+        </span>
+        <span aria-hidden="true" className={cn('adm-acc-caret', open && 'is-open')}>
+          <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5">
+            <path
+              d="m5.5 8 4.5 4.5L14.5 8"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </span>
       </button>
-      {open && <div className="space-y-4 border-t border-espresso/8 px-5 py-5 sm:px-6">{children}</div>}
+      {open && (
+        <div className="space-y-5 border-t border-espresso/8 px-5 py-5 sm:px-6">{children}</div>
+      )}
     </section>
   );
 }
@@ -230,6 +240,7 @@ export default function AdminAssistantPage() {
       <div className="space-y-4">
         {/* ─── ۱) تنظیمات صدا ─── */}
         <Accordion
+          icon={IconAssistant}
           title="تنظیمات صدا"
           desc="کلید اصلی صدا، خواندن خودکار، صدای ابری فارسی، انتخاب صدا و سرعت خواندن"
           defaultOpen
@@ -315,6 +326,7 @@ export default function AdminAssistantPage() {
 
         {/* ─── ۲) تنظیمات رفتار ربات ─── */}
         <Accordion
+          icon={IconSettings}
           title="تنظیمات رفتار ربات"
           desc="پیشنهادهای شروع گفتگو و لحن پاسخ‌ها — جدا از تنظیمات صدا"
         >
@@ -347,6 +359,7 @@ export default function AdminAssistantPage() {
 
         {/* ─── ۳) وضعیت سرویس ─── */}
         <Accordion
+          icon={IconDashboard}
           title="وضعیت سرویس"
           desc="سلامت صدای ابری و مسیر جایگزین مرورگر — بدون نمایش هیچ کلید یا مقدار محرمانه"
         >
@@ -391,7 +404,7 @@ export default function AdminAssistantPage() {
         </Accordion>
 
         {/* ─── save bar ─── */}
-        <div className="flex flex-col gap-3 rounded-2xl border border-espresso/8 bg-cream-50/70 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex flex-col gap-3 rounded-2xl border border-espresso/8 bg-white/70 p-4 shadow-[0_1px_2px_rgba(42,11,18,0.04)] sm:flex-row sm:items-center sm:justify-between">
           <button type="button" onClick={save} className="btn-lux btn-wine rounded-xl sm:min-w-48">
             ذخیره تنظیمات ربات
           </button>

@@ -44,6 +44,16 @@ for (const path of ['/admin/products?view=prices', '/admin/products?view=images'
   mustInclude('src/admin/pages/AdminDashboardPage.tsx', path, `direct product focus: ${path}`);
 }
 
+// The redesigned panel home is seven independent, side-by-side section
+// cards (icon + short title + one-line description + a round button) —
+// never a crowded icon grid again.
+for (const label of ['محصولات', 'سفارش‌ها', 'ربات ژینو', 'تنظیمات', 'موجودی', 'دستور تهیه', 'محتوای سایت']) {
+  mustInclude('src/admin/pages/AdminDashboardPage.tsx', `label: '${label}'`, `dashboard section card: ${label}`);
+}
+mustInclude('src/admin/pages/AdminDashboardPage.tsx', 'adm-card-action', 'dashboard card round button');
+mustInclude('src/admin/admin.css', '.adm-card-grid', 'dashboard card grid style');
+mustInclude('src/admin/pages/AdminAssistantPage.tsx', 'Accordion', 'assistant settings stay in collapsible groups');
+
 for (const path of ['/admin/dashboard', '/admin/products', '/admin/orders', '/admin/inventory', '/admin/recipes', '/admin/site-content', '/admin/settings']) {
   mustInclude('src/admin/nav.ts', `to: '${path}'`, `admin route: ${path}`);
 }

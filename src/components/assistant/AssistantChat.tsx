@@ -28,6 +28,8 @@
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
+import { formatPrice, toPersianDigits } from '../../utils/format';
+import { cheapestVariant } from '../../services/assistant/knowledge';
 import AssistantAvatar from './AssistantAvatar';
 import { ASSISTANT_NAME } from './assistantData';
 import { useAssistantSpeech } from './useAssistantSpeech';
@@ -149,9 +151,34 @@ function ChevronIcon() {
   );
 }
 
+/** آیکن سبد خرید — دکمهٔ «افزودن به سبد» */
+function BasketIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path
+        d="M2.9 6.9h14.2l-1.3 8a1.6 1.6 0 0 1-1.6 1.3H5.8a1.6 1.6 0 0 1-1.6-1.3l-1.3-8Zm4.4 0L9 3.4m2 3.5 1.7-3.5M8 10v3m4-3v3"
+        stroke="currentColor"
+        strokeWidth="1.4"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+/** آیکن تیک — «به سبد اضافه شد» */
+function CheckIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="m4.6 10.4 3.3 3.3 7.5-7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
 export default function AssistantChat({ chat, className }: Props) {
   // «گفتگوی تازه» (clear) در سربرگ صفحه است، نه اینجا
-  const { messages, draft, setDraft, thinking, suggestions, send } = chat;
+  const { messages, draft, setDraft, thinking, suggestions, send, acceptCartOffer, dismissCartOffer } =
+    chat;
   const feedRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const {
@@ -427,7 +454,118 @@ export default function AssistantChat({ chat, className }: Props) {
                       ))}
                     </span>
                   )}
+
+                  {/* کارت‌های محصول: همان قیمت و موجودی واقعی که در متن
+                      پاسخ آمده — از کاتالوگ همین لحظه، نه از حدس.
+                      «افزودن به سبد» هیچ‌وقت مستقیم اجرا نمی‌شود. */}
+                  {message.from === 'bot' && message.products && message.products.length > 0 && (
+                    <span className="zhino-assistant-products">
+                      {message.products.map((product) => {
+                        const option = cheapestVariant(product);
+                        const out = option === null;
+                        const lowStock =
+                          option !== null && option.stock > 0 && option.stock <= 5;
+                        return (
+                          <span
+                            key={`${message.id}-${product.id}`}
+                            className={cn('zhino-assistant-product', out && 'is-out')}
+                          >
+                            <span className="zhino-assistant-product-main">
+                              <span className="zhino-assistant-product-name">{product.name}</span>
+                              <span className="zhino-assistant-product-meta">
+                                {option ? (
+                                  <>
+                                    <span className="zhino-assistant-product-price">
+                                      {formatPrice(option.price)}
+                                    </span>
+                                    <span className="zhino-assistant-product-sep" aria-hidden="true">
+                                      ·
+                                    </span>
+                                    <span>{option.weight}</span>
+                                    <span className="zhino-assistant-product-sep" aria-hidden="true">
+                                      ·
+                                    </span>
+                                    <span
+                                      className={cn(
+                                        'zhino-assistant-product-stock',
+                                        out && 'is-out',
+                                        lowStock && 'is-low',
+                                      )}
+                                    >
+                                      {out
+                                        ? 'ناموجود'
+                                        : lowStock
+                                          ? `فقط ${toPersianDigits(String(option.stock))} عدد`
+                                          : 'موجود'}
+                                    </span>
+                                  </>
+                                ) : (
+                                  <span className="zhino-assistant-product-stock is-out">ناموجود</span>
+                                )}
+                              </span>
+                            </span>
+                            <button
+                              type="button"
+                              className="zhino-assistant-add"
+                              disabled={out || thinking}
+                              onClick={() => {
+                                if (!option) return;
+                                acceptCartOffer(message.id, {
+                                  productId: product.id,
+                                  variantId: option.id,
+                                  label: `${product.shortName}${option.weight ? ` ${option.weight}` : ''}`.trim(),
+                                  price: option.price,
+                                  stock: option.stock,
+                                });
+                              }}
+                              aria-label={
+                                out
+                                  ? `${product.shortName} ناموجود است`
+                                  : `درخواست افزودن ${product.shortName} به سبد خرید`
+                              }
+                              title={out ? 'ناموجود' : 'افزودن به سبد خرید — با تأیید شما'}
+                            >
+                              {out ? <span>ناموجود</span> : <BasketIcon />}
+                              {!out && <span>افزودن به سبد</span>}
+                            </button>
+                          </span>
+                        );
+                      })}
+                    </span>
+                  )}
                 </div>
+
+                {/* تأیید صریح پیش از افزودن به سبد: تا این دکمه زده نشود
+                    هیچ چیز به سبد نمی‌رود و هیچ پرداختی اجرا نمی‌شود. */}
+                {message.from === 'bot' &&
+                  message.cartOffer &&
+                  (message.cartState ?? 'pending') === 'pending' && (
+                    <div className="zhino-assistant-cart-confirm" role="group" aria-label="تأیید افزودن به سبد خرید">
+                      <p className="zhino-assistant-cart-confirm-text">
+                        <span>
+                          {message.cartOffer.label} — {formatPrice(message.cartOffer.price)}
+                        </span>
+                        <span>به سبد خرید اضافه شود؟</span>
+                      </p>
+                      <div className="zhino-assistant-cart-confirm-actions">
+                        <button
+                          type="button"
+                          className="zhino-assistant-cart-yes"
+                          onClick={() => acceptCartOffer(message.id, message.cartOffer!)}
+                        >
+                          <CheckIcon />
+                          <span>بله، اضافه کن</span>
+                        </button>
+                        <button
+                          type="button"
+                          className="zhino-assistant-cart-no"
+                          onClick={() => dismissCartOffer(message.id, message.cartOffer!)}
+                        >
+                          نه
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
                 {/* کار کوچک زیر پاسخ: پخش / توقف / ادامه با صدای مرورگر */}
                 {message.from === 'bot' && !message.welcome && voiceAvailable && (
@@ -497,6 +635,7 @@ export default function AssistantChat({ chat, className }: Props) {
             </div>
           </div>
         )}
+
       </div>
 
       {/* کادر نوشتن پیام — همیشه پایین صفحه، الگوی ChatGPT */}

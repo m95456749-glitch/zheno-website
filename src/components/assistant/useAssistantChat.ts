@@ -24,6 +24,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useCatalogSync } from '../../services/catalogSync';
 import { useRemoteSiteData } from '../../services/siteDataSync';
+import { useCartContext } from '../../context/CartContext';
+import { getProductById, getVariantById } from '../../services/catalog';
+import { productPath, searchProducts } from '../../services/assistant/knowledge';
 import {
   AssistantRemoteError,
   askRemoteAssistant,
@@ -33,10 +36,13 @@ import {
 import { DEFAULT_SUGGESTIONS, answerLocally } from '../../services/assistant/engine';
 import { buildAssistantContext, getAssistantDataSource } from '../../services/assistant/knowledge';
 import type {
+  AssistantCartOffer,
   AssistantChatMessage,
   AssistantConnection,
+  AssistantContext,
   AssistantDataSource,
   AssistantHistoryTurn,
+  AssistantProductFact,
   AssistantSuggestion,
 } from '../../services/assistant/types';
 
@@ -80,7 +86,21 @@ export interface UseAssistantChatResult {
   dataSource: AssistantDataSource;
   suggestions: AssistantSuggestion[];
   send: (text?: string) => void;
+  /**
+   * تکرار آخرین پرسش — برای وقتی پاسخ دیر می‌رسد یا نصفه می‌ماند.
+   * کاربر مجبور نیست سؤالش را دوباره تایپ کند.
+   */
+  retry: () => void;
   clear: () => void;
+  /**
+   * تأیید یا ردِ پیشنهاد «افزودن به سبد».
+   *
+   * تا وقتی acceptCartOffer صدا زده نشود هیچ چیزی به سبد اضافه نمی‌شود؛
+   * افزودن هم دقیقاً از همان مسیر همیشگی سبد فروشگاه انجام می‌شود
+   * (CartContext) و هرگز به تسویه‌حساب یا پرداخت خودکار نمی‌رسد.
+   */
+  acceptCartOffer: (messageId: number, offer: AssistantCartOffer) => void;
+  dismissCartOffer: (messageId: number, offer: AssistantCartOffer) => void;
 }
 
 export function useAssistantChat(): UseAssistantChatResult {
@@ -103,9 +123,13 @@ export function useAssistantChat(): UseAssistantChatResult {
   const [suggestions, setSuggestions] = useState<AssistantSuggestion[]>(() =>
     DEFAULT_SUGGESTIONS.slice(0, 4),
   );
+  /** سبد خرید فروشگاه — همان Context مشترک همهٔ صفحه‌ها، بدون مسیر تازه */
+  const cart = useCartContext();
 
   const nextId = useRef(2);
   const busy = useRef(false);
+  /** آخرین پرسش کاربر — برای دکمهٔ «تلاش دوباره» */
+  const lastQuestion = useRef<string>('');
   const mounted = useRef(true);
   const timers = useRef<number[]>([]);
   const abortRef = useRef<AbortController | null>(null);
@@ -165,6 +189,7 @@ export function useAssistantChat(): UseAssistantChatResult {
       busy.current = true;
       setDraft('');
       push({ from: 'user', text: clean });
+      lastQuestion.current = clean;
       setThinking(true);
 
       const history: AssistantHistoryTurn[] = messages
@@ -180,10 +205,33 @@ export function useAssistantChat(): UseAssistantChatResult {
         if (!mounted.current) return;
         const context = buildAssistantContext();
         const answer = answerLocally(clean, context);
-        push({ from: 'bot', text: answer.text, links: answer.links, source: 'local' });
+        push({
+          from: 'bot',
+          text: answer.text,
+          links: answer.links,
+          products: answer.products,
+          cartOffer: answer.cartOffer,
+          source: 'local',
+        });
         setSuggestions(answer.suggestions ?? DEFAULT_SUGGESTIONS);
         setThinking(false);
         busy.current = false;
+      };
+
+      /**
+       * کارت‌های محصول برای پاسخی که از مدل آمده: مدل دادهٔ ساختاری
+       * محصول نمی‌فرستد، پس کارت‌ها از همان «کارت اطلاعات» همین لحظه
+       * ساخته می‌شوند (از روی همان لینک‌های محصولی که در پاسخ هست).
+       * هیچ عدد تازه‌ای از مدل گرفته نمی‌شود.
+       */
+      const attachProducts = (
+        context: AssistantContext,
+        replyLinks?: { to: string }[],
+      ): AssistantProductFact[] | undefined => {
+        const paths = new Set((replyLinks ?? []).map((item) => item.to));
+        const matched = context.products.filter((product) => paths.has(product.to));
+        const fallback = matched.length > 0 ? matched : searchProducts(context, clean).slice(0, 3);
+        return fallback.length > 0 ? fallback.slice(0, 5) : undefined;
       };
 
       const run = async () => {
@@ -194,13 +242,14 @@ export function useAssistantChat(): UseAssistantChatResult {
         // محلی پاسخ می‌دهیم تا کاربر معطل یک Endpoint خراب نشود —
         // و هیچ پیام فنی‌ای هم به مشتری نمی‌رسد.
         if (mayAskModel) {
+          const context = buildAssistantContext();
           const controller = new AbortController();
           abortRef.current = controller;
           try {
             const reply = await askRemoteAssistant({
               message: clean,
               history,
-              context: buildAssistantContext(),
+              context,
               signal: controller.signal,
             });
             abortRef.current = null;
@@ -214,7 +263,14 @@ export function useAssistantChat(): UseAssistantChatResult {
               reply.knowledgeSource === 'none'
                 ? 'این پاسخ را خودم گفتم و از فهرست فروشگاه نبود. دربارهٔ قیمت یا موجودی یک بار دیگر بپرسید تا دقیق نگاه کنم.'
                 : undefined;
-            push({ from: 'bot', text: reply.text, links: reply.links, source: 'ai', note });
+            push({
+              from: 'bot',
+              text: reply.text,
+              links: reply.links,
+              products: attachProducts(context, reply.links),
+              source: 'ai',
+              note,
+            });
             setSuggestions(reply.suggestions ?? DEFAULT_SUGGESTIONS);
             setThinking(false);
             busy.current = false;
@@ -239,6 +295,82 @@ export function useAssistantChat(): UseAssistantChatResult {
     [draft, messages, push, sleep],
   );
 
+  /**
+   * «بله، اضافه کن» — تنها راهی که از گفتگو چیزی به سبد اضافه می‌شود.
+   * قیمت و موجودی دوباره از خود کاتالوگ خوانده می‌شود (نه از متن چت)،
+   * پس عدد کهنه هیچ‌وقت وارد سبد نمی‌شود. بعد از افزودن فقط یک لینک
+   * «دیدن سبد خرید» نشان داده می‌شود — بدون هیچ پرداخت خودکار.
+   */
+  const acceptCartOffer = useCallback(
+    (messageId: number, offer: AssistantCartOffer) => {
+      const product = getProductById(offer.productId);
+      const variant = getVariantById(offer.productId, offer.variantId);
+      const label = product?.shortName ?? offer.label;
+
+      const markAdded = () =>
+        setMessages((current) =>
+          current.map((message) =>
+            message.id === messageId ? { ...message, cartState: 'added' as const } : message,
+          ),
+        );
+
+      if (!product || !variant || !variant.available) {
+        markAdded();
+        push({
+          from: 'bot',
+          text: `«${label}» همین لحظه ناموجود شد و به سبد اضافه نشد. اگر خواستید، طعم دیگری پیشنهاد می‌دهم.`,
+          links: [{ label: 'مشاهدهٔ محصولات', to: '/products' }],
+          source: 'local',
+        });
+        return;
+      }
+
+      const result = cart.addItemWithToast(offer.productId, offer.variantId, 1);
+      markAdded();
+      push({
+        from: 'bot',
+        text: result.success
+          ? `${label} (${variant.weight}) به سبد خرید اضافه شد. ثبت سفارش و پرداخت با خودتان است؛ هر وقت خواستید از سبد خرید انجامش بدهید.`
+          : `افزودن «${label}» به سبد انجام نشد${result.error ? `: ${result.error}` : ''}. از صفحهٔ محصول هم می‌توانید اضافه‌اش کنید.`,
+        links: result.success
+          ? [{ label: 'دیدن سبد خرید', to: '/cart' }]
+          : [{ label: 'صفحهٔ محصول', to: productPath(product.id) }],
+        source: 'local',
+        suggestions: [{ label: 'پیشنهاد طعم دیگر', prompt: 'یک طعم دیگر پیشنهاد بده' }],
+      });
+    },
+    [cart, push],
+  );
+
+  /** «تلاش دوباره» — همان آخرین پرسش، بدون تایپ مجدد */
+  const retry = useCallback(() => {
+    if (busy.current) return;
+    const text = lastQuestion.current.trim();
+    if (text.length === 0) return;
+    send(text);
+  }, [send]);
+
+  /** «نه» — پیشنهاد بی‌اثر می‌شود و هیچ چیز به سبد نمی‌رود */
+  const dismissCartOffer = useCallback(
+    (messageId: number, offer: AssistantCartOffer) => {
+      setMessages((current) =>
+        current.map((message) =>
+          message.id === messageId ? { ...message, cartState: 'dismissed' as const } : message,
+        ),
+      );
+      const product = getProductById(offer.productId);
+      push({
+        from: 'bot',
+        text: 'باشه، چیزی به سبد اضافه نکردم. هر وقت خواستید بگویید تا اضافه کنم.',
+        links: product
+          ? [{ label: `صفحهٔ ${product.shortName}`, to: productPath(product.id) }]
+          : undefined,
+        source: 'local',
+      });
+    },
+    [push],
+  );
+
   const clear = useCallback(() => {
     // درخواست در پرواز لغو می‌شود تا پاسخ دیرهنگام روی گفتگوی تازه ننشیند
     timers.current.forEach((timer) => window.clearTimeout(timer));
@@ -247,6 +379,7 @@ export function useAssistantChat(): UseAssistantChatResult {
     abortRef.current = null;
     busy.current = false;
     remoteFailures.current = 0;
+    lastQuestion.current = '';
     setThinking(false);
     setDraft('');
     // بازگشت به همان حالت خوشامد اولیه: پیام تازه، وسط صفحه، با
@@ -264,6 +397,9 @@ export function useAssistantChat(): UseAssistantChatResult {
     dataSource,
     suggestions,
     send,
+    retry,
     clear,
+    acceptCartOffer,
+    dismissCartOffer,
   };
 }
