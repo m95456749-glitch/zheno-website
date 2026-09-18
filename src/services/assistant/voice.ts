@@ -35,15 +35,19 @@ export type CloudVoiceErrorKind =
   | 'unconfigured'
   /** مدار موقتاً باز است (از شکست اخیر شبکه/سرور) */
   | 'cooldown'
+  /** تابع روی Supabase مستقر نشده است (۴۰۴) */
+  | 'not-deployed'
   /** Secret روی سرور تنظیم نشده (۵۰۱) */
   | 'not-configured'
+  /** مجوز دسترسی معتبر نیست (۴۰۱/۴۰۳) */
+  | 'auth'
   /** شبکه/تابع در دسترس نبود */
   | 'network'
   /** پاسخ در زمان مقرر نرسید */
   | 'timeout'
   /** سهمیه تمام شده (۴۲۹ از تابع یا ضدسوءاستفاده) */
   | 'quota'
-  /** متن/درخواست پذیرفته نشد (۴۰۰/۴۰۳/۴۱۳) */
+  /** متن/درخواست پذیرفته نشد (۴۰۰/۴۱۳) */
   | 'rejected'
   /** خطای سمت سرور/Azure (۵xx) */
   | 'server'
@@ -85,8 +89,12 @@ export type CloudVoiceHealth =
   | { state: 'no-supabase' }
   /** سرویس آماده است؛ Secret تنظیم شده */
   | { state: 'ready'; voice: string | null; enabled: boolean }
-  /** تابع پاسخ می‌دهد ولی Secretهای Azure تنظیم نشده‌اند */
+  /** تابع روی Supabase هنوز مستقر نشده است (۴۰۴) */
+  | { state: 'not-deployed' }
+  /** تابع پاسخ می‌دهد ولی Secretهای Azure تنظیم نشده‌اند (۵۰۱) */
   | { state: 'not-configured' }
+  /** احراز هویت / مجوز دسترسی ناموفق بود (۴۰۱/۴۰۳) */
+  | { state: 'auth-failed' }
   /** تابع/شبکه در دسترس نبود */
   | { state: 'unreachable' };
 
@@ -109,6 +117,9 @@ export async function probeCloudVoiceHealth(): Promise<CloudVoiceHealth> {
       headers: headersFor(config),
       signal: controller.signal,
     });
+    if (response.status === 404) return { state: 'not-deployed' };
+    if (response.status === 401 || response.status === 403) return { state: 'auth-failed' };
+    if (response.status === 501) return { state: 'not-configured' };
     if (!response.ok) return { state: 'unreachable' };
     const payload = (await response.json()) as {
       configured?: unknown;
@@ -264,6 +275,10 @@ export async function loadCloudAudio(text: string, external?: AbortSignal): Prom
     external?.removeEventListener('abort', abortFromOutside);
   }
 
+  if (response.status === 404) {
+    tripCircuit();
+    throw new CloudVoiceError('not-deployed', 'تابع zhino-voice روی سرور Supabase مستقر نشده است.', 404);
+  }
   if (response.status === 501) {
     tripCircuit();
     throw new CloudVoiceError('not-configured', 'صدای ابری روی سرور پیکربندی نشده است.', 501);
@@ -272,7 +287,11 @@ export async function loadCloudAudio(text: string, external?: AbortSignal): Prom
     tripCircuit();
     throw new CloudVoiceError('quota', 'سهمیهٔ سرویس صدا پر شده است.', 429);
   }
-  if (response.status === 400 || response.status === 403 || response.status === 413) {
+  if (response.status === 401 || response.status === 403) {
+    tripCircuit();
+    throw new CloudVoiceError('auth', 'مجوز دسترسی به سرویس صدا تأیید نشد.', response.status);
+  }
+  if (response.status === 400 || response.status === 413) {
     // مشکل خودِ درخواست است، نه زیرساخت — مدار باز نمی‌شود
     throw new CloudVoiceError('rejected', 'درخواست صدا پذیرفته نشد.', response.status);
   }

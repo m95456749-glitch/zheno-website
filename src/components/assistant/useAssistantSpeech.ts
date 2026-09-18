@@ -68,9 +68,11 @@ export type AssistantVoiceStatus =
 /** چرا خواندن ممکن نبود — فقط برای نمایش پیام کوتاه به مشتری */
 export type AssistantVoiceProblem =
   | 'no-persian-voice'
-  | 'engine-stalled'
-  /** صدای ابری شکست خورد و صدای مرورگر هم در دسترس نبود */
+  | 'not-allowed'
+  | 'cloud-not-deployed'
   | 'cloud-failed'
+  | 'engine-stalled'
+  | 'playback-failed'
   | null;
 
 export interface AssistantSpeech {
@@ -151,13 +153,20 @@ function writePref(on: boolean): void {
 }
 
 function isPersian(voice: SpeechSynthesisVoice): boolean {
-  const lang = (voice.lang ?? '').toLowerCase();
+  const lang = (voice.lang ?? '').toLowerCase().replace(/_/g, '-');
   const name = (voice.name ?? '').toLowerCase();
   return (
-    lang.startsWith('fa') ||
+    lang === 'fa' ||
+    lang.startsWith('fa-') ||
+    lang === 'pes' ||
+    lang.startsWith('pes-') ||
+    lang === 'fas' ||
+    lang.startsWith('fas-') ||
     name.includes('persian') ||
     name.includes('farsi') ||
-    name.includes('فارسی')
+    name.includes('فارسی') ||
+    name.includes('dilara') ||
+    name.includes('farid')
   );
 }
 
@@ -165,11 +174,19 @@ function findPersianVoice(
   voices: SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
-  // اولویت ۱: fa-IR دقیق — اولویت ۲: هر fa-* — اولویت ۳: نام فارسی
-  const exact = voices.find((v) => (v.lang ?? '').toLowerCase() === 'fa-ir');
+  // اولویت ۱: fa-IR یا fa_IR دقیق
+  const exact = voices.find((v) => {
+    const l = (v.lang ?? '').toLowerCase().replace(/_/g, '-');
+    return l === 'fa-ir';
+  });
   if (exact) return exact;
-  const fa = voices.find((v) => (v.lang ?? '').toLowerCase().startsWith('fa'));
+  // اولویت ۲: هر fa-* یا pes-*
+  const fa = voices.find((v) => {
+    const l = (v.lang ?? '').toLowerCase().replace(/_/g, '-');
+    return l.startsWith('fa-') || l === 'fa' || l.startsWith('pes-') || l === 'pes';
+  });
   if (fa) return fa;
+  // اولویت ۳: هر صدایی که نشانهٔ زبان فارسی در نام دارد
   return voices.find((v) => isPersian(v)) ?? null;
 }
 
@@ -596,8 +613,16 @@ export function useAssistantSpeech(): AssistantSpeech {
           clearTimers();
           stopKeepalive();
           hardCancel();
-          setVoiceProblem('engine-stalled');
           setPlayState('idle');
+          if (err === 'not-allowed') {
+            setVoiceProblem('not-allowed');
+          } else if (err === 'language-unavailable' || err === 'voice-unavailable') {
+            setVoiceProblem('no-persian-voice');
+          } else if (idx === 0 && !started) {
+            setVoiceProblem('no-persian-voice');
+          } else {
+            setVoiceProblem('engine-stalled');
+          }
         };
 
         // آزمون شروع: اگر onstart نیامد، موتور صدا را اصلاً شروع
@@ -621,7 +646,7 @@ export function useAssistantSpeech(): AssistantSpeech {
             }, CANCEL_SETTLE_MS);
           } else {
             hardCancel();
-            setVoiceProblem(idx === 0 ? 'no-persian-voice' : 'engine-stalled');
+            setVoiceProblem('no-persian-voice');
             finalize(gen);
           }
         }, START_TIMEOUT_MS);
@@ -760,9 +785,9 @@ export function useAssistantSpeech(): AssistantSpeech {
 
   /** ترتیب جایگزین بعد از شکست صدای ابری: صدای مرورگر، وگرنه پیام کوتاه */
   const fallbackToBrowser = useCallback(
-    (text: string) => {
+    (text: string, cloudErrorKind?: string) => {
       if (!canSynthesize()) {
-        setVoiceProblem('cloud-failed');
+        setVoiceProblem(cloudErrorKind === 'not-deployed' ? 'cloud-not-deployed' : 'cloud-failed');
         setPlayState('idle');
         return;
       }
@@ -780,7 +805,7 @@ export function useAssistantSpeech(): AssistantSpeech {
       // (فهرست خالی یعنی «هنوز نامشخص» — مثل Chrome Android — پس مسیر
       // مرورگر امتحان می‌شود و «آزمون شروع» صادقانه نتیجه را می‌گوید.)
       if (list.length > 0 && !hasPersianVoice(list)) {
-        setVoiceProblem('cloud-failed');
+        setVoiceProblem(cloudErrorKind === 'not-deployed' ? 'cloud-not-deployed' : 'cloud-failed');
         setPlayState('idle');
         return;
       }
@@ -890,12 +915,13 @@ export function useAssistantSpeech(): AssistantSpeech {
               fallbackToBrowser(text);
             });
         })
-        .catch(() => {
+        .catch((err: unknown) => {
           if (gen !== generationRef.current) return;
           cloudAbortRef.current = null;
           setLoadingAudio(false);
           engineRef.current = null;
-          fallbackToBrowser(text);
+          const kind = (err as { kind?: string })?.kind;
+          fallbackToBrowser(text, kind);
         });
     },
     [
