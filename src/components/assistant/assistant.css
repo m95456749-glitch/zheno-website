@@ -471,25 +471,360 @@
 }
 
 .zhino-assistant-welcome-title {
-  margin-top: 1.1rem;
-  font-size: clamp(1.25rem, 4.4vw, 1.7rem);
-  font-weight: 300;
+  margin-top: 0.85rem;
+  font-size: clamp(1.2rem, 4.2vw, 1.6rem);
+  font-weight: 400;
   line-height: 1.75;
   /* رنگ Hero برند: #5A1725 */
   color: var(--color-wine-900);
 }
 
-.zhino-assistant-welcome-sub {
-  margin-top: 0.5rem;
-  max-width: 34rem;
-  font-size: 0.86rem;
-  font-weight: 300;
-  line-height: 2.1;
-  color: var(--color-mocha);
+.zhino-assistant-welcome-rule {
+  margin-top: 0.9rem;
 }
 
-.zhino-assistant-welcome-rule {
-  margin-top: 1.1rem;
+/* ============================================================
+   انیمیشن خوشامدگویی کارتونی ربات ژینو با محصولات واقعی ژله و کاستر
+   ============================================================ */
+
+.zhino-welcome-stage {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 340px);
+  height: 148px;
+  margin-inline: auto;
+  margin-bottom: 0.35rem;
+  /* جلوگیری از هرگونه پرش محتوا (CLS = 0) */
+  contain: layout paint;
+  user-select: none;
+}
+
+/* هالهٔ نرم پشت صحنه */
+.zhino-welcome-stage::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 220px;
+  height: 120px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: radial-gradient(
+    ellipse at center,
+    rgba(224, 208, 171, 0.35) 0%,
+    rgba(113, 49, 59, 0.08) 55%,
+    transparent 75%
+  );
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* حباب کوچک سلام در شروع ورود */
+.zhino-anim-speech-bubble {
+  position: absolute;
+  top: 0.15rem;
+  left: 50%;
+  transform: translateX(-50%) scale(0);
+  background: rgba(42, 11, 18, 0.94);
+  color: var(--color-gold-300);
+  border: 1px solid rgba(184, 154, 98, 0.45);
+  box-shadow: 0 8px 18px -6px rgba(42, 11, 18, 0.6);
+  padding: 0.22rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  pointer-events: none;
+  z-index: 5;
+  animation: zhino-speech-pop 1.25s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes zhino-speech-pop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, 10px) scale(0.6);
+  }
+  20%,
+  75% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+  95%,
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -8px) scale(0.8);
+  }
+}
+
+/* لفاف ربات */
+.zhino-anim-bot-wrap {
+  position: relative;
+  z-index: 3;
+  cursor: pointer;
+  outline: none;
+  /* کل انیمیشن ربات: ورود (0s) -> سلام (0.4-1.1s) -> خروج (1.2-1.8s) -> ورود دوباره (1.9-2.7s) -> نشستن */
+  animation: zhino-bot-choreography 3.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.zhino-anim-bot-wrap:focus-visible {
+  border-radius: 9999px;
+  box-shadow: 0 0 0 3px rgba(184, 154, 98, 0.6);
+}
+
+@keyframes zhino-bot-choreography {
+  /* ۱. ورود از بالا */
+  0% {
+    opacity: 0;
+    transform: translate3d(0, -65px, 0) scale(0.6);
+  }
+  14% {
+    opacity: 1;
+    transform: translate3d(0, 4px, 0) scale(1.05) rotate(0deg);
+  }
+  20% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(-8deg); /* سلام و تکان سر */
+  }
+  26% {
+    transform: translate3d(0, 0, 0) scale(1.02) rotate(6deg);
+  }
+  32% {
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+  /* ۲. خروج شیطنت‌آمیز از کادر اصلی به سمت راست */
+  38% {
+    transform: translate3d(-10px, 6px, 0) scale(0.96) rotate(-4deg);
+  }
+  48% {
+    opacity: 0;
+    transform: translate3d(140px, -20px, 0) scale(0.65) rotate(16deg);
+  }
+  54% {
+    opacity: 0;
+    transform: translate3d(-140px, 15px, 0) scale(0.65) rotate(-14deg);
+  }
+  /* ۳. ورود دوباره با هیجان از سمت دیگر */
+  66% {
+    opacity: 1;
+    transform: translate3d(6px, -4px, 0) scale(1.06) rotate(3deg);
+  }
+  74% {
+    transform: translate3d(0, 0, 0) scale(0.98) rotate(0deg);
+  }
+  /* ۴. استقرار و نمایش محصولات */
+  84%,
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1) rotate(0deg);
+  }
+}
+
+/* هاله طلایی دور مدال ربات */
+.zhino-anim-bot-halo {
+  position: absolute;
+  inset: -6px;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(184, 154, 98, 0.35) 0%, transparent 70%);
+  animation: zhino-halo-pulse 3s ease-in-out infinite;
+  pointer-events: none;
+}
+
+@keyframes zhino-halo-pulse {
+  0%,
+  100% {
+    transform: scale(0.95);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.1);
+    opacity: 0.9;
+  }
+}
+
+/* مدال ربات */
+.zhino-anim-bot-medallion {
+  display: grid;
+  place-items: center;
+  width: 5.2rem;
+  height: 5.2rem;
+  border-radius: 9999px;
+  background: radial-gradient(
+    120% 120% at 50% 0%,
+    #ffffff 0%,
+    #f4ece2 58%,
+    #e4d6c7 100%
+  );
+  border: 2px solid rgba(184, 154, 98, 0.55);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.9),
+    inset 0 -2px 6px rgba(113, 49, 59, 0.12),
+    0 16px 28px -12px rgba(29, 7, 12, 0.65);
+  transition:
+    transform 0.3s ease,
+    box-shadow 0.3s ease;
+}
+
+.zhino-anim-bot-img {
+  width: 82%;
+  height: 82%;
+  object-fit: contain;
+  display: block;
+}
+
+/* شناوری آرام بعد از اتمام رقص ربات */
+.zhino-welcome-stage.is-settled .zhino-anim-bot-wrap {
+  animation: zhino-bot-hover 6s ease-in-out infinite;
+}
+
+@keyframes zhino-bot-hover {
+  0%,
+  100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -6px, 0);
+  }
+}
+
+/* ============================================================
+   محصولات واقعی ژینو (ژله و کاستر)
+   ============================================================ */
+
+.zhino-anim-product {
+  position: absolute;
+  top: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  z-index: 2;
+  pointer-events: none;
+  /* در ابتدا پنهان — بعد از بازگشت ربات ظاهر می‌شوند */
+  opacity: 0;
+  transform: translate(0, -50%) scale(0);
+}
+
+/* پودر ژله توت‌فرنگی ژینو (سمت راست در RTL) */
+.zhino-anim-product.is-jelly {
+  right: calc(50% + 2.85rem);
+  animation: zhino-product-pop-jelly 3.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes zhino-product-pop-jelly {
+  0%,
+  65% {
+    opacity: 0;
+    transform: translate(25px, -50%) scale(0) rotate(-12deg);
+  }
+  74% {
+    opacity: 1;
+    transform: translate(0, -55%) scale(1.16) rotate(6deg);
+  }
+  82% {
+    transform: translate(0, -50%) scale(0.96) rotate(-3deg);
+  }
+  90%,
+  100% {
+    opacity: 1;
+    transform: translate(0, -50%) scale(1) rotate(0deg);
+  }
+}
+
+/* پودر کاستر موزی ژینو (سمت چپ در RTL) */
+.zhino-anim-product.is-custard {
+  left: calc(50% + 2.85rem);
+  animation: zhino-product-pop-custard 3.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes zhino-product-pop-custard {
+  0%,
+  67% {
+    opacity: 0;
+    transform: translate(-25px, -50%) scale(0) rotate(12deg);
+  }
+  76% {
+    opacity: 1;
+    transform: translate(0, -55%) scale(1.16) rotate(-6deg);
+  }
+  84% {
+    transform: translate(0, -50%) scale(0.96) rotate(3deg);
+  }
+  92%,
+  100% {
+    opacity: 1;
+    transform: translate(0, -50%) scale(1) rotate(0deg);
+  }
+}
+
+/* شناوری آرام محصولات پس از استقرار */
+.zhino-welcome-stage.is-settled .zhino-anim-product.is-jelly {
+  opacity: 1;
+  animation: zhino-product-idle-jelly 5.4s ease-in-out infinite;
+}
+
+.zhino-welcome-stage.is-settled .zhino-anim-product.is-custard {
+  opacity: 1;
+  animation: zhino-product-idle-custard 5.8s ease-in-out infinite 0.4s;
+}
+
+@keyframes zhino-product-idle-jelly {
+  0%,
+  100% {
+    transform: translate(0, -50%) rotate(0deg);
+  }
+  50% {
+    transform: translate(0, calc(-50% - 5px)) rotate(2deg);
+  }
+}
+
+@keyframes zhino-product-idle-custard {
+  0%,
+  100% {
+    transform: translate(0, -50%) rotate(0deg);
+  }
+  50% {
+    transform: translate(0, calc(-50% - 6px)) rotate(-2deg);
+  }
+}
+
+/* کادر عکس واقعی محصول */
+.zhino-anim-product-frame {
+  position: relative;
+  width: 3.35rem;
+  height: 3.35rem;
+  border-radius: 1rem;
+  overflow: hidden;
+  background: #ffffff;
+  border: 1.5px solid rgba(184, 154, 98, 0.45);
+  box-shadow:
+    0 10px 22px -8px rgba(42, 11, 18, 0.45),
+    0 0 0 1px rgba(255, 255, 255, 0.6);
+  padding: 0.22rem;
+  display: grid;
+  place-items: center;
+}
+
+.zhino-anim-product-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 0.75rem;
+  display: block;
+}
+
+/* برچسب شیشه‌ای و کارتونی زیر محصول */
+.zhino-anim-product-tag {
+  white-space: nowrap;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: var(--color-wine-950);
+  background: rgba(255, 255, 255, 0.88);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  border: 1px solid rgba(184, 154, 98, 0.35);
+  padding: 0.15rem 0.48rem;
+  border-radius: 9999px;
+  box-shadow: 0 4px 10px -4px rgba(42, 11, 18, 0.25);
 }
 
 /* پیشنهادهای آغازین — درست زیر پیام خوشامد، وسط‌چین و خلوت */
@@ -1549,6 +1884,34 @@
   .zhino-assistant-hint {
     font-size: 0.66rem;
   }
+
+  .zhino-welcome-stage {
+    height: 135px;
+    max-width: 310px;
+  }
+
+  .zhino-anim-bot-medallion {
+    width: 4.6rem;
+    height: 4.6rem;
+  }
+
+  .zhino-anim-product-frame {
+    width: 2.85rem;
+    height: 2.85rem;
+  }
+
+  .zhino-anim-product.is-jelly {
+    right: calc(50% + 2.45rem);
+  }
+
+  .zhino-anim-product.is-custard {
+    left: calc(50% + 2.45rem);
+  }
+
+  .zhino-anim-product-tag {
+    font-size: 0.58rem;
+    padding: 0.12rem 0.4rem;
+  }
 }
 
 /* روی صفحه‌های بسیار باریک فقط نشان، عنوان و دو دکمهٔ سربرگ می‌مانند */
@@ -1566,6 +1929,33 @@
 
   .zhino-assistant-brand-title {
     font-size: 0.85rem;
+  }
+
+  .zhino-welcome-stage {
+    height: 120px;
+    max-width: 270px;
+  }
+
+  .zhino-anim-bot-medallion {
+    width: 4rem;
+    height: 4rem;
+  }
+
+  .zhino-anim-product-frame {
+    width: 2.45rem;
+    height: 2.45rem;
+  }
+
+  .zhino-anim-product.is-jelly {
+    right: calc(50% + 2.15rem);
+  }
+
+  .zhino-anim-product.is-custard {
+    left: calc(50% + 2.15rem);
+  }
+
+  .zhino-anim-product-tag {
+    display: none;
   }
 }
 
@@ -1597,9 +1987,30 @@
   .zhino-assistant-row,
   .zhino-assistant-welcome,
   .zhino-assistant-ideas-body,
-  .zhino-assistant-voice-note {
+  .zhino-assistant-voice-note,
+  .zhino-anim-speech-bubble,
+  .zhino-anim-bot-wrap,
+  .zhino-anim-bot-halo,
+  .zhino-anim-product.is-jelly,
+  .zhino-anim-product.is-custard,
+  .zhino-welcome-stage.is-settled .zhino-anim-bot-wrap,
+  .zhino-welcome-stage.is-settled .zhino-anim-product.is-jelly,
+  .zhino-welcome-stage.is-settled .zhino-anim-product.is-custard {
     animation: none !important;
     transform: none !important;
+    opacity: 1 !important;
+  }
+
+  .zhino-anim-product.is-jelly {
+    transform: translate(0, -50%) !important;
+  }
+
+  .zhino-anim-product.is-custard {
+    transform: translate(0, -50%) !important;
+  }
+
+  .zhino-anim-speech-bubble {
+    display: none !important;
   }
 
   .zhino-assistant-soundbars span {

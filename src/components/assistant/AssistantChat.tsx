@@ -31,12 +31,12 @@ import { cn } from '../../utils/cn';
 import { formatPrice, toPersianDigits } from '../../utils/format';
 import { cheapestVariant } from '../../services/assistant/knowledge';
 import AssistantAvatar from './AssistantAvatar';
+import ZhinoWelcomeAnimation from './ZhinoWelcomeAnimation';
 import { ASSISTANT_NAME } from './assistantData';
 import { useAssistantSpeech } from './useAssistantSpeech';
 import { useVoiceSettings } from '../../services/voiceSettings';
 import {
   ASSISTANT_MAX_LENGTH,
-  ASSISTANT_WELCOME_SUB,
   ASSISTANT_WELCOME_TITLE,
   type UseAssistantChatResult,
 } from './useAssistantChat';
@@ -59,6 +59,8 @@ const LOADING_VOICE_MSG = 'در حال آماده‌سازی صدا… لطفا�
 /** صدای ابری شکست خورد و صدای مرورگر هم نبود — کوتاه، بدون اصطلاح فنی */
 const CLOUD_FAILED_MSG =
   'صدا این لحظه در دسترس نیست؛ متن پاسخ را همین‌جا می‌خوانید.';
+const NOT_ALLOWED_MSG =
+  'پخش خودکار توسط مرورگر مسدود شد؛ برای شنیدن روی دکمهٔ «خواندن پاسخ» بزنید.';
 const PREPARING_VOICE_MSG = 'در حال آماده‌سازی صدا…';
 
 function isAndroidDevice(): boolean {
@@ -269,8 +271,14 @@ export default function AssistantChat({ chat, className }: Props) {
     return () => window.clearTimeout(timer);
   }, [voiceNotice]);
 
-  // اگر موتور صدا اصلاً شروع نکرد (رایج‌ترین علت: نبود صدای فارسی روی
-  // دستگاه)، پیام کوتاه و واضح — چت هرگز نمی‌شکند و دکمه‌ها گیر نمی‌کنند
+  // ریست شدن شناسهٔ پیام در حال خواندن وقتی هیچ فعالیتی در جریان نیست
+  useEffect(() => {
+    if (!voiceReading && !voicePaused && !voiceLoading) {
+      setReadingId(null);
+    }
+  }, [voiceReading, voicePaused, voiceLoading]);
+
+  // اگر موتور صدا با خطا مواجه شد، پیام کوتاه و واضح — چت هرگز نمی‌شکند و دکمه‌ها گیر نمی‌کنند
   useEffect(() => {
     if (!voiceProblem) return;
     if (voiceProblem === 'no-persian-voice') {
@@ -278,14 +286,14 @@ export default function AssistantChat({ chat, className }: Props) {
         NO_PERSIAN_MSG,
         isAndroidDevice() ? ANDROID_VOICE_HINT : null,
       );
-    } else if (voiceProblem === 'cloud-failed') {
-      // صدای ابری در دسترس نبود و صدای فارسیِ مرورگر هم نبود؛ بدون
-      // هیچ پیشنهاد نصب صدای گوشی — آن راهنما فقط برای مسیرِ کاملاً
-      // محلی است.
+    } else if (voiceProblem === 'cloud-failed' || voiceProblem === 'cloud-not-deployed') {
       showVoiceNotice(CLOUD_FAILED_MSG);
+    } else if (voiceProblem === 'not-allowed') {
+      showVoiceNotice(NOT_ALLOWED_MSG);
     } else {
       showVoiceNotice(ENGINE_STALLED_MSG);
     }
+    setReadingId(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voiceProblem]);
 
@@ -409,13 +417,10 @@ export default function AssistantChat({ chat, className }: Props) {
         tabIndex={0}
       >
         {fresh ? (
-          /* پیام خوشامد — کوتاه، فارسی و وسط صفحه، با پیشنهادها زیر آن */
+          /* پیام خوشامد — کوتاه، فارسی و انیمیشن جذاب ربات با محصولات ژینو */
           <div className="zhino-assistant-welcome">
-            <span className="zhino-assistant-welcome-mark">
-              <AssistantAvatar />
-            </span>
+            <ZhinoWelcomeAnimation />
             <h2 className="zhino-assistant-welcome-title">{ASSISTANT_WELCOME_TITLE}</h2>
-            <p className="zhino-assistant-welcome-sub">{ASSISTANT_WELCOME_SUB}</p>
             <span className="rule-lux zhino-assistant-welcome-rule" aria-hidden="true" />
             {/* پیشنهادهای شروع گفت‌وگو — از پنل قابل خاموش‌کردن است */}
             {voiceSite.suggestions && (

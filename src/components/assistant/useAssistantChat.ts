@@ -58,14 +58,10 @@ const MAX_REMOTE_FAILURES = 2;
 
 /**
  * پیام خوش‌آمد — کوتاه، فارسی و دوستانه.
- * همان متن در دو جا دیده می‌شود: حالت خوشامد (AssistantChat) و حباب
- * اول گفتگو پس از شروع چت.
  */
 export const ASSISTANT_WELCOME_TITLE = 'سلام! من دستیار ژینو هستم.';
-export const ASSISTANT_WELCOME_SUB =
-  'طعم‌ها، قیمت و موجودی، دستور تهیهٔ ژله و کاستر یا انتخاب دسر — هرچی لازم دارید بپرسید، کوتاه جواب می‌دم.';
 
-const WELCOME_TEXT = `${ASSISTANT_WELCOME_TITLE} ${ASSISTANT_WELCOME_SUB}`;
+const WELCOME_TEXT = ASSISTANT_WELCOME_TITLE;
 
 /** پیام اول گفتگو */
 function welcomeMessage(): AssistantChatMessage {

@@ -44,8 +44,11 @@ const RATE_OPTIONS = [
 
 const PROBLEM_TEXT: Record<Exclude<AssistantVoiceProblem, null>, string> = {
   'no-persian-voice': 'صدای فارسی روی مرورگر پیدا نشد؛ می‌توانید صدای ابری را روشن کنید.',
-  'engine-stalled': 'موتور صدای مرورگر در میانه راه متوقف شد؛ دوباره امتحان کنید.',
+  'not-allowed': 'مجوز پخش خودکار توسط مرورگر مسدود شد؛ نیاز به لمس یا کلیک مستقیم کاربر دارد.',
+  'cloud-not-deployed': 'تابع zhino-voice روی Supabase مستقر نشده است (404 Not Found).',
   'cloud-failed': 'صدای ابری در دسترس نبود و جایگزین مرورگر هم نشد؛ وضعیت سرویس را بررسی کنید.',
+  'engine-stalled': 'موتور صدای مرورگر در میانه راه متوقف شد؛ دوباره امتحان کنید.',
+  'playback-failed': 'خطایی در پخش صدا رخ داد؛ لطفاً دوباره امتحان کنید.',
 };
 
 /* ── collapsible subsection ─────────────────────────────── */
@@ -205,8 +208,12 @@ export default function AdminAssistantPage() {
       setErrorNote(null);
     } else if (result.state === 'ready') {
       setErrorNote('صدای ابری همین حالا از سمت سرویس خاموش است؛ کلید «صدای ابری» یا «صدای ربات» را بررسی کنید.');
+    } else if (result.state === 'not-deployed') {
+      setErrorNote('تابع zhino-voice روی Supabase مستقر نشده است (404 Not Found)؛ با دستور supabase functions deploy zhino-voice مستقر کنید.');
     } else if (result.state === 'not-configured') {
       setErrorNote('Secret های سرویس صدای ابری روی سرور تنظیم نشده‌اند؛ مستندات استقرار Supabase را ببینید.');
+    } else if (result.state === 'auth-failed') {
+      setErrorNote('احراز هویت سرویس صدا ناموفق بود (401/403)؛ کلید anon یا تنظیمات دامنه را بررسی کنید.');
     } else if (result.state === 'no-supabase') {
       setErrorNote('ارتباط Supabase در فرانت‌اند تعریف نشده است (حالت آفلاین/دمو)؛ فقط صدای مرورگر فعال است.');
     } else {
@@ -223,9 +230,13 @@ export default function AdminAssistantPage() {
         ? { cls: 'adm-badge-ok', label: 'متصل و سالم' }
         : health.state === 'ready'
           ? { cls: 'adm-badge-warning', label: 'خاموش از سمت سرویس' }
-          : health.state === 'unreachable'
-            ? { cls: 'adm-badge-cancelled', label: 'قطع یا خطا' }
-            : { cls: 'adm-badge-cancelled', label: 'تنظیم نشده' };
+          : health.state === 'not-deployed'
+            ? { cls: 'adm-badge-warning', label: 'مستقر نشده (404)' }
+            : health.state === 'auth-failed'
+              ? { cls: 'adm-badge-cancelled', label: 'خطای مجوز (401/403)' }
+              : health.state === 'unreachable'
+                ? { cls: 'adm-badge-cancelled', label: 'قطع یا خطا' }
+                : { cls: 'adm-badge-cancelled', label: 'تنظیم نشده' };
 
   return (
     <div className="max-w-2xl">
