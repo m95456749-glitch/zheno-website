@@ -60,6 +60,44 @@ jobs:
       - name: Runtime smoke tests
         run: npm run smoke
 
+      # تشخیص مستقیم کلید TTS سمت OpenAI. اگر POST به تابع ما 429 بدهد،
+      # این گام مشخص می‌کند کلید نامعتبر است یا اعتبار/سهمیه حساب تمام شده.
+      # مقدار کلید هرگز چاپ نمی‌شود (گیت‌هاب هم خودش آن را *** می‌کند).
+      - name: Diagnose the OpenAI TTS key (key value is never printed)
+        env:
+          TTS_KEY: ${{ secrets.TTS_API_KEY }}
+        run: |
+          set -uo pipefail
+          if [ -z "${TTS_KEY:-}" ]; then
+            echo "::warning::TTS_API_KEY is not available to this run — key diagnosis skipped."
+            exit 0
+          fi
+          echo "secret present: yes (length ${#TTS_KEY} characters; value never printed)"
+
+          # 1) کلید معتبر است؟ فهرست مدل‌ها هزینه و سهمیه مصرف نمی‌کند
+          mcode=$(curl -sS -m 30 -o /tmp/models.json -w '%{http_code}' \
+                  -H "Authorization: Bearer ${TTS_KEY}" \
+                  https://api.openai.com/v1/models 2>/dev/null) || mcode="000"
+          echo "GET /v1/models -> HTTP ${mcode}"
+
+          # 2) همان درخواست صوتی که تابع ما می‌فرستد — مستقیم به OpenAI
+          scode=$(curl -sS -m 60 -o /tmp/oai.bin -w '%{http_code}' \
+                  -X POST -H "Authorization: Bearer ${TTS_KEY}" -H 'Content-Type: application/json' \
+                  --data '{"model":"gpt-4o-mini-tts","voice":"coral","input":"سلام","response_format":"mp3"}' \
+                  https://api.openai.com/v1/audio/speech 2>/dev/null) || scode="000"
+          ssize=$(wc -c < /tmp/oai.bin 2>/dev/null | tr -d ' ') || ssize=0
+          echo "POST /v1/audio/speech -> HTTP ${scode} (${ssize} bytes)"
+          body=$(head -c 400 /tmp/oai.bin 2>/dev/null | tr -d '\r\n')
+          echo "upstream body: ${body:-n/a}"
+
+          if [ "$scode" = "200" ] && [ "${ssize:-0}" -gt 1000 ]; then
+            echo "::notice::OPENAI KEY OK — direct TTS call returned HTTP 200 with ${ssize} bytes; /v1/models was HTTP ${mcode}. Any 429 from zhino-voice is therefore transient."
+          else
+            echo "::error::OPENAI TTS REJECTED the request — HTTP ${scode} (${ssize} bytes). Upstream said: ${body:-no body}. /v1/models HTTP ${mcode}. The key value is not printed."
+          fi
+          # تشخیص است، نه دروازهٔ کیفیت کد
+          exit 0
+
       # Live synthetic check of the deployed cloud voice. Read-only for our
       # infrastructure (one GET + one POST to the public endpoint, exactly the
       # two calls the storefront makes) and it NEVER blocks the build: the
