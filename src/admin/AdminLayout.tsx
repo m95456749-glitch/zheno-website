@@ -132,7 +132,10 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <span className="text-sm font-bold text-wine-950">{current.label}</span>
         <LogoutButton />
       </header>
-      <MobileNavList />
+      {/* The dashboard home reaches every section through its seven cards,
+          so the circular row is omitted there; on every other page it
+          stays as the mobile way between sections. */}
+      {!isDashboardHome && <MobileNavList />}
 
       {/* ── main content ────────────────────────────────────── */}
       <main className="lg:ms-[17rem]">

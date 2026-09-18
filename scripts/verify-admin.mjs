@@ -33,11 +33,12 @@ for (const file of [
   else fail(`admin stage-three file is missing: ${file}`);
 }
 
+// The six statistics cards were removed from the dashboard together with
+// their (now effect-less) customization panel. Their identities stay
+// contracted on the untouched preferences service so the cards can be
+// restored later without re-inventing the ids.
 for (const id of ['new-orders', 'preparing-orders', 'shipped-orders', 'completed-orders', 'sales', 'low-stock']) {
   mustInclude('src/services/dashboardPreferences.ts', `'${id}'`, `dashboard card contract: ${id}`);
-}
-for (const label of ['سفارش‌های جدید', 'در حال آماده‌سازی', 'سفارش‌های ارسال‌شده', 'سفارش‌های تکمیل‌شده', 'مجموع فروش', 'موجودی کم یا رو به اتمام']) {
-  mustInclude('src/admin/pages/AdminDashboardPage.tsx', label, `dashboard label: ${label}`);
 }
 
 for (const path of ['/admin/products?view=prices', '/admin/products?view=images']) {
