@@ -177,6 +177,19 @@ function makeFetchMock({ mode = 'ok', calls, restRows = null, restFails = false,
       });
     }
     if (mode === 'quota') return new globalThis.Response('quota', { status: 429 });
+    // شکل واقعی خطای OpenAI — تا علت 429 در پاسخ ما قابل تشخیص باشد
+    if (mode === 'quota-openai') {
+      return new globalThis.Response(
+        JSON.stringify({
+          error: {
+            message: 'You exceeded your current quota, please check your plan and billing details.',
+            type: 'insufficient_quota',
+            code: 'insufficient_quota',
+          },
+        }),
+        { status: 429, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
     if (mode === 'auth') return new globalThis.Response('denied', { status: 403 });
     if (mode === 'upstream') return new globalThis.Response('boom', { status: 500 });
     if (mode === 'not-audio') {
@@ -1043,6 +1056,30 @@ function assertNoKey(bodyText, label) {
         fail(`V10 — custom endpoint was not honoured: ${calls.map((c) => c.url).join(', ')}`);
       }
     }
+    // 4) علت واقعی خطای سرویس در پاسخ می‌آید — بدون کلید و بدون بدنهٔ خام
+    {
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'quota-openai', calls });
+      const handler = await loadVoiceFunction(baseEnv, 'oai-quota-detail');
+      const res = await post(handler, { text: 'سهمیه' });
+      const body = await res.text();
+      if (res.status !== 429 || !body.includes('quota_exceeded')) {
+        fail(`V10 — expected 429 quota_exceeded, got ${res.status}: ${body.slice(0, 200)}`);
+      } else if (!body.includes('insufficient_quota')) {
+        fail(`V10 — the 429 does not name the upstream cause: ${body.slice(0, 200)}`);
+      } else if (body.includes(OPENAI_KEY) || body.includes('please check your plan')) {
+        fail('V10 — the 429 body leaked the key or the raw upstream text');
+      } else if (calls.filter((c) => c.url === OPENAI_URL).length !== 1) {
+        fail(
+          `V10 — expected exactly one OpenAI TTS call, got ${
+            calls.filter((c) => c.url === OPENAI_URL).length
+          } of ${calls.length}`,
+        );
+      } else {
+        ok('V10 — the 429 names the upstream cause (insufficient_quota), key-free');
+      }
+    }
+
   } finally {
     globalThis.fetch = realFetch;
   }

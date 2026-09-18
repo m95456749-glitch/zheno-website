@@ -352,16 +352,60 @@ function openaiInstructions(ratePercent: number): string {
 
 type UpstreamResult =
   | { ok: true; audio: ArrayBuffer }
-  | { ok: false; kind: 'timeout' | 'network' | 'quota' | 'auth' | 'invalid' | 'upstream'; status?: number };
+  | {
+      ok: false;
+      kind: 'timeout' | 'network' | 'quota' | 'auth' | 'invalid' | 'upstream';
+      status?: number;
+      /** علت کوتاه و غیرمحرمانهٔ سمت سرویس TTS (برای تشخیص سریع) */
+      upstream?: string;
+    };
+
+/**
+ * فقط دو فیلد کوتاه و غیرحساس از خطای سرویس TTS بیرون کشیده می‌شود
+ * (`type` و `code`) — تا علت واقعی (مثلاً `insufficient_quota` یعنی
+ * نبود اعتبار/روش پرداخت، در برابر `rate_limit_exceeded`) بدون خواندن
+ * لاگ سرور معلوم باشد. کلید هیچ‌وقت در بدنهٔ خطای سرویس نیست و اینجا
+ * هم بدنهٔ خام برگردانده نمی‌شود.
+ */
+async function upstreamErrorDetail(response: Response): Promise<string | undefined> {
+  try {
+    const text = (await response.text()).slice(0, 500);
+    const parsed = JSON.parse(text) as {
+      error?: { type?: unknown; code?: unknown; message?: unknown };
+    };
+    const type = typeof parsed?.error?.type === 'string' ? parsed.error.type.slice(0, 60) : '';
+    const code = typeof parsed?.error?.code === 'string' ? parsed.error.code.slice(0, 60) : '';
+    const parts = [type, code].filter(Boolean).filter((v, i, a) => a.indexOf(v) === i);
+    if (parts.length > 0) return parts.join('/');
+    const message = typeof parsed?.error?.message === 'string' ? parsed.error.message.slice(0, 160) : '';
+    return message === '' ? undefined : message;
+  } catch {
+    return undefined;
+  }
+}
 
 /** بررسی مشترک پاسخ سرویس TTS — برای هر دو مسیر یکسان است */
 async function toAudioResult(response: Response): Promise<UpstreamResult> {
   try {
-    if (response.status === 429) return { ok: false, kind: 'quota', status: 429 };
-    if (response.status === 401 || response.status === 403) {
-      return { ok: false, kind: 'auth', status: response.status };
+    if (response.status === 429) {
+      return { ok: false, kind: 'quota', status: 429, upstream: await upstreamErrorDetail(response) };
     }
-    if (!response.ok) return { ok: false, kind: 'upstream', status: response.status };
+    if (response.status === 401 || response.status === 403) {
+      return {
+        ok: false,
+        kind: 'auth',
+        status: response.status,
+        upstream: await upstreamErrorDetail(response),
+      };
+    }
+    if (!response.ok) {
+      return {
+        ok: false,
+        kind: 'upstream',
+        status: response.status,
+        upstream: await upstreamErrorDetail(response),
+      };
+    }
 
     const contentType = (response.headers.get('Content-Type') ?? '').toLowerCase();
     if (!contentType.startsWith('audio/')) {
@@ -534,19 +578,50 @@ Deno.serve(async (request: Request): Promise<Response> => {
 
   const result = await synthesize(provider, text, site);
   if (!result.ok) {
-    // فقط نام سرویس و کد وضعیت در لاگ می‌ماند — نه کلید، نه متن کاربر.
-    console.error('[zhino-voice] upstream failed:', provider, result.kind, result.status ?? '');
+    // در لاگ فقط نام سرویس، کد وضعیت و علت کوتاه سمت سرویس می‌ماند —
+    // نه کلید، نه متن کاربر، نه بدنهٔ خام پاسخ.
+    console.error(
+      '[zhino-voice] upstream failed:',
+      provider,
+      result.kind,
+      result.status ?? '',
+      result.upstream ?? '',
+    );
+    // `upstream` علت سمت سرویس TTS است (مثلاً `insufficient_quota` یعنی
+    // اعتبار/روش پرداخت حساب کامل نیست) — بدون آن، 429 و 502 برای مدیر
+    // قابل تفکیک نیستند. کلید هیچ‌وقت در آن نیست.
+    const upstream = result.upstream ?? null;
     switch (result.kind) {
       case 'timeout':
-        return json({ error: 'upstream_timeout', message: 'پاسخ سرویس صدا به‌موقع نرسید.' }, 504, request);
+        return json(
+          { error: 'upstream_timeout', message: 'پاسخ سرویس صدا به‌موقع نرسید.', upstream },
+          504,
+          request,
+        );
       case 'quota':
-        return json({ error: 'quota_exceeded', message: 'سهمیهٔ سرویس صدا پر شده است.' }, 429, request);
+        return json(
+          { error: 'quota_exceeded', message: 'سهمیهٔ سرویس صدا پر شده است.', upstream },
+          429,
+          request,
+        );
       case 'auth':
-        return json({ error: 'upstream_auth', message: 'اعتبار سرویس صدا تأیید نشد.' }, 502, request);
+        return json(
+          { error: 'upstream_auth', message: 'اعتبار سرویس صدا تأیید نشد.', upstream },
+          502,
+          request,
+        );
       case 'invalid':
-        return json({ error: 'invalid_upstream_audio', message: 'پاسخ سرویس صدا معتبر نبود.' }, 502, request);
+        return json(
+          { error: 'invalid_upstream_audio', message: 'پاسخ سرویس صدا معتبر نبود.', upstream },
+          502,
+          request,
+        );
       default:
-        return json({ error: 'upstream_error', message: 'سرویس صدا در این لحظه پاسخ نداد.' }, 502, request);
+        return json(
+          { error: 'upstream_error', message: 'سرویس صدا در این لحظه پاسخ نداد.', upstream },
+          502,
+          request,
+        );
     }
   }
 

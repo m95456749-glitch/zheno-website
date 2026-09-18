@@ -98,7 +98,10 @@ jobs:
           if [ "$pcode" = "200" ] && [ "${ctype:-audio/none}" = "audio/mpeg" ] && [ "${size:-0}" -gt 1000 ]; then
             echo "::notice::LIVE VOICE OK — POST returned HTTP 200 ${ctype} with ${size} bytes of MP3."
           else
-            echo "::error::LIVE VOICE NOT OK — GET=${gcode}, POST=${pcode}, content-type=${ctype:-n/a}, bytes=${size:-0}."
+            # بدنهٔ پاسخ ما هیچ کلیدی ندارد (تست‌ها همین را قفل کرده‌اند)؛
+            # با `upstream` علت واقعی سمت سرویس TTS همین‌جا دیده می‌شود.
+            body=$(head -c 240 /tmp/voice.bin 2>/dev/null | tr -d '\r\n')
+            echo "::error::LIVE VOICE NOT OK — GET=${gcode}, POST=${pcode}, content-type=${ctype:-n/a}, bytes=${size:-0}, body=${body:-n/a}"
           fi
           # Diagnostic only: a voice outage must not fail unrelated pull requests.
           exit 0
