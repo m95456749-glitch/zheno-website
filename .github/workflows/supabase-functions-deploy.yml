@@ -410,6 +410,73 @@ jobs:
           [ "$failures" -eq 0 ] || exit 1
           echo "✅ Both functions answer — the 404 is gone."
 
+      - name: Real synthesis round trip (POST /functions/v1/zhino-voice)
+        env:
+          PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
+          PUBLIC_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -uo pipefail
+          base="${PROJECT_URL:-https://${PROJECT_REF}.supabase.co}"; base="${base%/}"
+          url="${base}/functions/v1/zhino-voice"
+          key="${PUBLIC_KEY:-}"
+          # The exact request the storefront makes: one short Persian answer,
+          # publishable key in Authorization + apikey. Nothing secret is sent
+          # and the function never returns a key, so the response is safe to
+          # print. The audio itself is NOT printed — only its size and the
+          # first bytes (an MP3 starts with "ID3" or 0xFF 0xFx).
+          auth=()
+          if [ -n "$key" ]; then auth=(-H "Authorization: Bearer ${key}" -H "apikey: ${key}"); fi
+
+          code="000"; ctype=""; size=0
+          for attempt in 1 2 3; do
+            code=$(curl -sS -m 60 -D /tmp/tts.hdr -o /tmp/tts.bin -w '%{http_code}' \
+                   -X POST -H 'Content-Type: application/json' "${auth[@]}" \
+                   --data '{"text":"سلام، صدای ژینو"}' "$url" 2>/dev/null) || code="000"
+            ctype=$(sed -e 's/\r$//' /tmp/tts.hdr 2>/dev/null | awk 'tolower($1)=="content-type:"{print $2}' | head -1)
+            size=$(wc -c < /tmp/tts.bin 2>/dev/null | tr -d ' ') || size=0
+            echo "attempt ${attempt} -> HTTP ${code} | content-type=${ctype:-n/a} | bytes=${size:-0}"
+            # 501 = the secrets have not propagated to the function env yet;
+            # 000 = the runner got no answer. Both are worth one more try.
+            if [ "$code" = "200" ] && [ "${ctype:-}" != "" ]; then break; fi
+            if [ "$code" != "501" ] && [ "$code" != "000" ]; then break; fi
+            sleep 15
+          done
+
+          echo "--- response headers ---"
+          sed -e 's/\r$//' /tmp/tts.hdr 2>/dev/null | head -15
+          case "${ctype:-}" in
+            audio/*) : ;;
+            *) echo "--- response body (first 400 bytes; the function never puts a key in a response) ---"
+               head -c 400 /tmp/tts.bin 2>/dev/null; echo ;;
+          esac
+          echo "--- first bytes of the body ---"
+          head -c 4 /tmp/tts.bin 2>/dev/null | od -An -tx1 | head -1
+
+          case "$code" in
+            200)
+              case "${ctype:-}" in
+                audio/*)
+                  if [ "${size:-0}" -gt 1000 ]; then
+                    echo "::notice::zhino-voice POST OK — HTTP 200, ${ctype}, ${size} bytes of audio (real MP3 round trip through the TTS provider)."
+                  else
+                    echo "::error::zhino-voice POST returned 200 ${ctype} but only ${size} bytes — the audio looks truncated."
+                    exit 1
+                  fi ;;
+                *)
+                  echo "::error::zhino-voice POST answered 200 with content-type=${ctype:-n/a} instead of audio — see the body above for the upstream error."
+                  exit 1 ;;
+              esac ;;
+            501)
+              echo "::error::zhino-voice answered 501 not_configured — the TTS secret is not visible to the function env (set TTS_API_KEY, then re-run)."
+              exit 1 ;;
+            000)
+              echo "::error::zhino-voice POST got no HTTP answer after 3 attempts — the voice path cannot be confirmed, so this run is marked failed."
+              exit 1 ;;
+            *)
+              echo "::error::zhino-voice POST failed — HTTP ${code} (see the body above)."
+              exit 1 ;;
+          esac
+
       - name: Result summary
         if: always()
         env:
