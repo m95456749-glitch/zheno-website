@@ -31,8 +31,14 @@ name: Supabase deploy functions (manual)
 #   or sb_secret_…) do NOT work — the CLI cannot use data-plane keys.
 #
 # OPTIONAL repository secrets (each is conditional — set only what you have):
+#   TTS_API_KEY (+ TTS_API_URL, TTS_MODEL, TTS_VOICE_FEMALE, TTS_VOICE_MALE)
+#       — enables the cloud voice through OpenAI «gpt-4o-mini-tts»
+#         (zhino-voice answers 200 with audio). One key is enough; it is
+#         the only credential the voice function needs on this path.
 #   AZURE_SPEECH_KEY + AZURE_SPEECH_REGION (+ AZURE_SPEECH_VOICE)
-#       — enables the cloud voice (zhino-voice answers 200 with audio)
+#       — the alternate cloud voice provider (Azure AI Speech). Kept
+#         available: with both keys set, auto mode prefers OpenAI, so
+#         setting VOICE_PROVIDER (see VARIABLES) picks the provider.
 #   AI_API_KEY + AI_MODEL (+ AI_API_URL)
 #       — enables the chat AI (zhino-assistant answers with model replies)
 #
@@ -42,6 +48,9 @@ name: Supabase deploy functions (manual)
 #   it here adds no new exposure. If unset, the check falls back to an
 #   unauthenticated probe where "anything but 404" still proves the function
 #   exists.
+#   VOICE_PROVIDER — optional, not a secret: `openai` or `azure`. When it is
+#   left unset the voice function picks automatically (OpenAI if TTS_API_KEY
+#   exists, otherwise Azure).
 
 on:
   workflow_dispatch:
@@ -185,9 +194,15 @@ jobs:
 
       - name: Set Supabase secrets — only the names that were provided
         env:
-          # ONLY these six secrets are wired into this step — nothing else.
-          # An undefined repository secret evaluates to an empty string,
-          # which the conditionals below treat as "not provided".
+          # ONLY these names are wired into this step — nothing else.
+          # An undefined repository secret/variable evaluates to an empty
+          # string, which the conditionals below treat as "not provided".
+          VOICE_PROVIDER: ${{ vars.VOICE_PROVIDER }}
+          TTS_API_KEY: ${{ secrets.TTS_API_KEY }}
+          TTS_API_URL: ${{ secrets.TTS_API_URL }}
+          TTS_MODEL: ${{ secrets.TTS_MODEL }}
+          TTS_VOICE_FEMALE: ${{ secrets.TTS_VOICE_FEMALE }}
+          TTS_VOICE_MALE: ${{ secrets.TTS_VOICE_MALE }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
           AZURE_SPEECH_VOICE: ${{ secrets.AZURE_SPEECH_VOICE }}
@@ -199,6 +214,7 @@ jobs:
           # The values live in GitHub secrets and travel only inside this
           # command invocation; they are never echoed (and ::add-mask:: in
           # the guard step covers accidental repetition of the token).
+          echo "::add-mask::${TTS_API_KEY:-}"
           echo "::add-mask::${AZURE_SPEECH_KEY:-}"
           echo "::add-mask::${AI_API_KEY:-}"
 
@@ -208,6 +224,25 @@ jobs:
               echo "set ${2} on the Supabase project (value never printed)"
             fi
           }
+
+          if [ -n "${TTS_API_KEY:-}" ]; then
+            set_pair openai-tts TTS_API_KEY "${TTS_API_KEY}"
+            set_pair openai-tts TTS_API_URL "${TTS_API_URL:-}"
+            set_pair openai-tts TTS_MODEL "${TTS_MODEL:-}"
+            set_pair openai-tts TTS_VOICE_FEMALE "${TTS_VOICE_FEMALE:-}"
+            set_pair openai-tts TTS_VOICE_MALE "${TTS_VOICE_MALE:-}"
+          fi
+
+          # Not a secret — just which provider serves the voice. Empty means
+          # "auto" (OpenAI when TTS_API_KEY exists, otherwise Azure).
+          if [ -n "${VOICE_PROVIDER:-}" ]; then
+            case "${VOICE_PROVIDER}" in
+              openai|azure) set_pair voice-provider VOICE_PROVIDER "${VOICE_PROVIDER}" ;;
+              *)
+                echo "::error::VOICE_PROVIDER must be either 'openai' or 'azure' (got: ${VOICE_PROVIDER}). Leaving it unset so the function keeps choosing automatically."
+                ;;
+            esac
+          fi
 
           if [ -n "${AZURE_SPEECH_KEY:-}" ]; then
             if [ -z "${AZURE_SPEECH_REGION:-}" ]; then
@@ -227,8 +262,8 @@ jobs:
             set_pair ai-model AI_API_URL "${AI_API_URL:-}"
           fi
 
-          if [ -z "${AZURE_SPEECH_KEY:-}" ] && [ -z "${AI_API_KEY:-}" ]; then
-            echo "::notice::No Azure/AI secrets were provided as GitHub secrets — both functions are deployed, but cloud voice answers 501 (not_configured) and the chat AI stays off. Add AZURE_SPEECH_KEY + AZURE_SPEECH_REGION and/or AI_API_KEY + AI_MODEL under Settings > Secrets and variables > Actions, then re-run this workflow (re-running is safe: deploys are idempotent)."
+          if [ -z "${TTS_API_KEY:-}" ] && [ -z "${AZURE_SPEECH_KEY:-}" ] && [ -z "${AI_API_KEY:-}" ]; then
+            echo "::notice::No TTS/Azure/AI secrets were provided as GitHub secrets — both functions are deployed, but cloud voice answers 501 (not_configured) and the chat AI stays off. Add TTS_API_KEY (OpenAI gpt-4o-mini-tts) and/or AZURE_SPEECH_KEY + AZURE_SPEECH_REGION and/or AI_API_KEY + AI_MODEL under Settings > Secrets and variables > Actions, then re-run this workflow (re-running is safe: deploys are idempotent)."
           fi
 
       - name: Verify — live HTTP health check of both deployed functions

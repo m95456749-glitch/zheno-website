@@ -2,11 +2,12 @@
 // ZHINO — Cloud voice Edge Function checks (phase 9)
 //
 // What this script proves WITHOUT deploying anything and WITHOUT
-// any real Azure call:
+// any real TTS call (no Azure, no OpenAI, no network at all):
 //
-//   V1 — the function exists, reads AZURE_SPEECH_KEY only from
-//        Deno.env (Supabase Secrets), and no key string is in the
-//        repository
+//   V1 — the function exists, reads AZURE_SPEECH_KEY / TTS_API_KEY
+//        only from Deno.env (Supabase Secrets), keeps the Azure path
+//        and the OpenAI path behind the VOICE_PROVIDER switch, and no
+//        key string is in the repository
 //   V2 — GET health: ok/configured/voice — and never a key
 //   V3 — success: SSML goes to the right regional endpoint with
 //        fa-IR-DilaraNeural, the key travels only in the request
@@ -18,6 +19,10 @@
 //   V6 — input guards: empty text, over-long text, huge body
 //   V7 — per-IP rate limit holds after 30 requests
 //   V8 — no response body ever contains the configured key
+//   V10 — the OpenAI provider path: gpt-4o-mini-tts is called with the
+//        key only in the Authorization header, the admin voice/rate map
+//        onto the OpenAI voice + instructions, the Azure key is never
+//        touched, and every failure still maps to the same status codes
 //
 // Usage:  node scripts/verify-voice.mjs
 // ============================================================
@@ -69,6 +74,33 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
       ok('the function degrades honestly when secrets are missing');
     } else {
       fail('zhino-voice must serve via Deno and report not_configured');
+    }
+
+    // ── provider switch: the OpenAI path must be a first-class option ──
+    if (/Deno\.env\.get\('VOICE_PROVIDER'\)/.test(code)) {
+      ok('the TTS provider is selectable through VOICE_PROVIDER');
+    } else {
+      fail('zhino-voice must read VOICE_PROVIDER from Deno.env');
+    }
+    if (/Deno\.env\.get\('TTS_API_KEY'\)/.test(code)) {
+      ok('the OpenAI key is read only from Deno.env (Supabase Secrets)');
+    } else {
+      fail('zhino-voice must read TTS_API_KEY from Deno.env');
+    }
+    if (/gpt-4o-mini-tts/.test(code) && /\/v1\/audio\/speech/.test(code)) {
+      ok('the OpenAI path targets gpt-4o-mini-tts on /v1/audio/speech');
+    } else {
+      fail('zhino-voice must default to gpt-4o-mini-tts on /v1/audio/speech');
+    }
+    if (/Ocp-Apim-Subscription-Key/.test(code) && /application\/ssml\+xml/.test(code)) {
+      ok('the Azure path stays available as the alternate provider');
+    } else {
+      fail('zhino-voice must keep the Azure SSML path as a provider');
+    }
+    if (!/['"]sk-[A-Za-z0-9]{20,}/.test(code)) {
+      ok('no OpenAI-style key literal is committed in the function');
+    } else {
+      fail('a possible OpenAI key literal was found in the function source');
     }
   }
 }
@@ -659,6 +691,360 @@ function assertNoKey(bodyText, label) {
     } finally {
       globalThis.fetch = realFetch;
     }
+  }
+}
+
+/* ── V10 — the OpenAI provider path (gpt-4o-mini-tts) ────────
+   Same contract, same status codes, same admin settings — only the
+   upstream differs. Nothing here may reach the real OpenAI API.     */
+{
+  const OPENAI_URL = 'https://api.openai.com/v1/audio/speech';
+  // Assembled at runtime so this fixture never looks like a committed key.
+  const OPENAI_KEY = ['sk', 'verify', 'tts', 'placeholder'].join('-');
+  const noOpenAiKey = (text) => !text.includes(OPENAI_KEY);
+
+  const baseEnv = {
+    TTS_API_KEY: OPENAI_KEY,
+    VOICE_PROVIDER: 'openai',
+    SUPABASE_URL: 'https://voice-sim.supabase.co',
+    SUPABASE_ANON_KEY: 'sb_publishable_verify_key',
+    ALLOWED_ORIGINS: '*',
+    VOICE_UPSTREAM_TIMEOUT_MS: '400',
+  };
+
+  const realFetch = globalThis.fetch;
+  try {
+    // (الف) health + یک چرخهٔ کامل ساخت صدا با OpenAI
+    {
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const handler = await loadVoiceFunction(baseEnv, 'oai-ok');
+
+      const health = await handler(new Request(ENDPOINT, { method: 'GET' }));
+      const healthBody = await health.text();
+      const healthJson = JSON.parse(healthBody);
+      if (
+        health.status === 200 &&
+        healthJson.ok === true &&
+        healthJson.configured === true &&
+        healthJson.provider === 'openai' &&
+        healthJson.voice === 'fa-IR-DilaraNeural'
+      ) {
+        ok('V10 — GET health reports the OpenAI provider as ready');
+      } else {
+        fail(`V10 — unexpected OpenAI health response (${health.status}): ${healthBody}`);
+      }
+      if (noOpenAiKey(healthBody)) ok('V10 — the health body carries no OpenAI key');
+      else fail('V10 — the health body leaked the OpenAI key');
+
+      const res = await post(handler, { text: 'سلام! ژله & کاستر ژینو آماده است.' });
+      const audio = await res.arrayBuffer();
+      if (res.status === 200 && (res.headers.get('Content-Type') ?? '').includes('audio/mpeg')) {
+        ok('V10 — POST returns audio/mpeg through the OpenAI provider');
+      } else {
+        fail(`V10 — expected 200 audio/mpeg, got ${res.status} ${res.headers.get('Content-Type')}`);
+      }
+      if (audio.byteLength === FAKE_MP3.byteLength) {
+        ok('V10 — the exact upstream audio bytes are streamed back (contract unchanged)');
+      } else {
+        fail('V10 — audio body does not match the upstream bytes');
+      }
+
+      const call = calls.find((c) => c.url.includes('/v1/audio/speech'));
+      if (call && call.url === OPENAI_URL) {
+        ok('V10 — the request hits the official OpenAI speech endpoint');
+      } else {
+        fail(`V10 — wrong OpenAI endpoint: ${call?.url}`);
+      }
+      if (call?.headers['authorization'] === `Bearer ${OPENAI_KEY}`) {
+        ok('V10 — the OpenAI key travels only in the Authorization header');
+      } else {
+        fail('V10 — the Authorization header does not carry the OpenAI key');
+      }
+      if (call && noOpenAiKey(call.body)) {
+        ok('V10 — the request body carries no key material');
+      } else {
+        fail('V10 — the request body leaked the OpenAI key');
+      }
+
+      let payload = null;
+      try {
+        payload = JSON.parse(call?.body ?? '{}');
+      } catch {
+        payload = null;
+      }
+      if (payload && payload.model === 'gpt-4o-mini-tts' && payload.response_format === 'mp3') {
+        ok('V10 — gpt-4o-mini-tts is called with MP3 output');
+      } else {
+        fail(`V10 — unexpected OpenAI payload: ${call?.body ?? '(no call)'}`);
+      }
+      if (payload && payload.voice === 'coral' && payload.input === 'سلام! ژله & کاستر ژینو آماده است.') {
+        ok('V10 — the assistant text is passed verbatim as `input` (never the question)');
+      } else {
+        fail('V10 — the input text or the default voice was not forwarded correctly');
+      }
+      if (typeof payload?.instructions === 'string' && payload.instructions.includes('1.00 times')) {
+        ok('V10 — the admin rate maps onto the OpenAI instructions (no SSML needed)');
+      } else {
+        fail(`V10 — instructions did not carry the rate: ${payload?.instructions ?? '(none)'}`);
+      }
+      if (typeof payload?.instructions === 'string' && /Persian/i.test(payload.instructions)) {
+        ok('V10 — the instructions pin the language to Persian (Iran)');
+      } else {
+        fail('V10 — the instructions must pin Persian as the spoken language');
+      }
+    }
+
+    // (ب) تنظیمات مدیر روی مسیر OpenAI: فرید + سرعت ۱٫۱۵
+    {
+      const calls = [];
+      globalThis.fetch = makeFetchMock({
+        mode: 'ok',
+        calls,
+        restRows: [
+          { key: 'assistant_voice_name', value: 'fa-IR-FaridNeural' },
+          { key: 'assistant_voice_rate', value: '1.15' },
+          { key: 'assistant_voice_cloud', value: '1' },
+        ],
+      });
+      const handler = await loadVoiceFunction(baseEnv, 'oai-farid');
+      const res = await post(handler, { text: 'سلام' });
+      await res.arrayBuffer();
+      const call = calls.find((c) => c.url.includes('/v1/audio/speech'));
+      let payload = null;
+      try {
+        payload = JSON.parse(call?.body ?? '{}');
+      } catch {
+        payload = null;
+      }
+      if (res.status === 200 && payload?.voice === 'onyx' && payload?.instructions?.includes('1.15 times')) {
+        ok('V10 — the admin voice choice + rate reach the OpenAI request');
+      } else {
+        fail(`V10 — OpenAI request does not reflect admin settings: ${call?.body ?? '(no call)'}`);
+      }
+    }
+
+    // (ج) نام صدا و سرعت نامعتبر در دیتابیس → clamp (همان قواعد Azure)
+    {
+      const calls = [];
+      globalThis.fetch = makeFetchMock({
+        mode: 'ok',
+        calls,
+        restRows: [
+          { key: 'assistant_voice_name', value: 'en-US-AriaNeural' },
+          { key: 'assistant_voice_rate', value: '2.5' },
+        ],
+      });
+      const handler = await loadVoiceFunction(baseEnv, 'oai-clamp');
+      const res = await post(handler, { text: 'سلام' });
+      await res.arrayBuffer();
+      const call = calls.find((c) => c.url.includes('/v1/audio/speech'));
+      let payload = null;
+      try {
+        payload = JSON.parse(call?.body ?? '{}');
+      } catch {
+        payload = null;
+      }
+      if (res.status === 200 && payload?.voice === 'coral' && payload?.instructions?.includes('1.40 times')) {
+        ok('V10 — an invalid voice falls back to the female default and a wild rate is clamped to 1.4');
+      } else {
+        fail(`V10 — clamping failed on the OpenAI path: ${call?.body ?? '(no call)'}`);
+      }
+    }
+
+    // (د) کلید اصلی خاموش → ۴۰۳ و صفر تماس با OpenAI (بدون هزینه)
+    {
+      const calls = [];
+      globalThis.fetch = makeFetchMock({
+        mode: 'ok',
+        calls,
+        restRows: [{ key: 'assistant_voice_cloud', value: '0' }],
+      });
+      const handler = await loadVoiceFunction(baseEnv, 'oai-off');
+      const res = await post(handler, { text: 'سلام' });
+      const body = await res.text();
+      if (res.status === 403 && body.includes('voice_disabled')) {
+        ok('V10 — the admin master switch off → 403 voice_disabled on the OpenAI path too');
+      } else {
+        fail(`V10 — master switch off expected 403 voice_disabled, got ${res.status}`);
+      }
+      if (!calls.some((c) => c.url.includes('/v1/audio/speech'))) {
+        ok('V10 — when disabled, no OpenAI call is ever made (no spend)');
+      } else {
+        fail('V10 — OpenAI was called although the admin disabled the cloud voice');
+      }
+    }
+
+    // (ه) ورودی‌های نامعتبر هرگز به OpenAI نمی‌رسند
+    {
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const handler = await loadVoiceFunction(baseEnv, 'oai-guards');
+      const empty = await post(handler, { text: '   ' });
+      const emptyBody = await empty.text();
+      const longText = await post(handler, { text: 'ژ'.repeat(2001) });
+      const longBody = await longText.text();
+      if (empty.status === 400 && emptyBody.includes('empty_text')) {
+        ok('V10 — empty text → 400 empty_text on the OpenAI path');
+      } else {
+        fail('V10 — empty text was not rejected on the OpenAI path');
+      }
+      if (longText.status === 400 && longBody.includes('text_too_long')) {
+        ok('V10 — over-long text → 400 text_too_long on the OpenAI path');
+      } else {
+        fail('V10 — over-long text was not rejected on the OpenAI path');
+      }
+      if (calls.length === 0) {
+        ok('V10 — guarded inputs never reach OpenAI');
+      } else {
+        fail('V10 — a guarded input still triggered an OpenAI call');
+      }
+    }
+
+    // (و) نگاشت خطاهای OpenAI به همان کدهای وضعیت قبلی
+    {
+      const scenarios = [
+        ['quota', 429, 'quota_exceeded'],
+        ['auth', 502, 'upstream_auth'],
+        ['network', 502, 'upstream_error'],
+        ['hang', 504, 'upstream_timeout'],
+        ['not-audio', 502, 'invalid_upstream_audio'],
+        ['empty-audio', 502, 'invalid_upstream_audio'],
+        ['upstream', 502, 'upstream_error'],
+      ];
+      for (const [mode, wantStatus, wantError] of scenarios) {
+        const calls = [];
+        globalThis.fetch = makeFetchMock({ mode, calls });
+        const handler = await loadVoiceFunction(baseEnv, `oai-fail-${mode}`);
+        const res = await post(handler, { text: 'یک پاسخ کوتاه' });
+        const body = await res.text();
+        const named = `V10/${mode}`;
+        if (res.status === wantStatus && body.includes(wantError)) {
+          ok(`${named} — maps to ${wantStatus} ${wantError} (frontend fallback unchanged)`);
+        } else {
+          fail(`${named} — expected ${wantStatus} ${wantError}, got ${res.status}: ${body}`);
+        }
+        if (!noOpenAiKey(body)) fail(`${named} — the OpenAI key leaked into an error body`);
+      }
+    }
+
+    // (ز) انتخاب سرویس: صریح، خودکار و بازگشت کلید از AI_API_KEY
+    {
+      // Azure هم تنظیم است، ولی VOICE_PROVIDER=openai → فقط OpenAI صدا زده می‌شود
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const handler = await loadVoiceFunction(
+        {
+          ...baseEnv,
+          AZURE_SPEECH_KEY: AZURE_KEY,
+          AZURE_SPEECH_REGION: 'eastus',
+        },
+        'oai-not-azure',
+      );
+      await (await post(handler, { text: 'سلام' })).arrayBuffer();
+      if (
+        calls.some((c) => c.url.includes('/v1/audio/speech')) &&
+        !calls.some((c) => c.url.includes('tts.speech.microsoft.com'))
+      ) {
+        ok('V10 — VOICE_PROVIDER=openai wins over a configured Azure key (Azure stays untouched)');
+      } else {
+        fail(`V10 — wrong upstreams called: ${calls.map((c) => c.url).join(', ')}`);
+      }
+    }
+    {
+      // هیچ انتخابی نیست و هر دو کلید هست → خودکار OpenAI انتخاب می‌شود
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const autoEnv = { ...baseEnv, AZURE_SPEECH_KEY: AZURE_KEY, AZURE_SPEECH_REGION: 'eastus' };
+      delete autoEnv.VOICE_PROVIDER;
+      const handler = await loadVoiceFunction(autoEnv, 'oai-auto');
+      const health = JSON.parse(await (await handler(new Request(ENDPOINT, { method: 'GET' }))).text());
+      await (await post(handler, { text: 'سلام' })).arrayBuffer();
+      if (
+        health.provider === 'openai' &&
+        calls.some((c) => c.url.includes('/v1/audio/speech')) &&
+        !calls.some((c) => c.url.includes('tts.speech.microsoft.com'))
+      ) {
+        ok('V10 — auto mode prefers OpenAI when its key exists');
+      } else {
+        fail(`V10 — auto mode picked ${health.provider ?? '(nothing)'}`);
+      }
+    }
+    {
+      // فقط کلید Azure هست و انتخابی نشده → Azure دقیقاً مثل قبل کار می‌کند
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const handler = await loadVoiceFunction(
+        {
+          SUPABASE_URL: 'https://voice-sim.supabase.co',
+          SUPABASE_ANON_KEY: 'sb_publishable_verify_key',
+          ALLOWED_ORIGINS: '*',
+          AZURE_SPEECH_KEY: AZURE_KEY,
+          AZURE_SPEECH_REGION: 'eastus',
+          VOICE_UPSTREAM_TIMEOUT_MS: '400',
+        },
+        'oai-auto-azure',
+      );
+      const res = await post(handler, { text: 'سلام' });
+      await res.arrayBuffer();
+      if (res.status === 200 && calls.some((c) => c.url.includes('tts.speech.microsoft.com'))) {
+        ok('V10 — with only an Azure key, auto mode still serves the Azure path');
+      } else {
+        fail(`V10 — Azure-only auto mode failed (${res.status})`);
+      }
+    }
+    {
+      // کلید مشترک دستیار (AI_API_KEY) هم برای صدا کافی است
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const sharedEnv = { ...baseEnv };
+      delete sharedEnv.TTS_API_KEY;
+      sharedEnv.AI_API_KEY = OPENAI_KEY;
+      const handler = await loadVoiceFunction(sharedEnv, 'oai-shared-key');
+      const res = await post(handler, { text: 'سلام' });
+      await res.arrayBuffer();
+      const call = calls.find((c) => c.url.includes('/v1/audio/speech'));
+      if (res.status === 200 && call?.headers['authorization'] === `Bearer ${OPENAI_KEY}`) {
+        ok('V10 — without TTS_API_KEY the shared assistant key (AI_API_KEY) is used');
+      } else {
+        fail(`V10 — shared-key fallback failed (${res.status})`);
+      }
+    }
+    {
+      // بدون هیچ کلیدی → ۵۰۱ صادقانه و صفر تماس با OpenAI
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const handler = await loadVoiceFunction({ ALLOWED_ORIGINS: '*', VOICE_PROVIDER: 'openai' }, 'oai-nokey');
+      const res = await post(handler, { text: 'سلام' });
+      const body = await res.text();
+      if (res.status === 501 && body.includes('not_configured') && calls.length === 0) {
+        ok('V10 — no OpenAI key → 501 not_configured and zero upstream calls');
+      } else {
+        fail(`V10 — expected 501 not_configured without a call, got ${res.status}: ${body}`);
+      }
+    }
+    {
+      // آدرس سفارشی (پروکسی/سازگار با OpenAI) رعایت می‌شود
+      const calls = [];
+      globalThis.fetch = makeFetchMock({ mode: 'ok', calls });
+      const handler = await loadVoiceFunction(
+        { ...baseEnv, TTS_API_URL: 'https://tts-proxy.example/v1/audio/speech' },
+        'oai-custom-url',
+      );
+      const res = await post(handler, { text: 'سلام' });
+      await res.arrayBuffer();
+      if (
+        res.status === 200 &&
+        calls.some((c) => c.url === 'https://tts-proxy.example/v1/audio/speech') &&
+        !calls.some((c) => c.url === OPENAI_URL)
+      ) {
+        ok('V10 — TTS_API_URL overrides the endpoint (OpenAI-compatible proxies work)');
+      } else {
+        fail(`V10 — custom endpoint was not honoured: ${calls.map((c) => c.url).join(', ')}`);
+      }
+    }
+  } finally {
+    globalThis.fetch = realFetch;
   }
 }
 
