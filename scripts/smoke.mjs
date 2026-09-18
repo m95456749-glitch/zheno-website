@@ -640,7 +640,7 @@ function expectNoErrors(label, errors) {
     const textDeadline = Date.now() + 12000;
     let sawDashboard = false;
     while (Date.now() < textDeadline) {
-      if (text().includes('سفارش‌های جدید')) {
+      if (text().includes('ZH-SMOKE01')) {
         sawDashboard = true;
         break;
       }
@@ -660,8 +660,10 @@ function expectNoErrors(label, errors) {
       expectContains('admin dashboard', t, 'خروج');
       // demo-mode disclosure is visible
       expectContains('admin dashboard', t, 'نمایشی');
+      // the six statistics cards are no longer rendered at the top of the
+      // page — their labels must stay out of the default dashboard view
       for (const label of ['سفارش‌های جدید', 'در حال آماده‌سازی', 'سفارش‌های ارسال‌شده', 'سفارش‌های تکمیل‌شده', 'مجموع فروش', 'موجودی کم یا رو به اتمام']) {
-        expectContains('admin dashboard cards', t, label);
+        expectNotContains('admin dashboard (stat cards hidden by default)', t, label);
       }
       for (const label of ['داشبورد', 'سفارش‌ها', 'محصولات', 'موجودی', 'قیمت‌ها', 'تصاویر محصولات', 'محتوای سایت', 'دستور تهیه', 'تنظیمات']) {
         expectContains('admin circular launchers', t, label);
@@ -671,26 +673,16 @@ function expectNoErrors(label, errors) {
         if (launcherHrefs.some((actual) => actual.endsWith(href))) ok(`admin circular launchers link to ${href}`);
         else fail(`admin circular launchers missing ${href}`);
       }
+      // the stat cards were removed, so their customization panel must be
+      // gone too — a control that only stores preferences while no card is
+      // rendered would be fake UI
       const customizeButton = Array.from(document.querySelectorAll('button')).find((button) =>
         button.textContent?.includes('تنظیم کارت‌ها'),
       );
-      if (customizeButton) {
-        customizeButton.click();
-        let controlsShown = false;
-        for (let attempt = 0; attempt < 30; attempt += 1) {
-          if (text().includes('کارت‌های آماری') && document.querySelectorAll('[role="switch"]').length >= 6) {
-            controlsShown = true;
-            break;
-          }
-          await sleep(50);
-        }
-        if (controlsShown) {
-          ok('admin dashboard — card visibility/order controls render');
-        } else {
-          fail('admin dashboard — card visibility/order controls did not render');
-        }
+      if (!customizeButton) {
+        ok('admin dashboard — no card customization controls remain (stat cards removed)');
       } else {
-        fail('admin dashboard — card customization button missing');
+        fail('admin dashboard — the card customization button is still present');
       }
     } else {
       fail('demo login did not reach the dashboard (text: ' + text().slice(0, 220) + ')');
@@ -960,7 +952,7 @@ function expectNoErrors(label, errors) {
     setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
     document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
 
-    const reachedDashboard = await waitFor(() => text().includes('سفارش‌های جدید'));
+    const reachedDashboard = await waitFor(() => text().includes('متصل به دیتابیس'));
     if (reachedDashboard) ok('connected admin — Supabase Auth login + is_admin() accepted');
     else fail('connected admin — login did not reach the dashboard: ' + text().slice(0, 200));
     if (calls.some((c) => c.url.includes('/auth/v1/token'))) ok('connected admin — credentials sent to /auth/v1/token');
@@ -1290,7 +1282,9 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
     if (refused) ok('authz — a non-admin account is refused with an explicit message');
     else fail('authz — non-admin login was not refused: ' + text().slice(0, 180));
 
-    if (!text().includes('سفارش‌های جدید') && !text().includes('افزودن محصول')) {
+    // «آخرین سفارش‌ها» only exists on the dashboard, so it is a reliable
+    // "an admin screen rendered" probe
+    if (!text().includes('آخرین سفارش‌ها') && !text().includes('افزودن محصول')) {
       ok('authz — no admin screen was ever rendered for the non-admin account');
     } else {
       fail('authz — the admin panel opened for a non-admin account');
@@ -1731,12 +1725,16 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
       setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
       document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
 
-      const onDashboard = await waitFor(() => text().includes('سفارش‌های جدید'));
+      // the remote orders list (ZH-ADM1001) in the dashboard fold is the
+      // first dashboard-only marker — the stat cards no longer render
+      const onDashboard = await waitFor(() => text().includes('ZH-ADM1001'));
       if (onDashboard) {
         ok('admin orders — the panel opened for the verified admin session');
-        // the dashboard already proves the remote source:
+        // the dashboard already proves the remote source (per-order totals
+        // in the recent list — the combined «مجموع فروش» card is gone):
         expectContains('admin dashboard (remote)', text(), 'ZH-ADM1001');
-        expectContains('admin dashboard (remote)', text(), '۱٬۰۵۰٬۰۰۰ تومان');
+        expectContains('admin dashboard (remote)', text(), '۶۵۰٬۰۰۰ تومان');
+        expectContains('admin dashboard (remote)', text(), '۴۰۰٬۰۰۰ تومان');
       } else {
         fail('admin orders — login did not reach the dashboard: ' + text().slice(0, 200));
       }

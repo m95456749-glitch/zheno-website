@@ -3,15 +3,19 @@
 //
 // طراحی خواسته‌شده: Premium، منظم و خلوت.
 //   • هدر برند کوچک (بازگشت به سایت + حالت نمایشی/وضعیت همگام‌سازی)
-//   • یک نوار باریک آمار سفارش‌ها و فروش (همان دادهٔ واقعی قبل)
+//   • شش کارت آماری (سفارش‌های جدید تا موجودی کم) از بالای صفحه حذف
+//     شدند؛ چون پنل «تنظیم کارت‌ها» دیگر کارتی برای مدیریت نداشت
+//     (گزینه‌های ترتیب/نمایش بی‌اثر بودند)، خود دکمه و پنل هم موقتاً
+//     برداشته شدند. سرویس dashboardPreferences.ts دست‌نخورده ماند تا
+//     برگرداندن کارت‌ها در صورت نیاز ساده باشد.
 //   • هفت کارت «مستقل و هم‌سطح»: محصولات، سفارش‌ها، ربات ژینو،
 //     تنظیمات، موجودی، دستور تهیه، محتوای سایت.
 //     هر کارت = آیکون + عنوان کوتاه + یک خط توضیح + دکمهٔ گرد.
 //     هیچ بخشی زیرمجموعهٔ کارت دیگری نیست.
 //   • دو میان‌بر ظریف و جدا: «قیمت‌ها» و «تصاویر محصولات» (هر دو به
 //     همان صفحهٔ محصولات می‌روند؛ Routing دست‌نخورده است).
-//   • «تنظیم کارت‌ها» و فهرست‌های آخرین سفارش‌ها/کم‌موجودی‌ها همان
-//     منطق قبلی را دارند، فقط جمع‌شونده و بی‌سروصدا شده‌اند.
+//   • فهرست‌های آخرین سفارش‌ها/کم‌موجودی‌ها همان منطق قبلی را دارند،
+//     فقط جمع‌شونده و بی‌سروصدا شده‌اند.
 //
 // هر قابلیت فقط در صفحهٔ خودش مدیریت می‌شود؛ این صفحه فقط «ورودی»
 // تمیز و مستقیم به همان صفحه‌هاست.
@@ -23,12 +27,6 @@ import { useAdminAuth } from '../auth/AuthContext';
 import { useCatalog } from '../../services/catalog';
 import { useOrders } from '../../services/orderSync';
 import { useSettings } from '../../services/settings';
-import {
-  resetDashboardPreferences,
-  saveDashboardPreferences,
-  useDashboardPreferences,
-  type DashboardCardId,
-} from '../../services/dashboardPreferences';
 import { formatNumber, formatPrice } from '../../utils/format';
 import { formatDate } from '../format';
 import { EmptyState, StatusBadge, SyncStatusBadge } from '../components/ui';
@@ -45,16 +43,6 @@ import {
 } from '../Icons';
 import { cn } from '../../utils/cn';
 
-interface DashboardCard {
-  id: DashboardCardId;
-  label: string;
-  value: string;
-  hint: string;
-  tone: 'wine' | 'gold' | 'green' | 'neutral';
-  icon: typeof IconOrders;
-  href: string;
-}
-
 interface SectionCard {
   id: string;
   label: string;
@@ -62,15 +50,6 @@ interface SectionCard {
   to: string;
   icon: typeof IconOrders;
 }
-
-const CARD_LABELS: Record<DashboardCardId, string> = {
-  'new-orders': 'سفارش‌های جدید',
-  'preparing-orders': 'در حال آماده‌سازی',
-  'shipped-orders': 'سفارش‌های ارسال‌شده',
-  'completed-orders': 'سفارش‌های تکمیل‌شده',
-  sales: 'مجموع فروش',
-  'low-stock': 'موجودی کم یا رو به اتمام',
-};
 
 /**
  * هفت بخش اصلی پنل — هرکدام یک کارت مستقل با صفحهٔ اختصاصی خودش.
@@ -157,8 +136,6 @@ export default function AdminDashboardPage() {
   const { orders, state } = useOrders();
   const catalog = useCatalog();
   const settings = useSettings();
-  const preferences = useDashboardPreferences();
-  const [customizing, setCustomizing] = useState(false);
   /** فهرست سفارش‌ها از همان اول باز است (مدیر نباید دنبالش بگردد) */
   const [listsOpen, setListsOpen] = useState(true);
 
@@ -171,92 +148,6 @@ export default function AdminDashboardPage() {
       ),
     [catalog, settings.lowStockThreshold],
   );
-
-  const cards = useMemo<DashboardCard[]>(() => {
-    const count = (status: 'new' | 'processing' | 'shipped' | 'delivered') =>
-      orders.filter((order) => order.status === status).length;
-    const sales = orders
-      .filter((order) => order.status !== 'cancelled')
-      .reduce((sum, order) => sum + order.total, 0);
-
-    return [
-      {
-        id: 'new-orders',
-        label: CARD_LABELS['new-orders'],
-        value: formatNumber(count('new')),
-        hint: 'نیازمند بررسی و تأیید',
-        tone: 'wine',
-        icon: IconOrders,
-        href: '/admin/orders',
-      },
-      {
-        id: 'preparing-orders',
-        label: CARD_LABELS['preparing-orders'],
-        value: formatNumber(count('processing')),
-        hint: 'در حال آماده‌سازی برای ارسال',
-        tone: 'gold',
-        icon: IconOrders,
-        href: '/admin/orders',
-      },
-      {
-        id: 'shipped-orders',
-        label: CARD_LABELS['shipped-orders'],
-        value: formatNumber(count('shipped')),
-        hint: 'در مسیر مشتری',
-        tone: 'neutral',
-        icon: IconOrders,
-        href: '/admin/orders',
-      },
-      {
-        id: 'completed-orders',
-        label: CARD_LABELS['completed-orders'],
-        value: formatNumber(count('delivered')),
-        hint: 'تحویل‌شده و نهایی',
-        tone: 'green',
-        icon: IconOrders,
-        href: '/admin/orders',
-      },
-      {
-        id: 'sales',
-        label: CARD_LABELS.sales,
-        value: formatPrice(sales),
-        hint: 'سفارش‌های لغوشده محاسبه نشده‌اند',
-        tone: 'wine',
-        icon: IconOrders,
-        href: '/admin/orders',
-      },
-      {
-        id: 'low-stock',
-        label: CARD_LABELS['low-stock'],
-        value: formatNumber(lowStock.length),
-        hint: `آستانه هشدار: ${formatNumber(settings.lowStockThreshold)} عدد`,
-        tone: lowStock.length > 0 ? 'gold' : 'green',
-        icon: IconInventory,
-        href: '/admin/inventory',
-      },
-    ];
-  }, [lowStock.length, orders, settings.lowStockThreshold]);
-
-  const cardsById = new Map(cards.map((card) => [card.id, card]));
-  const visibleCards = preferences.order
-    .map((id) => cardsById.get(id))
-    .filter((card): card is DashboardCard => card !== undefined && !preferences.hidden.includes(card.id));
-
-  const moveCard = (id: DashboardCardId, direction: -1 | 1) => {
-    const index = preferences.order.indexOf(id);
-    const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= preferences.order.length) return;
-    const order = [...preferences.order];
-    [order[index], order[nextIndex]] = [order[nextIndex], order[index]];
-    saveDashboardPreferences({ ...preferences, order });
-  };
-
-  const setHidden = (id: DashboardCardId, hidden: boolean) => {
-    const nextHidden = hidden
-      ? [...preferences.hidden, id]
-      : preferences.hidden.filter((cardId) => cardId !== id);
-    saveDashboardPreferences({ ...preferences, hidden: nextHidden });
-  };
 
   const recent = orders.slice(0, 5);
 
@@ -279,36 +170,6 @@ export default function AdminDashboardPage() {
           {isDatabaseAuth && <SyncStatusBadge />}
         </div>
       </header>
-
-      {/* ── نوار باریک آمار — همان شش شاخص قبلی، در یک ردیف ───── */}
-      <section className="adm-stat-strip" aria-label="وضعیت سفارش‌ها و فروش">
-        {visibleCards.length > 0 ? (
-          visibleCards.map((card) => (
-            <Link
-              key={card.id}
-              to={card.href}
-              className={cn('adm-stat-chip', `adm-stat-chip-${card.tone}`)}
-              title={card.hint}
-            >
-              <small>{card.label}</small>
-              <strong>{card.value}</strong>
-            </Link>
-          ))
-        ) : (
-          <p className="adm-stat-empty">
-            همهٔ شاخص‌ها پنهان شده‌اند — از «تنظیم کارت‌ها» برگردانیدشان.
-          </p>
-        )}
-        <button
-          type="button"
-          className="adm-dashboard-settings"
-          onClick={() => setCustomizing((open) => !open)}
-          aria-expanded={customizing}
-        >
-          <IconSettings className="h-4 w-4" />
-          تنظیم کارت‌ها
-        </button>
-      </section>
 
       {/* ── هفت کارت مستقل و هم‌سطح ───────────────────────────── */}
       <nav className="adm-card-grid" aria-label="بخش‌های پنل مدیریت">
@@ -343,35 +204,6 @@ export default function AdminDashboardPage() {
           );
         })}
       </div>
-
-      {/* ── تنظیم ترتیب/نمایش شاخص‌ها — جمع‌شونده و بی‌سروصدا ─── */}
-      {customizing && (
-        <section className="adm-dashboard-customizer mb-2" aria-label="تنظیم کارت‌های داشبورد">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-sm font-bold text-wine-950">کارت‌های آماری</h2>
-              <p className="mt-1 text-[0.7rem] leading-6 text-mocha">
-                فقط نمایش و ترتیب کارت‌ها در همین مرورگر تغییر می‌کند؛ اطلاعات اصلی حذف نمی‌شود.
-              </p>
-            </div>
-            <button type="button" onClick={() => resetDashboardPreferences()} className="adm-quiet-link shrink-0">
-              بازنشانی
-            </button>
-          </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            {preferences.order.map((id, index) => (
-              <div key={id} className="adm-dashboard-option">
-                <span className="min-w-0 flex-1 truncate text-[0.75rem] font-bold text-espresso">{CARD_LABELS[id]}</span>
-                <button type="button" onClick={() => moveCard(id, -1)} disabled={index === 0} aria-label={`انتقال ${CARD_LABELS[id]} به جایگاه بالاتر`} className="adm-order-button">↑</button>
-                <button type="button" onClick={() => moveCard(id, 1)} disabled={index === preferences.order.length - 1} aria-label={`انتقال ${CARD_LABELS[id]} به جایگاه پایین‌تر`} className="adm-order-button">↓</button>
-                <button type="button" role="switch" aria-checked={!preferences.hidden.includes(id)} onClick={() => setHidden(id, !preferences.hidden.includes(id))} className={cn('adm-visibility-button', !preferences.hidden.includes(id) && 'active')}>
-                  {preferences.hidden.includes(id) ? 'نمایش' : 'نمایش داده می‌شود'}
-                </button>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
 
       {/* ── فهرست‌های تکمیلی: جمع‌شونده تا صفحهٔ اصلی خلوت بماند ── */}
       <section className="adm-fold">
