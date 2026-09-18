@@ -39,6 +39,7 @@ import AdminInventoryPage from './admin/pages/AdminInventoryPage';
 import AdminRecipesPage from './admin/pages/AdminRecipesPage';
 import AdminSiteContentPage from './admin/pages/AdminSiteContentPage';
 import AdminSettingsPage from './admin/pages/AdminSettingsPage';
+import AdminAssistantPage from './admin/pages/AdminAssistantPage';
 
 /** Storefront — the existing shell and routes, kept intact. */
 function Storefront() {
@@ -90,6 +91,9 @@ export default function App() {
           <Route path="recipes" element={<AdminRecipesPage />} />
           <Route path="site-content" element={<AdminSiteContentPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
+          {/* «ربات ژینو» — همهٔ امکانات دستیار (صدا، رفتار، وضعیت سرویس)
+              فقط در این یک صفحهٔ جمع‌شونده مدیریت می‌شود */}
+          <Route path="assistant" element={<AdminAssistantPage />} />
           <Route path="*" element={<Navigate to="/admin/dashboard" replace />} />
         </Route>
 

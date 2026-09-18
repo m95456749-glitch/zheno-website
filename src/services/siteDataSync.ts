@@ -248,6 +248,20 @@ export async function pushRemoteContent(content: SiteContent): Promise<void> {
   if (error) throw new Error(describe(error));
 }
 
+/**
+ * Generic public key/value write, used by the assistant voice settings.
+ * These are plain published site_content rows — the exact same table and
+ * RLS the storefront content editor already writes to (admin-only writes,
+ * public reads). Nothing secret may ever be stored through this helper:
+ * the rows are readable by every visitor by design.
+ */
+export async function pushRemoteVoiceSettings(rows: Record<string, string>): Promise<void> {
+  const supabase = await requireSupabase();
+  const payload = Object.entries(rows).map(([key, value]) => ({ key, value, published: true }));
+  const { error } = await supabase.from('site_content').upsert(payload, { onConflict: 'key' });
+  if (error) throw new Error(describe(error));
+}
+
 export async function pushRemoteRecipe(recipe: Recipe, active = true): Promise<void> {
   const supabase = await requireSupabase();
   const { error } = await supabase.from('recipes').upsert(

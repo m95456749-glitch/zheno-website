@@ -228,6 +228,28 @@ function clampText(text: string, max: number): string {
  * کارت اطلاعات فروشگاه از دیتابیس واقعی.
  * خروجی: متن فشرده برای مدل، یا null اگر دیتابیس در دسترس نبود.
  */
+/**
+ * لحن پاسخ‌گویی از «تنظیمات ربات» در پنل مدیریت (غیرمحرمانه).
+ * فقط مقدار دقیق 'formal' معتبر است؛ هر چیز دیگر (نبود ردیف، خرابی
+ * شبکه یا دیتابیس، مقدار دست‌کاری‌شده) یعنی لحن پیش‌فرض خودمانی —
+ * همان رفتاری که فروشگاه تا امروز داشته است.
+ */
+async function readAssistantTone(): Promise<'friendly' | 'formal'> {
+  try {
+    interface ToneRow {
+      key: string;
+      value: string;
+    }
+    const rows = await restSelect<ToneRow>(
+      'site_content?select=key,value&key=eq.assistant_tone&published=eq.true&limit=1',
+    );
+    const value = rows[0]?.value ?? '';
+    return value === 'formal' ? 'formal' : 'friendly';
+  } catch {
+    return 'friendly';
+  }
+}
+
 async function readStoreDigest(): Promise<string | null> {
   try {
     const [products, variants, inventory, recipes, settingsRows] = await Promise.all([
@@ -505,11 +527,20 @@ Deno.serve(async (request: Request): Promise<Response> => {
   const catalog = storeDigest ?? clientCatalog;
   const history = sanitizeHistory(body.history);
 
+  // لحن از پنل مدیریت (غیرمحرمانه)؛ در حالت خودمانی دقیقاً همان متن
+  // قبلی سیستم‌پرامپت فرستاده می‌شود و فقط حالت رسمی یک قاعده اضافه می‌کند.
+  const tone = await readAssistantTone();
+  const systemPrompt =
+    tone === 'formal'
+      ? SYSTEM_PROMPT +
+        '\n\n۱۲) لحن این گفتگو رسمی و محتاط باشد؛ از جمله‌های کوتاه، مؤدبانه و بدون صمیمیت بیش از حد استفاده کن و هیچ کنایه یا شوخی نکن.'
+      : SYSTEM_PROMPT;
+
   const payload: Record<string, unknown> = {
     model: AI_MODEL,
     temperature: 0.4,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: buildUserContent(message, catalog, history) },
     ],
   };

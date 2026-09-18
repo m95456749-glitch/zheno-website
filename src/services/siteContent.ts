@@ -63,10 +63,19 @@ export function getSiteContent(): SiteContent {
 }
 
 export function saveSiteContent(next: SiteContent): void {
+  // Only this module's own keys are ever written — other published
+  // site_content rows (e.g. the non-secret assistant voice settings)
+  // ride along in the merged snapshot for reads but must never be
+  // re-upserted by the content editor.
+  const own: SiteContent = { ...DEFAULT_SITE_CONTENT };
+  for (const key of Object.keys(DEFAULT_SITE_CONTENT) as (keyof SiteContent)[]) {
+    if (typeof next[key] === 'string') own[key] = next[key];
+  }
   if (getSupabase()) {
-    runRemoteSiteWrite('ذخیره محتوای سایت', () => pushRemoteContent(next));
+    runRemoteSiteWrite('ذخیره محتوای سایت', () => pushRemoteContent(own));
     return;
   }
+  next = own;
 
   const overlay: ContentOverlay = {};
   for (const key of Object.keys(DEFAULT_SITE_CONTENT) as (keyof SiteContent)[]) {
