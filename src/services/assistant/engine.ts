@@ -36,9 +36,11 @@ import {
   isAvailable,
   productsOf,
   searchProducts,
+  sellableVariants,
 } from './knowledge';
 import type {
   AssistantCapabilityId,
+  AssistantCartOffer,
   AssistantContext,
   AssistantLink,
   AssistantProductFact,
@@ -83,6 +85,14 @@ export const ASSISTANT_CAPABILITIES: AssistantCapabilityCard[] = [
     title: 'قیمت و موجودی واقعی',
     description: 'پاسخ فقط از کاتالوگ همین فروشگاه؛ اگر محصولی نباشد، صریح گفته می‌شود.',
     example: 'قیمت ژله توت فرنگی چند است؟',
+    status: 'ready',
+  },
+  {
+    id: 'add-to-cart',
+    title: 'افزودن به سبد خرید با تأیید مشتری',
+    description:
+      'محصول را با قیمت و موجودی واقعی پیشنهاد می‌دهد و فقط بعد از تأیید مشتری به همان سبد فروشگاه اضافه می‌کند؛ هیچ پرداخت یا تسویه‌حسابی خودکار اجرا نمی‌شود.',
+    example: 'ژله توت فرنگی را به سبد خرید اضافه کن',
     status: 'ready',
   },
   {
@@ -287,6 +297,39 @@ function productLinks(products: AssistantProductFact[], max = 3): AssistantLink[
     .map((product) => link(`صفحهٔ ${product.shortName}`, product.to));
 }
 
+/**
+ * پیشنهاد «افزودن به سبد» برای همان محصولاتی که در متن پاسخ آمده‌اند.
+ *
+ * این فقط یک *پیشنهاد* است: رابط کاربری تا وقتی مشتری دکمهٔ تأیید را
+ * نزده هیچ چیزی به سبد اضافه نمی‌کند و هیچ تسویه‌حسابی اجرا نمی‌شود.
+ * گزینهٔ پیشنهادی، ارزان‌ترین گزینهٔ قابل فروش همان محصول است — همان
+ * عددی که در متن پاسخ هم نوشته شده، پس قیمت کارت و متن هرگز جدا نمی‌افتند.
+ */
+export function cartOffersFor(
+  products: AssistantProductFact[],
+  max = 3,
+): AssistantCartOffer[] {
+  const offers: AssistantCartOffer[] = [];
+  for (const product of products) {
+    if (offers.length >= max) break;
+    const variant = cheapestVariant(product);
+    if (!variant) continue; // ناموجود → پیشنهادی ساخته نمی‌شود
+    offers.push({
+      productId: product.id,
+      variantId: variant.id,
+      label: `${product.shortName}${variant.weight ? ` ${variant.weight}` : ''}`.trim(),
+      price: variant.price,
+      stock: variant.stock,
+    });
+  }
+  return offers;
+}
+
+/** گزینه‌های قابل فروش یک محصول — برای کارت محصول در گفتگو */
+export function sellableOptionsOf(product: AssistantProductFact) {
+  return sellableVariants(product);
+}
+
 function bubble(...lines: (string | null | undefined)[]): string {
   return lines.filter((line): line is string => typeof line === 'string' && line.length > 0).join('\n');
 }
@@ -297,13 +340,23 @@ type LocalReply = Omit<AssistantReply, 'dataSource'>;
 function reply(
   capability: AssistantReply['capability'],
   text: string,
-  extra: { links?: AssistantLink[]; suggestions?: AssistantSuggestion[]; grounded?: boolean } = {},
+  extra: {
+    links?: AssistantLink[];
+    suggestions?: AssistantSuggestion[];
+    grounded?: boolean;
+    /** کارت‌های محصول همین پاسخ (همان داده‌ای که در متن آمده) */
+    products?: AssistantProductFact[];
+    /** پیشنهاد افزودن به سبد — منتظر تأیید مشتری می‌ماند */
+    cartOffer?: AssistantCartOffer;
+  } = {},
 ): LocalReply {
   return {
     capability,
     text,
     links: extra.links,
     suggestions: extra.suggestions,
+    products: extra.products,
+    cartOffer: extra.cartOffer,
     source: 'local',
     grounded: extra.grounded ?? false,
   };
@@ -391,8 +444,9 @@ function catalogReply(context: AssistantContext): LocalReply {
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
       grounded: true,
+      products: context.products.filter(isAvailable).slice(0, 4),
       suggestions: [
-        { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
+        { label: 'قیمت و موجودی', prompt: 'قیمت محصولات چقدر است؟' },
         { label: 'پیشنهاد دسر', prompt: 'یک دسر مناسب مهمانی پیشنهاد بده' },
       ],
     },
@@ -507,6 +561,7 @@ function flavorReply(context: AssistantContext, products: AssistantProductFact[]
     {
       links: productLinks(products),
       grounded: true,
+      products: products.slice(0, 4),
       suggestions: [
         { label: 'طرز تهیه', prompt: `طرز تهیه ${products[0].shortName} چطور است؟` },
         { label: 'ترکیب طعم‌ها', prompt: `${products[0].flavorLabel} با چه طعمی خوب می‌شود؟` },
@@ -529,6 +584,16 @@ function priceStockReply(context: AssistantContext, products: AssistantProductFa
     return reply('price-stock', bubble('قیمت و موجودی امروز:', ...lines), {
       links: [...productLinks(products), link('همهٔ محصولات', '/products')],
       grounded: true,
+      products: products.slice(0, 5),
+      suggestions: [
+        {
+          // نام دستهٔ کوتاه («ژله»/«کاستر») و نه نام کامل محصول، تا پرسش
+          // دقیقاً به همان دستور رسمی روی بسته برسد.
+          label: `طرز تهیه ${products[0].category === 'jelly' ? 'ژله' : 'کاستر'}`,
+          prompt: `طرز تهیه ${products[0].category === 'jelly' ? 'ژله' : 'کاستر'} چطور است؟`,
+        },
+        { label: 'افزودن به سبد', prompt: `می‌شود ${products[0].shortName} را به سبد خرید اضافه کنی؟` },
+      ],
     });
   }
 
@@ -725,6 +790,7 @@ function budgetReply(context: AssistantContext, budget: number): LocalReply {
     {
       links: [...productLinks(picked.map((item) => item.product)), link('سبد خرید', '/cart')],
       grounded: true,
+      products: picked.map((item) => item.product),
       suggestions: [
         { label: 'دستور تهیه', prompt: 'طرز تهیه کاستر چطور است؟' },
         { label: 'ترکیب طعم‌ها', prompt: 'چه ترکیب طعمی پیشنهاد می‌کنید؟' },
@@ -801,11 +867,12 @@ function pairingReply(context: AssistantContext, products: AssistantProductFact[
       'این ترکیب را پیشنهاد می‌کنم:',
       ...suggestions.map((product) => `• ${describeProduct(product)}`),
       note,
-      'هر دو را بگذارید در سبد و یک دسر لایه‌ای درست کنید.',
+      'اگر دوست داشتید، همین‌جا با تأیید خودتان به سبد اضافه‌شان می‌کنم.',
     ),
     {
       links: [...productLinks(suggestions, 3), link('سبد خرید', '/cart')],
       grounded: true,
+      products: suggestions.slice(0, 3),
       suggestions: [
         { label: 'مقدار برای ۸ نفر', prompt: 'برای ۸ نفر چند بسته لازم است؟' },
         { label: 'دستور تهیه', prompt: 'طرز تهیه ژله چطور است؟' },
@@ -904,6 +971,7 @@ function suggestionReply(context: AssistantContext, preferences: Preference[]): 
     {
       links: [...productLinks(picks, 3), link('سبد خرید', '/cart')],
       grounded: true,
+      products: picks.slice(0, 3),
       suggestions: [
         { label: 'دستور تهیه', prompt: picks[0].category === 'jelly' ? 'طرز تهیه ژله چطور است؟' : 'طرز تهیه کاستر چطور است؟' },
         { label: 'مقدار برای ۸ نفر', prompt: 'برای ۸ نفر چند بسته لازم است؟' },
@@ -927,12 +995,110 @@ function shippingReply(context: AssistantContext): LocalReply {
   );
 }
 
+/**
+ * «این را به سبد اضافه کن» → پیشنهاد صریح، نه افزودن خودکار.
+ *
+ * خروجی این تابع فقط یک *پیشنهاد* است (cartOffer). رابط کاربری دکمهٔ
+ * تأیید را نشان می‌دهد و تنها وقتی مشتری «بله، اضافه کن» را زد، همان
+ * مسیر همیشگی سبد فروشگاه (CartContext.addItemWithToast) صدا زده می‌شود.
+ * هیچ پرداخت یا تسویه‌حسابی از اینجا اجرا نمی‌شود.
+ */
+function addToCartReply(
+  context: AssistantContext,
+  products: AssistantProductFact[],
+): LocalReply {
+  const offer = cartOffersFor(products, 1)[0];
+
+  if (!offer) {
+    // نام محصول را یافته‌ایم ولی همین لحظه قابل سفارش نیست: صادقانه
+    // می‌گوییم و هیچ پیشنهاد افزودنی نمی‌سازیم. (طعم دیگری را بی‌اجازه
+    // جایگزین نمی‌کنیم.)
+    const namedOutOfStock = products.filter((item) => !isAvailable(item));
+    if (namedOutOfStock.length > 0) {
+      const first = namedOutOfStock[0];
+      const others = context.products.filter(isAvailable).slice(0, 3);
+      return reply(
+        'add-to-cart',
+        bubble(
+          `«${first.shortName}» را پیدا کردم، ولی همین لحظه موجود نیست و چیزی به سبد اضافه نکردم.`,
+          others.length > 0
+            ? `طعم‌های موجود الان: ${others.map((item) => item.shortName).join('، ')}.`
+            : 'بقیهٔ محصولات را هم که نگاه می‌کنم، فعلاً قابل سفارش نیستند.',
+          'هر وقت موجود شد، همین‌جا بگویید تا با تأیید خودتان اضافه کنم.',
+        ),
+        {
+          links: [link('مشاهدهٔ محصولات', '/products')],
+          grounded: true,
+          products: namedOutOfStock.slice(0, 3),
+          suggestions: [{ label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' }],
+        },
+      );
+    }
+
+    const available = context.products.filter(isAvailable);
+    const guess = available[0];
+    if (!guess) {
+      return reply(
+        'add-to-cart',
+        bubble(
+          'الان محصول قابل سفارشی در فروشگاه نمی‌بینم؛ برای همین چیزی به سبد اضافه نمی‌کنم.',
+          'وقتی موجودی برگشت، همین‌جا بگویید تا اضافه کنم.',
+        ),
+        { links: [link('مشاهدهٔ محصولات', '/products')], grounded: true },
+      );
+    }
+    const fallback = cartOffersFor([guess], 1)[0];
+    if (!fallback) {
+      return reply(
+        'add-to-cart',
+        'کدام محصول را اضافه کنم؟ نام طعم را بگویید (مثلاً «ژله انار») تا با تأیید شما به سبد اضافه کنم.',
+        { links: [link('مشاهدهٔ محصولات', '/products')], grounded: true },
+      );
+    }
+    return reply(
+      'add-to-cart',
+      bubble(
+        'اسم محصول را پیدا نکردم؛ نزدیک‌ترین گزینهٔ موجود این است:',
+        `• ${describeProduct(guess)}`,
+        'همین را اضافه کنم؟ دکمهٔ تأیید را بزنید تا به سبد خرید اضافه شود.',
+      ),
+      {
+        links: [link('مشاهدهٔ محصولات', '/products')],
+        grounded: true,
+        products: [guess],
+        suggestions: [{ label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' }],
+      },
+    );
+  }
+
+  const product = products.find((item) => item.id === offer.productId);
+  const stockNote =
+    offer.stock <= context.settings.lowStockThreshold
+      ? ` (تنها ${fa(offer.stock)} عدد باقی مانده)`
+      : '';
+
+  return reply(
+    'add-to-cart',
+    bubble(
+      `حتماً — این گزینه را پیدا کردم: ${offer.label} به قیمت ${price(offer.price)}${stockNote}.`,
+      'دکمهٔ «بله، اضافه کن» را بزنید تا به سبد خرید اضافه شود؛ پرداخت و ثبت سفارش با خودتان است و من خودکار انجامش نمی‌دهم.',
+    ),
+    {
+      links: [link('سبد خرید', '/cart')],
+      grounded: true,
+      products: product ? [product] : [],
+      cartOffer: offer,
+      suggestions: [{ label: 'دیدن سبد خرید', prompt: 'سبد خریدم چه چیزهایی دارد؟' }],
+    },
+  );
+}
+
 function orderHelpReply(): LocalReply {
   return reply(
     'order-help',
     bubble(
       'سفارش خیلی ساده است:',
-      '۱. محصول را از صفحهٔ محصولات انتخاب و «افزودن به سبد خرید» را بزنید.',
+      '۱. محصول را انتخاب کنید — از صفحهٔ محصولات، یا همین‌جا بگویید تا با تأیید خودتان به سبد اضافه کنم.',
       '۲. در سبد خرید تعداد را بررسی کنید.',
       '۳. در تسویه حساب مشخصات تحویل‌گیرنده را پر کنید و سفارش را ثبت کنید.',
       'جایی گیر کردید؟ همین‌جا بنویسید، با هم ردیفش می‌کنیم.',
@@ -977,6 +1143,23 @@ const INTENT_RULES: IntentRule[] = [
       'می خواهم',
       'دوست دارم',
       'شیرینی',
+    ],
+  },
+  {
+    id: 'add-to-cart',
+    keywords: [
+      'اضافه کن',
+      'اضافه‌اش کن',
+      'بیفزا',
+      'بگذار توی سبد',
+      'بذار تو سبد',
+      'به سبد',
+      'توی سبد',
+      'سبد خرید اضافه',
+      'سفارش بده',
+      'اضافه میشه',
+      'برام بگذار',
+      'برام بذار',
     ],
   },
   { id: 'shipping', keywords: ['ارسال', 'کرایه', 'پست', 'رایگان', 'هزینه ارسال', 'پیک'] },
@@ -1050,6 +1233,13 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
   const people = parsePeople(normalized);
   const intent = detectIntent(normalized);
   const flavorProducts = matchFlavorProducts(context, normalized);
+
+  // «این را به سبد اضافه کن» — پیش از بقیهٔ موضوع‌ها بررسی می‌شود، چون
+  // واژهٔ «سبد» در غیر این صورت به راهنمای سفارش می‌رفت. خروجی فقط یک
+  // پیشنهاد است؛ افزودن واقعی با تأیید مشتری در رابط کاربری انجام می‌شود.
+  if (intent.id === 'add-to-cart') {
+    return addToCartReply(context, flavorProducts);
+  }
 
   // اولویت‌ها: عدد نفرات ← بودجه ← تشخیص موضوع ← تطبیق طعم
   if (people !== null && (intent.id === 'servings' || intent.score === 0 || normalized.includes('نفر'))) {

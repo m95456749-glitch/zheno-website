@@ -38,6 +38,7 @@ export type AssistantCapabilityId =
   | 'budget'
   | 'pairing'
   | 'suggestion'
+  | 'add-to-cart'
   | 'shipping'
   | 'order-help'
   | 'scope';
@@ -65,6 +66,18 @@ export interface AssistantReply {
   text: string;
   links?: AssistantLink[];
   suggestions?: AssistantSuggestion[];
+  /**
+   * کارت‌های محصولِ همین پاسخ — همان دادهٔ واقعی کاتالوگ که متن پاسخ
+   * از آن ساخته شده (قیمت/موجودی واقعی). اختیاری است: پاسخ‌هایی که
+   * محصولی معرفی نمی‌کنند هیچ کارتی ندارند. هیچ درخواست تازه‌ای برای
+   * ساختن این فهرست زده نمی‌شود.
+   */
+  products?: AssistantProductFact[];
+  /**
+   * پیشنهاد افزودن به سبد خرید — فقط با تأیید مشتری اجرا می‌شود و
+   * هیچ‌وقت به تسویه‌حساب یا پرداخت ختم نمی‌شود.
+   */
+  cartOffer?: AssistantCartOffer;
   /** قابلیتی که پاسخ را ساخته — برای توسعه و تحلیل بعدی */
   capability: AssistantCapabilityId | 'ai' | 'open';
   source: AssistantReplySource;
@@ -77,6 +90,27 @@ export interface AssistantReply {
   dataSource: AssistantDataSource;
 }
 
+/**
+ * پیشنهاد افزودن یک محصول به سبد خرید.
+ *
+ * این پیشنهاد «درخواست افزودن» است، نه افزودن: تا وقتی مشتری دکمهٔ
+ * تأیید را نزده هیچ چیزی به سبد اضافه نمی‌شود و هیچ پرداخت یا
+ * تسویه‌حسابی اجرا نمی‌شود.
+ */
+export interface AssistantCartOffer {
+  productId: string;
+  variantId: string;
+  /** متن کوتاه برای جملهٔ تأیید: «ژله توت فرنگی ۲۵۰ گرم» */
+  label: string;
+  /** قیمت واقعی همین گزینه (تومان) */
+  price: number;
+  /** موجودی واقعی همین گزینه */
+  stock: number;
+}
+
+/** نتیجهٔ تصمیم مشتری روی یک پیشنهاد افزودن به سبد */
+export type AssistantCartOfferState = 'pending' | 'added' | 'dismissed';
+
 /** یک پیام در محیط گفتگو */
 export interface AssistantChatMessage {
   id: number;
@@ -84,6 +118,12 @@ export interface AssistantChatMessage {
   text: string;
   links?: AssistantLink[];
   suggestions?: AssistantSuggestion[];
+  /** کارت‌های محصول زیر این پاسخ (اختیاری) */
+  products?: AssistantProductFact[];
+  /** پیشنهاد افزودن به سبد — فقط با تأیید مشتری اجرا می‌شود */
+  cartOffer?: AssistantCartOffer;
+  /** وضعیت همان پیشنهاد: در انتظار تأیید / اضافه شد / رد شد */
+  cartState?: AssistantCartOfferState;
   /** یادداشت کوچک زیر حباب (شفاف‌سازی وضعیت اتصال یا «برآورد تقریبی») */
   note?: string;
   source?: AssistantReplySource;
