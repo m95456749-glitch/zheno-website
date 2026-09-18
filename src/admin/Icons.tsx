@@ -95,6 +95,16 @@ export function IconContent({ className = 'h-5 w-5' }: IconProps) {
   );
 }
 
+export function IconAssistant({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      {/* حباب گفت‌وگو + موج صوت — نماد «ربات ژینو» */}
+      <path d="M8 3h8a4.5 4.5 0 0 1 4.5 4.5v3A4.5 4.5 0 0 1 16 15h-1.2l-4.3 4.3V15H8a4.5 4.5 0 0 1-4.5-4.5v-3A4.5 4.5 0 0 1 8 3Z" />
+      <path d="M8.5 11l1.5-2.5 1.8 4 1.6-3h2.1" />
+    </svg>
+  );
+}
+
 export function IconSettings({ className = 'h-5 w-5' }: IconProps) {
   return (
     <svg {...svgProps(className)}>

@@ -3290,7 +3290,7 @@ async function loadAssistantEdgeFunction(env, marker) {
     }
 
     const readTables = Array.from(new Set(restCalls.map((call) => call.url.split('/rest/v1/')[1].split('?')[0])));
-    const allowedTables = ['products', 'product_variants', 'inventory', 'recipes', 'site_settings'];
+    const allowedTables = ['products', 'product_variants', 'inventory', 'recipes', 'site_settings', 'site_content'];
     const unexpected = readTables.filter((table) => !allowedTables.includes(table));
     if (unexpected.length === 0) ok(`edge function — reads only public catalog tables (${readTables.join(', ')})`);
     else fail(`edge function — unexpected table reads: ${unexpected.join(', ')}`);
@@ -3300,6 +3300,40 @@ async function loadAssistantEdgeFunction(env, marker) {
       ok('edge function — store reads use the public anon key only (RLS applies)');
     } else {
       fail(`edge function — unexpected authorization for store reads: ${usedKeys.join(' | ')}`);
+    }
+
+    // (الف-۲) لحن پاسخ‌ها (فاز ۱۱): فقط مقدار دقیق 'formal' قانون رسمی را می‌افزاید
+    const friendlyPrompt = modelCallBodies[0]?.messages?.[0]?.content ?? '';
+    {
+      const rowsBackup = ASSISTANT_DB_ROWS.site_content;
+      // ۱) مقدار رسمی → قانون ۱۲ به پرامپت افزوده می‌شود
+      ASSISTANT_DB_ROWS.site_content = [{ key: 'assistant_tone', value: 'formal' }];
+      await post({ message: 'سلام', history: [], locale: 'fa-IR' });
+      const formalPrompt = modelCallBodies.at(-1)?.messages?.[0]?.content ?? '';
+      if (formalPrompt.includes('لحن این گفتگو رسمی')) {
+        ok('edge function — the formal tone switch appends the formal rule to the prompt');
+      } else {
+        fail('edge function — formal tone was not reflected in the model prompt');
+      }
+      // ۲) مقدار نامعتبر → دقیقاً همان پرامپت دوستانهٔ اولیه
+      ASSISTANT_DB_ROWS.site_content = [{ key: 'assistant_tone', value: 'FORMAL ' }];
+      await post({ message: 'سلام دوباره', history: [], locale: 'fa-IR' });
+      const garbagePrompt = modelCallBodies.at(-1)?.messages?.[0]?.content ?? '';
+      if (garbagePrompt === friendlyPrompt && !garbagePrompt.includes('لحن این گفتگو رسمی')) {
+        ok('edge function — an invalid tone value falls back to the byte-identical friendly prompt');
+      } else {
+        fail('edge function — an invalid tone changed the system prompt (allowlist failed)');
+      }
+      // ۳) نبود ردیف → باز هم همان پرامپت دوستانه
+      ASSISTANT_DB_ROWS.site_content = [];
+      await post({ message: 'بازم سلام', history: [], locale: 'fa-IR' });
+      const defaultPrompt = modelCallBodies.at(-1)?.messages?.[0]?.content ?? '';
+      if (defaultPrompt === friendlyPrompt) {
+        ok('edge function — without a tone row the friendly prompt stays untouched');
+      } else {
+        fail('edge function — missing tone row changed the system prompt');
+      }
+      ASSISTANT_DB_ROWS.site_content = rowsBackup;
     }
 
     // (ب) بررسی سلامت

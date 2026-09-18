@@ -7,6 +7,7 @@
 
 import type { ComponentType } from 'react';
 import {
+  IconAssistant,
   IconContent,
   IconDashboard,
   IconInventory,
@@ -30,6 +31,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'داشبورد',
     desc: 'نمای کلی فروشگاه در یک نگاه',
     icon: IconDashboard,
+  },
+  {
+    to: '/admin/assistant',
+    label: 'ربات ژینو',
+    desc: 'صدا، رفتار و سلامت دستیار فروشگاه — همه در یک جا',
+    icon: IconAssistant,
   },
   {
     to: '/admin/products',

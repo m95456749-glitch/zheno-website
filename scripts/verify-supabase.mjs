@@ -189,11 +189,23 @@ if (!existsSync(assistantFn)) {
   if (browserSafe) ok('assistant Edge Function degrades gracefully when unconfigured');
   else fail('assistant Edge Function must answer not_configured when secrets are missing');
 
+  // Phase 11 — reply tone: read from public site_content only, and only the
+  // exact string 'formal' may diverge from the default friendly prompt
+  // (a broken/unknown value can never reshape the system prompt).
+  const toneReadOk = /async function readAssistantTone\(\)/.test(fn) && /site_content/.test(fn);
+  if (toneReadOk) ok('assistant tone is read from public site_content (no secrets involved)');
+  else fail('assistant tone must be read via readAssistantTone from site_content');
+  const toneStrict = /return value === 'formal' \? 'formal' : 'friendly';/.test(fn.replace(/\s+/g, ' '));
+  if (toneStrict) ok("assistant tone allowlist: only the exact value 'formal' is honoured");
+  else fail("assistant tone must treat anything but the exact 'formal' as friendly");
+
   // Phase 6 — the function reads the store itself. It may only touch the
   // public catalog/content tables, only with the anon key, and only
   // read-only: no orders, no customer data, never a service key.
   const readTables = Array.from(fn.matchAll(/restSelect<[^>]*>\(\s*'([a-z_]+)\?/g)).map((m) => m[1]);
-  const allowedTables = ['products', 'product_variants', 'inventory', 'recipes', 'site_settings'];
+  // site_content: public key/value table — the assistant reads the public
+  // «assistant_tone» switch from it (phase 11); published-read RLS applies.
+  const allowedTables = ['products', 'product_variants', 'inventory', 'recipes', 'site_settings', 'site_content'];
   const offLimits = readTables.filter((table) => !allowedTables.includes(table));
   if (offLimits.length === 0 && readTables.length >= 3) {
     ok(`assistant Edge Function reads only public store tables (${readTables.join(', ')})`);
@@ -241,6 +253,88 @@ if (!existsSync(assistantFn)) {
   }
 }
 
+// ── 7b. Voice Edge Function + admin voice settings (offline) ──
+// Phase 9 ships the cloud Persian voice: the Azure key lives only in
+// Supabase Secrets, the function enforces the admin master switch and
+// the Persian voice allow-list itself, reads ONLY the public
+// site_content table (the same table/RLS the content editor uses — no
+// migration), and the admin settings module/section must stay free of
+// any secret material.
+const voiceFn = join(root, 'supabase', 'functions', 'zhino-voice', 'index.ts');
+if (!existsSync(voiceFn)) {
+  fail('supabase/functions/zhino-voice/index.ts is missing');
+} else {
+  ok('voice Edge Function exists');
+  const fn = readFileSync(voiceFn, 'utf8');
+
+  if (/Deno\.env\.get\('AZURE_SPEECH_KEY'\)/.test(fn)) {
+    ok('voice Edge Function reads the Azure key only from Deno.env (Supabase Secrets)');
+  } else {
+    fail('voice Edge Function must read AZURE_SPEECH_KEY from Deno.env');
+  }
+
+  if (!/Ocp-Apim-Subscription-Key['"]?\s*[:=]\s*['"][A-Za-z0-9]{20,}/.test(fn)) {
+    ok('voice Edge Function contains no hardcoded Azure key');
+  } else {
+    fail('voice Edge Function contains a hardcoded Azure key');
+  }
+
+  if (fn.includes('ALLOWED_FA_VOICES') && fn.includes('fa-IR-DilaraNeural') && fn.includes('fa-IR-FaridNeural')) {
+    ok('voice Edge Function clamps voice names to the two allowed Persian voices');
+  } else {
+    fail('voice Edge Function must clamp the voice name to allowed Persian voices');
+  }
+
+  if (fn.includes('assistant_voice_cloud') && fn.includes('voice_disabled')) {
+    ok('voice Edge Function enforces the admin master switch server-side');
+  } else {
+    fail('voice Edge Function must enforce the admin master switch (assistant_voice_cloud)');
+  }
+
+  // Comments are stripped: the documentation deliberately *names* the
+  // forbidden things while explaining the rules.
+  const fnCode = fn
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .split('\n')
+    .filter((line) => !line.trim().startsWith('//'))
+    .join('\n');
+  if (fnCode.includes('rest/v1/site_content') && !/(orders|order_items|flavors|products|recipes|site_settings)/.test(fnCode)) {
+    ok('voice Edge Function touches only the public site_content table (not even the rest of the catalog)');
+  } else {
+    fail('voice Edge Function must read only the public site_content table');
+  }
+}
+
+{
+  const panelFiles = [
+    'src/services/voiceSettings.ts',
+    'src/admin/pages/AdminAssistantPage.tsx',
+  ];
+  let violations = 0;
+  for (const file of panelFiles) {
+    if (!existsSync(join(root, file))) {
+      fail(`${file} is missing`);
+      violations += 1;
+      continue;
+    }
+    const code = readFileSync(join(root, file), 'utf8');
+    const hits = [
+      ['AZURE_SPEECH_KEY', 'an Azure secret name'],
+      ['Ocp-Apim-Subscription-Key', 'an Azure key header'],
+      ['tts.speech.microsoft.com', 'a direct Azure endpoint'],
+      ['sb_secret_', 'a Supabase secret key'],
+      ['service_role', 'service-role material'],
+    ].filter(([needle]) => code.includes(needle));
+    if (hits.length > 0) {
+      fail(`${file} must stay free of secret material, found: ${hits.map(([, label]) => label).join(', ')}`);
+      violations += 1;
+    }
+  }
+  if (violations === 0) {
+    ok('admin voice settings module and panel section carry no secret material');
+  }
+}
+
 // ── 8. Assistant front-end boundaries (offline) ────────────────
 // The browser side of the assistant must stay read-only, order-free and
 // key-free: it may only talk to the shared storefront services and to
@@ -251,6 +345,7 @@ if (!existsSync(assistantFn)) {
     'src/services/assistant/knowledge.ts',
     'src/services/assistant/engine.ts',
     'src/services/assistant/client.ts',
+    'src/services/assistant/voice.ts',
     'src/components/assistant/useAssistantChat.ts',
     'src/components/assistant/useAssistantSpeech.ts',
     'src/components/assistant/AssistantChat.tsx',
@@ -282,10 +377,13 @@ if (!existsSync(assistantFn)) {
     ok('assistant front-end stays free of orders, service keys and model keys');
   }
 
-  // Phase 8 — the voice layer must stay inside the browser. Reading an answer
-  // aloud uses the page's own speechSynthesis; it may never open a request,
-  // never use a cloud voice service and never hand the customer's own words
-  // to anything (only the assistant's answer is spoken, see smoke test 34b).
+  // Phase 9 — the voice layer has a fixed fallback chain decided for the
+  // product: cloud voice (our own Supabase Edge Function «zhino-voice»,
+  // Azure fa-IR-DilaraNeural, key ONLY in Supabase Secrets) → the page's
+  // own speechSynthesis → a short Persian message. The hook itself still
+  // never opens a network call and never touches the microphone, and only
+  // the assistant's answer text is ever sent for synthesis — never the
+  // customer's own words (see smoke test 34b).
   const speechPath = join(root, 'src', 'components', 'assistant', 'useAssistantSpeech.ts');
   if (existsSync(speechPath)) {
     const speech = readFileSync(speechPath, 'utf8');
@@ -293,19 +391,57 @@ if (!existsSync(assistantFn)) {
       ['fetch(', 'a network call'],
       ['XMLHttpRequest', 'a network call'],
       ['WebSocket', 'a socket'],
-      ['https?://', 'a hard-coded external service'],
       ['navigator.mediaDevices', 'the microphone'],
       ['getUserMedia', 'the microphone'],
     ].filter(([needle]) => speech.includes(needle));
     if (outsourced.length === 0) {
-      ok('assistant voice layer is browser-only (speechSynthesis, no service, no microphone)');
+      ok('assistant voice hook makes no network call itself and never touches the microphone');
     } else {
-      fail(`assistant voice layer must stay inside the browser, found: ${outsourced.map(([, label]) => label).join(', ')}`);
+      fail(`assistant voice hook must not open connections itself, found: ${outsourced.map(([, label]) => label).join(', ')}`);
     }
-    if (speech.includes('speechSynthesis')) ok('assistant voice layer uses the browser\'s own Text-to-Speech');
-    else fail('assistant voice layer must use window.speechSynthesis');
+    if (speech.includes('speechSynthesis')) ok('assistant voice keeps the browser\'s own Text-to-Speech as the local fallback');
+    else fail('assistant voice must keep window.speechSynthesis as the fallback');
   } else {
     fail('src/components/assistant/useAssistantSpeech.ts is missing');
+  }
+
+  // Phase 9 — the cloud voice client (src/services/assistant/voice.ts):
+  // it may talk ONLY to our own Edge Function, built from the public
+  // project URL. No Azure endpoint, no Azure key, no secret of any kind
+  // may exist in it, and audio must live in memory only (no localStorage
+  // or IndexedDB for audio blobs).
+  const voiceClientPath = join(root, 'src', 'services', 'assistant', 'voice.ts');
+  if (existsSync(voiceClientPath)) {
+    const voiceClient = readFileSync(voiceClientPath, 'utf8');
+    if (voiceClient.includes('/functions/v1/zhino-voice')) {
+      ok('cloud voice client talks only to the zhino-voice Edge Function');
+    } else {
+      fail('cloud voice client must call only the zhino-voice Edge Function');
+    }
+    const forbidden = [
+      ['speech.microsoft.com', 'a direct Azure endpoint'],
+      ['tts.speech', 'a direct Azure endpoint'],
+      ['cognitiveservices', 'a direct Azure endpoint'],
+      ['Ocp-Apim-Subscription-Key', 'an Azure key header'],
+      ['AZURE_SPEECH', 'an Azure secret name'],
+      ['sb_secret_', 'a Supabase secret key'],
+    ].filter(([needle]) => voiceClient.includes(needle));
+    if (forbidden.length === 0) {
+      ok('cloud voice client carries no Azure endpoint, key or secret');
+    } else {
+      fail(`cloud voice client must stay free of Azure details and secrets, found: ${forbidden.map(([, label]) => label).join(', ')}`);
+    }
+    const persisted = [
+      ['localStorage.setItem', 'persisting to localStorage'],
+      ['indexedDB', 'persisting to IndexedDB'],
+    ].filter(([needle]) => voiceClient.includes(needle));
+    if (persisted.length === 0) {
+      ok('cloud audio cache is memory-only (no localStorage, no IndexedDB)');
+    } else {
+      fail(`cloud audio must be cached in memory only, found: ${persisted.map(([, label]) => label).join(', ')}`);
+    }
+  } else {
+    fail('src/services/assistant/voice.ts is missing');
   }
 
   // Phase 8 — nothing technical is shown to a customer. Comments are stripped

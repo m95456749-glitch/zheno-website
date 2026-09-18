@@ -31,6 +31,7 @@ import { cn } from '../../utils/cn';
 import AssistantAvatar from './AssistantAvatar';
 import { ASSISTANT_NAME } from './assistantData';
 import { useAssistantSpeech } from './useAssistantSpeech';
+import { useVoiceSettings } from '../../services/voiceSettings';
 import {
   ASSISTANT_MAX_LENGTH,
   ASSISTANT_WELCOME_SUB,
@@ -53,6 +54,10 @@ const ANDROID_VOICE_HINT =
 const ENGINE_STALLED_MSG =
   'شروع صدا نشد؛ دوباره بزنید تا یک‌بار دیگر امتحان شود.';
 const LOADING_VOICE_MSG = 'در حال آماده‌سازی صدا… لطفاً دوباره بزنید.';
+/** صدای ابری شکست خورد و صدای مرورگر هم نبود — کوتاه، بدون اصطلاح فنی */
+const CLOUD_FAILED_MSG =
+  'صدا این لحظه در دسترس نیست؛ متن پاسخ را همین‌جا می‌خوانید.';
+const PREPARING_VOICE_MSG = 'در حال آماده‌سازی صدا…';
 
 function isAndroidDevice(): boolean {
   try {
@@ -153,6 +158,7 @@ export default function AssistantChat({ chat, className }: Props) {
     available: voiceAvailable,
     status: voiceStatus,
     enabled: voiceOn,
+    loading: voiceLoading,
     speaking: voiceReading,
     paused: voicePaused,
     voiceProblem,
@@ -162,6 +168,8 @@ export default function AssistantChat({ chat, className }: Props) {
     pause,
     resume,
   } = useAssistantSpeech();
+  /** «تنظیمات صدای دستیار» مدیر — کلید غیرمحرمانهٔ خواندن خودکار */
+  const voiceSite = useVoiceSettings();
   /** چیپ‌ها بعد از شروع گفتگو جمع می‌شوند؛ کاربر هر وقت خواست باز می‌کند */
   const [ideasOpen, setIdeasOpen] = useState(false);
   /** پیغام کوتاه و انسانیِ صدا — چند لحظه بعد خودش می‌رود */
@@ -205,15 +213,16 @@ export default function AssistantChat({ chat, className }: Props) {
   }, [fresh, stop]);
 
   // هر پاسخ تازه (به‌جز خوشامد) یک‌بار خوانده می‌شود — فقط اگر روشن باشد
+  // و مدیر هم «خواندن خودکار» و «صدای ربات» را از پنل خاموش نکرده باشد
   useEffect(() => {
-    if (!voiceOn || thinking) return;
+    if (!voiceOn || !voiceSite.autoVoice || !voiceSite.voiceEnabled || thinking) return;
     const last = messages[messages.length - 1];
     if (!last || last.from !== 'bot' || last.welcome) return;
     if (spokenId.current === last.id) return;
     spokenId.current = last.id;
     setReadingId(last.id);
     speak(last.text);
-  }, [messages, thinking, voiceOn, speak]);
+  }, [messages, thinking, voiceOn, voiceSite.autoVoice, voiceSite.voiceEnabled, speak]);
 
   // بعد از هر پرسش، ردیف پیشنهادها دوباره جمع می‌شود تا چت خلوت بماند
   useEffect(() => {
@@ -242,6 +251,11 @@ export default function AssistantChat({ chat, className }: Props) {
         NO_PERSIAN_MSG,
         isAndroidDevice() ? ANDROID_VOICE_HINT : null,
       );
+    } else if (voiceProblem === 'cloud-failed') {
+      // صدای ابری در دسترس نبود و صدای فارسیِ مرورگر هم نبود؛ بدون
+      // هیچ پیشنهاد نصب صدای گوشی — آن راهنما فقط برای مسیرِ کاملاً
+      // محلی است.
+      showVoiceNotice(CLOUD_FAILED_MSG);
     } else {
       showVoiceNotice(ENGINE_STALLED_MSG);
     }
@@ -308,6 +322,16 @@ export default function AssistantChat({ chat, className }: Props) {
       setReadingId(null);
       return;
     }
+    // همین پیام در حال آماده‌سازی است → لمس دوم آن را لغو می‌کند
+    if (readingId === id && voiceLoading) {
+      stop();
+      setReadingId(null);
+      return;
+    }
+    // اگر آماده‌سازی یا پخشِ پاسخ دیگری روی خط است، همان را قطع کن
+    if (voiceLoading || voiceReading || voicePaused) {
+      stop();
+    }
     if (voiceStatus === 'none') {
       showVoiceNotice(
         NO_PERSIAN_MSG,
@@ -319,10 +343,6 @@ export default function AssistantChat({ chat, className }: Props) {
       // فهرست هنوز خالی است؛ امتحان می‌کنیم و «آزمون شروع» در هوک
       // (کمتر از ۳ ثانیه) نتیجهٔ واقعی را با پیام واضح نشان می‌دهد
       showVoiceNotice(LOADING_VOICE_MSG);
-    }
-    // اگر صدای دیگری در حال پخش است، آن را قطع کن
-    if (voiceReading) {
-      stop();
     }
     spokenId.current = id;
     setReadingId(id);
@@ -370,7 +390,10 @@ export default function AssistantChat({ chat, className }: Props) {
             <h2 className="zhino-assistant-welcome-title">{ASSISTANT_WELCOME_TITLE}</h2>
             <p className="zhino-assistant-welcome-sub">{ASSISTANT_WELCOME_SUB}</p>
             <span className="rule-lux zhino-assistant-welcome-rule" aria-hidden="true" />
-            <div className="zhino-assistant-welcome-chips">{chips}</div>
+            {/* پیشنهادهای شروع گفت‌وگو — از پنل قابل خاموش‌کردن است */}
+            {voiceSite.suggestions && (
+              <div className="zhino-assistant-welcome-chips">{chips}</div>
+            )}
           </div>
         ) : (
           messages.map((message) => (
@@ -413,33 +436,41 @@ export default function AssistantChat({ chat, className }: Props) {
                       const isReadingThis = readingId === message.id;
                       const isPausedThis = isReadingThis && voicePaused;
                       const isPlayingThis = isReadingThis && voiceReading;
+                      const isPreparingThis = isReadingThis && voiceLoading;
                       return (
                         <button
                           type="button"
                           className="zhino-assistant-read"
                           onClick={() => readAnswer(message.id, message.text)}
+                          aria-busy={isPreparingThis || undefined}
                           aria-label={
-                            isPlayingThis
-                              ? 'توقف خواندن این پاسخ'
-                              : isPausedThis
-                                ? 'ادامه خواندن این پاسخ'
-                                : 'خواندن این پاسخ'
+                            isPreparingThis
+                              ? 'در حال آماده‌سازی صدا — برای لغو بزنید'
+                              : isPlayingThis
+                                ? 'توقف خواندن این پاسخ'
+                                : isPausedThis
+                                  ? 'ادامه خواندن این پاسخ'
+                                  : 'خواندن این پاسخ'
                           }
                           title={
-                            isPlayingThis
-                              ? 'توقف خواندن'
-                              : isPausedThis
-                                ? 'ادامهٔ خواندن'
-                                : 'خواندن با صدای مرورگر'
+                            isPreparingThis
+                              ? 'در حال آماده‌سازی صدا…'
+                              : isPlayingThis
+                                ? 'توقف خواندن'
+                                : isPausedThis
+                                  ? 'ادامهٔ خواندن'
+                                  : 'خواندن این پاسخ'
                           }
                         >
-                          {isPlayingThis ? <StopIcon /> : isPausedThis ? <PlayIcon /> : <SoundOnIcon />}
+                          {isPlayingThis || isPreparingThis ? <StopIcon /> : isPausedThis ? <PlayIcon /> : <SoundOnIcon />}
                           <span>
-                            {isPlayingThis
-                              ? 'توقف خواندن'
-                              : isPausedThis
-                                ? 'ادامه خواندن'
-                                : 'خواندن پاسخ'}
+                            {isPreparingThis
+                              ? PREPARING_VOICE_MSG
+                              : isPlayingThis
+                                ? 'توقف خواندن'
+                                : isPausedThis
+                                  ? 'ادامه خواندن'
+                                  : 'خواندن پاسخ'}
                           </span>
                         </button>
                       );
@@ -470,8 +501,9 @@ export default function AssistantChat({ chat, className }: Props) {
 
       {/* کادر نوشتن پیام — همیشه پایین صفحه، الگوی ChatGPT */}
       <div className="zhino-assistant-composer">
-        {/* بعد از شروع گفتگو پیشنهادها در یک ردیف جمع‌شونده می‌نشینند */}
-        {!fresh && suggestions.length > 0 && (
+        {/* بعد از شروع گفتگو پیشنهادها در یک ردیف جمع‌شونده می‌نشینند
+            (اگر مدیر از پنل خاموششان نکرده باشد) */}
+        {!fresh && voiceSite.suggestions && suggestions.length > 0 && (
           <div className="zhino-assistant-ideas">
             <button
               type="button"
@@ -520,17 +552,20 @@ export default function AssistantChat({ chat, className }: Props) {
             />
           </span>
 
-          {/* خواندن پاسخ‌ها با صدای خود مرورگر — پیش‌فرض خاموش */}
-          <button
-            type="button"
-            className={cn('zhino-assistant-voice', voiceOn && 'is-on')}
-            onClick={toggleVoice}
-            aria-pressed={voiceOn}
-            aria-label={voiceOn ? 'خاموش کردن صدای پاسخ‌ها' : 'روشن کردن صدای پاسخ‌ها'}
-            title={voiceOn ? 'صدای پاسخ‌ها روشن است — برای خاموش کردن بزنید' : 'پاسخ‌ها با صدای مرورگر خوانده شود'}
-          >
-            {voiceOn ? <SoundOnIcon /> : <SoundOffIcon />}
-          </button>
+          {/* خواندن خودکار پاسخ‌های تازه — پیش‌فرض خاموش؛ با خاموش‌شدن
+              «خواندن خودکار» یا «صدای ربات» از پنل، این دکمه دیده نمی‌شود */}
+          {voiceSite.autoVoice && voiceSite.voiceEnabled && (
+            <button
+              type="button"
+              className={cn('zhino-assistant-voice', voiceOn && 'is-on')}
+              onClick={toggleVoice}
+              aria-pressed={voiceOn}
+              aria-label={voiceOn ? 'خاموش کردن صدای پاسخ‌ها' : 'روشن کردن صدای پاسخ‌ها'}
+              title={voiceOn ? 'صدای پاسخ‌ها روشن است — برای خاموش کردن بزنید' : 'پاسخ‌ها با صدا خوانده شود'}
+            >
+              {voiceOn ? <SoundOnIcon /> : <SoundOffIcon />}
+            </button>
+          )}
 
           <button
             type="submit"
