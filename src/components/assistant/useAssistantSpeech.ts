@@ -1,32 +1,34 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۹ — صدای فارسی ابری + رفع قطعی‌صدا روی موبایل)
+// ZHINO — «دستیار ژینو» (صدای رایگان مرورگر + رفع قطعی‌صدا روی موبایل)
 //
 // چه کاری انجام می‌دهد؟
-//   متن پاسخ دستیار را بلند می‌خواند — با این ترتیب جایگزین قطعی:
+//   متن پاسخ دستیار را با صدای خودِ مرورگر (Web Speech API) بلند
+//   می‌خواند — مسیر کاملاً محلی و رایگان:
 //
-//     ۱) صدای ابری فارسی (Azure fa-IR-DilaraNeural) از Edge Function
-//        «zhino-voice» — فقط اگر Supabase پیکربندی شده باشد. با این
-//        صدا، کاربر به نصب صدای فارسی روی گوشی نیاز ندارد. فایل
-//        صوتی هر پاسخ فقط در حافظهٔ موقت مرورگر کش می‌شود، پس پخش
-//        مجدد همان پاسخ هیچ درخواست تازه‌ای نمی‌زند. «مکث/ادامه» در
-//        این مسیر واقعی است (عنصر <audio> درست پشتیبانی می‌کند).
-//     ۲) صدای خودِ مرورگر (Web Speech API) — مسیر کاملاً محلیِ
-//        قبلی، با همهٔ راه‌حل‌های باگ‌های Chrome Android.
-//     ۳) اگر هیچ‌کدام نشد: پیام کوتاه و واضح فارسی.
+//     ۱) مناسب‌ترین صدای فارسی دستگاه انتخاب می‌شود (اول fa-IR دقیق،
+//        بعد هر fa-*/pes-*، بعد صدایی با نشانهٔ فارسی در نامش).
+//     ۲) اگر دستگاه صدای فارسی نداشت، خواندن همچنان با زبان fa-IR و
+//        صدای پیش‌فرض خودِ مرورگر امتحان می‌شود (fallback مرورگر) —
+//        به‌جای آنکه از قبل بی‌دلیل پیام خطا نشان داده شود.
+//     ۳) فقط اگر موتور صدا واقعاً شکست خورد (خطا یا سکوتِ آغاز)
+//        پیام کوتاه و واضح فارسی نمایش داده می‌شود.
+//
+// ⚠️ صدای ابری (OpenAI/Azure) عمداً از مسیر اجرا بیرون است: هیچ کلید
+//   API، هیچ اعتبار پولی و هیچ درخواست شبکه‌ای برای صدا وجود ندارد.
+//   تابع «zhino-voice» و کلید TTS_API_KEY در ریپازیتوری نگه داشته
+//   شده‌اند تا در صورت نیاز دوباره فعال شوند، ولی این هوک هرگز
+//   صدایی از سرور نمی‌گیرد.
 //
 // امنیت/حریم خصوصی:
-//   هیچ کلید API اینجا نیست؛ کلید Azure فقط در Secrets سوپابیس
-//   می‌ماند. فقط «متن پاسخ دستیار» برای ساخت صدا فرستاده می‌شود —
-//   هرگز سؤال کاربر، نام، نشانی یا سبد خرید.
+//   هیچ کلید API اینجا نیست و هیچ متنی از دستگاه خارج نمی‌شود —
+//   خواندن کاملاً روی خودِ مرورگر انجام می‌شود.
 //
-// چرا بازنویسی صدای مرورگر؟ (علل واقعیِ خرابی روی Chrome Android)
-
 // چرا این بازنویسی؟ (علل واقعیِ خرابی روی Chrome Android)
 //   ۱) در Chrome اندروید فهرست صداها ناهمگام و دیرهنگام می‌رسد
 //      (اولین getVoices() خالی است و voiceschanged قابل‌اعتماد
-//      نیست). اگر فهرست پر است اما صدای فارسی نیست، دستگاه اصلاً
-//      توانایی خواندن فارسی ندارد — در این حالت به‌جای سکوت یا
-//      پخش با صدای اشتباه، پیام کوتاه و واضح نشان داده می‌شود.
+//      نیست). اگر فهرست پر است اما صدای فارسی نیست، ابتدا fallback
+//      مرورگر با lang=fa-IR امتحان می‌شود؛ فقط سکوت یا خطای واقعی
+//      موتور باعث نمایش پیام کوتاه و واضح می‌شود.
 //   ۲) باگ شناخته‌شدهٔ pause در Chrome اندروید: صف TTS گاهی «قفل»
 //      می‌شود و حتی synth.paused گزارش کاذب (false) می‌دهد؛ همهٔ
 //      speakهای بعدی در صف می‌مانند و هیچ‌وقت پخش نمی‌شوند.
@@ -51,8 +53,7 @@
 //      autoplay موبایل آن را مسدود نکند.
 // ============================================================
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { isCloudVoiceConfigured, loadCloudAudio } from '../../services/assistant/voice';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useVoiceSettings, VOICE_RATE_MAX, VOICE_RATE_MIN } from '../../services/voiceSettings';
 
 const VOICE_PREF_KEY = 'zhino_assistant_voice_v1';
@@ -62,13 +63,14 @@ export type AssistantVoiceStatus =
   | 'loading'
   | 'none'
   | 'persian'
-  /** صدای ابری پیکربندی شده؛ به صدای نصب‌شده روی دستگاه نیازی نیست */
+  /** مقدار قدیمی برای سازگاری نوعی؛ در مسیر مرورگر هرگز صادر نمی‌شود */
   | 'cloud';
 
 /** چرا خواندن ممکن نبود — فقط برای نمایش پیام کوتاه به مشتری */
 export type AssistantVoiceProblem =
   | 'no-persian-voice'
   | 'not-allowed'
+  /** مقادیر قدیمی برای سازگاری UI؛ هوک جدید آن‌ها را صادر نمی‌کند */
   | 'cloud-not-deployed'
   | 'cloud-failed'
   | 'engine-stalled'
@@ -79,7 +81,7 @@ export interface AssistantSpeech {
   available: boolean;
   status: AssistantVoiceStatus;
   enabled: boolean;
-  /** در حال دریافت فایل صدای ابری (کش نبود؛ درخواست شبکه روی خط است) */
+  /** برای سازگاری با UI فعلی؛ مسیر مرورگر هیچ بارگیری شبکه‌ای ندارد */
   loading: boolean;
   speaking: boolean;
   paused: boolean;
@@ -105,19 +107,6 @@ const KEEPALIVE_MS = 8000;
 /** بارگذاری مجدد فهرست صداها: ۳۰ ثانیهٔ اول صفحه (فقط وقتی صفحهٔ فعال است) */
 const VOICE_POLL_MS = 500;
 const VOICE_MAX_POLLS = 60;
-
-/**
- * کلیپ WAV کاملاً بی‌صدای ~۱۰ میلی‌ثانیه‌ای.
- * سیاست autoplay موبایل (به‌ویژه Safari iOS) فقط به عنصری اجازهٔ
- * پخشِ بدون‌لمس می‌دهد که داخل یک لمس کاربر play() شده باشد؛ چون بین
- * لمس و پخشِ صدای واقعی یک fetch قرار می‌گیرد، همین کلیِپ در همان لمس
- * پخش می‌شود تا عنصر برای پخش بعدی «باز» بماند. هر خطاش بی‌صدا نادیده
- * گرفته می‌شود — در مرورگرهایی که نیازی ندارند، بی‌اثر است.
- */
-const SILENT_WAV_DATA_URI =
-  'data:audio/wav;base64,UklGRsQAAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YaAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
-
-type AudioEngine = 'cloud' | 'browser';
 
 function getSynth(): SpeechSynthesis | null {
   try {
@@ -170,23 +159,28 @@ function isPersian(voice: SpeechSynthesisVoice): boolean {
   );
 }
 
+/**
+ * مناسب‌ترین صدای فارسیِ دستگاه:
+ *   ۱) fa-IR دقیق (و میان آن‌ها صدای پیش‌فرضِ دستگاه)
+ *   ۲) هر fa-* / pes-* (مثلاً fa-AF)
+ *   ۳) صدایی که در نامش نشانهٔ فارسی دارد
+ * اگر هیچ‌کدام نبود null برمی‌گردد؛ آن‌وقت utterance بدون voice خاص و
+ * با lang='fa-IR' ساخته می‌شود تا مرورگر صدای پیش‌فرض خودش را به‌کار
+ * ببرد — یعنی fallback رایگان خودِ مرورگر، بدون هیچ سرویس بیرونی.
+ */
 function findPersianVoice(
   voices: SpeechSynthesisVoice[],
 ): SpeechSynthesisVoice | null {
   if (voices.length === 0) return null;
-  // اولویت ۱: fa-IR یا fa_IR دقیق
-  const exact = voices.find((v) => {
-    const l = (v.lang ?? '').toLowerCase().replace(/_/g, '-');
-    return l === 'fa-ir';
-  });
-  if (exact) return exact;
-  // اولویت ۲: هر fa-* یا pes-*
+  const langOf = (v: SpeechSynthesisVoice) =>
+    (v.lang ?? '').toLowerCase().replace(/_/g, '-');
+  const exact = voices.filter((v) => langOf(v) === 'fa-ir');
+  if (exact.length > 0) return exact.find((v) => v.default === true) ?? exact[0];
   const fa = voices.find((v) => {
-    const l = (v.lang ?? '').toLowerCase().replace(/_/g, '-');
+    const l = langOf(v);
     return l.startsWith('fa-') || l === 'fa' || l.startsWith('pes-') || l === 'pes';
   });
   if (fa) return fa;
-  // اولویت ۳: هر صدایی که نشانهٔ زبان فارسی در نام دارد
   return voices.find((v) => isPersian(v)) ?? null;
 }
 
@@ -273,16 +267,13 @@ function cutOnSpaces(part: string, maxChunk: number): string[] {
 type PlayState = 'idle' | 'playing' | 'paused';
 
 export function useAssistantSpeech(): AssistantSpeech {
-  /** زیرساخت صدای ابری (از پیکربندی ساخته می‌شود — ثابت در طول نشست) */
-  const cloudConfigured = useMemo(isCloudVoiceConfigured, []);
   /** «تنظیمات صدای دستیار» مدیر — غیرمحرمانه؛ با ذخیره فوراً تازه می‌شود */
   const voiceSiteCfg = useVoiceSettings();
-  /** کلید اصلی مدیر: ابری واقعی فقط وقتی هم زیرساخت هست و هم مدیر نگفته خاموش */
-  const cloudActive = cloudConfigured && voiceSiteCfg.cloudVoice;
-  /** کلید کلی صدای ربات: خاموش یعنی هیچ صدایی (نه ابری، نه مرورگر) */
+  /** کلید کلی صدای ربات: خاموش یعنی سکوت کامل */
   const voiceMasterOn = voiceSiteCfg.voiceEnabled;
   const [browserCapable, setBrowserCapable] = useState<boolean>(() => canSynthesize());
-  const available = voiceMasterOn && (browserCapable || cloudActive);
+  // تنها موتور صدا، Web Speech خودِ مرورگر است: رایگان، بدون کلید، بدون شبکه
+  const available = voiceMasterOn && browserCapable;
   const [voices, setVoices] = useState<SpeechSynthesisVoice[]>(() => {
     const synth = getSynth();
     if (!synth) return [];
@@ -293,12 +284,10 @@ export function useAssistantSpeech(): AssistantSpeech {
     }
   });
   const [enabled, setEnabledState] = useState<boolean>(() =>
-    canSynthesize() || isCloudVoiceConfigured() ? readPref() : false,
+    canSynthesize() ? readPref() : false,
   );
   const [speaking, setSpeaking] = useState(false);
   const [paused, setPaused] = useState(false);
-  /** در حال دریافت صدای ابری از سرور (کش نبود) */
-  const [loadingAudio, setLoadingAudio] = useState(false);
   const [voiceProblem, setVoiceProblem] = useState<AssistantVoiceProblem>(
     null,
   );
@@ -307,16 +296,6 @@ export function useAssistantSpeech(): AssistantSpeech {
   const indexRef = useRef(0);
   const pausePosRef = useRef(0);
   const stateRef = useRef<PlayState>('idle');
-  /** موتورِ فعالِ فعلی: ابری (عنصر <audio>) یا مرورگر (speechSynthesis) */
-  const engineRef = useRef<AudioEngine | null>(null);
-  /** عنصر پایدار پخش صدای ابری (برای حفظ «بازشدگیِ» autoplay موبایل) */
-  const audioElRef = useRef<HTMLAudioElement | null>(null);
-  /** object URL فعلی — با پایان/توقف پخش آزاد می‌شود */
-  const audioUrlRef = useRef<string | null>(null);
-  /** متنی که برایش درخواست ابری در راه است — برای جایگزینی مرورگر بعد از خطا */
-  const cloudTextRef = useRef('');
-  /** لغوی درخواست شبکهٔ درراه، هنگام توقف یا خواندنِ پاسخ دیگر */
-  const cloudAbortRef = useRef<AbortController | null>(null);
   /** هر speak/stop/pause/resume یک «نسل» تازه می‌سازد تا زمان‌بندی‌های
       خواندنیِ قدیمی روی خواندنِ جدید اثر نگذارند */
   const generationRef = useRef(0);
@@ -470,8 +449,6 @@ export function useAssistantSpeech(): AssistantSpeech {
 
   const status: AssistantVoiceStatus = (() => {
     if (!available) return 'unavailable';
-    // صدای ابری فعال → فارسیِ مطمئن، بی‌نیاز از صدای نصب‌شده روی دستگاه
-    if (cloudActive) return 'cloud';
     if (hasPersianVoice(voices)) return 'persian';
     if (voices.length > 0) return 'none';
     return 'loading';
@@ -532,14 +509,9 @@ export function useAssistantSpeech(): AssistantSpeech {
         /* بی‌اهمیت */
       }
 
-      // فهرست پر است ولی فارسی نیست → اصلاً شروع نمی‌کنیم
-      if (currentVoices.length > 0 && !hasPersianVoice(currentVoices)) {
-        hardCancel();
-        setVoiceProblem('no-persian-voice');
-        finalize(gen);
-        return;
-      }
-
+      // صدای فارسی نبود؟ باز هم امتحان می‌شود: utterance بدون voice
+      // خاص و با lang='fa-IR' ساخته می‌شود تا مرورگر صدای پیش‌فرض خودش
+      // را به‌کار ببرد. نتیجهٔ واقعی (پخش یا شکست) همان‌جا معلوم می‌شود.
       indexRef.current = idx;
       const chunk = chunksRef.current[idx];
       const voice = findPersianVoice(currentVoices);
@@ -609,6 +581,24 @@ export function useAssistantSpeech(): AssistantSpeech {
           const err = (ev as unknown as { error?: string })?.error ?? '';
           // canceled / interrupted وقتی خودمان stop/pause زده‌ایم طبیعی است
           if (err === 'canceled' || err === 'interrupted') return;
+          // خطای گذرای موتور: یک‌بار همان تکه دوباره امتحان می‌شود تا
+          // پیام خطا بی‌دلیل به کاربر نشان داده نشود
+          if (err === 'synthesis-failed' && attempts < 1) {
+            clearTimers();
+            try {
+              synth.cancel();
+            } catch {
+              /* بی‌اهمیت */
+            }
+            if (settleTimerRef.current !== null) window.clearTimeout(settleTimerRef.current);
+            settleTimerRef.current = window.setTimeout(() => {
+              settleTimerRef.current = null;
+              if (gen === generationRef.current && !started && !ended) {
+                speakIndex(gen, idx, attempts + 1);
+              }
+            }, CANCEL_SETTLE_MS);
+            return;
+          }
           ended = true;
           clearTimers();
           stopKeepalive();
@@ -666,63 +656,6 @@ export function useAssistantSpeech(): AssistantSpeech {
     [voices, clearTimers, finalize, hardCancel, setPlayState, startKeepalive, stopKeepalive, unfreeze],
   );
 
-  /* ── موتور ابری: یک عنصر <audio> پایدار + کش فقط‌حافظه ────── */
-
-  /** ساخت (یا گرفتن) عنصر پایدار پخش؛ در داخل لمس کاربر صدا خورده */
-  const ensureAudio = useCallback((): HTMLAudioElement | null => {
-    if (audioElRef.current) return audioElRef.current;
-    try {
-      const el = new Audio();
-      el.preload = 'auto';
-      audioElRef.current = el;
-      return el;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  /** بازکردن قفل پخش موبایل داخل همان لمس کاربر (قبل از fetch شبکه) */
-  const unlockAudio = useCallback((el: HTMLAudioElement) => {
-    try {
-      el.src = SILENT_WAV_DATA_URI;
-      const attempt = el.play();
-      // رد شدنش (مثلاً iOS قدیمی) فقط یعنی پخش بعدی نیاز به لمس دارد
-      void attempt?.catch?.(() => undefined);
-    } catch {
-      /* بی‌اهمیت */
-    }
-  }, []);
-
-  /** توقف کامل صدای ابری: لغو شبکهٔ درراه + سکوت عنصر + آزادسازی URL */
-  const stopCloudAudio = useCallback(() => {
-    if (cloudAbortRef.current) {
-      try {
-        cloudAbortRef.current.abort();
-      } catch {
-        /* بی‌اهمیت */
-      }
-      cloudAbortRef.current = null;
-    }
-    const el = audioElRef.current;
-    if (el) {
-      try {
-        el.onended = null;
-        el.onerror = null;
-        el.pause();
-      } catch {
-        /* برخی محیط‌ها هنگام pause خطا می‌دهند */
-      }
-    }
-    if (audioUrlRef.current) {
-      try {
-        URL.revokeObjectURL(audioUrlRef.current);
-      } catch {
-        /* بی‌اهمیت */
-      }
-      audioUrlRef.current = null;
-    }
-  }, []);
-
   const speakBrowser = useCallback(
     (text: string) => {
       const synth = getSynth();
@@ -731,34 +664,24 @@ export function useAssistantSpeech(): AssistantSpeech {
         return;
 
       // روی هر تلاش، فهرست صدا را تازه بخوان (اندروید گاهی فقط بعد از
-      // اولین لمس پر می‌کند)
-      let currentVoices = voices;
+      // اولین لمس پر می‌کند). انتخاب صدا خودش در speakIndex انجام
+      // می‌شود، چون فهرست ممکن است همان لحظه پر شده باشد.
       try {
         const fresh = synth.getVoices() ?? [];
-        if (fresh.length > 0) {
-          currentVoices = fresh;
-          setVoices(fresh);
-        }
+        if (fresh.length > 0) setVoices(fresh);
       } catch {
         /* بی‌اهمیت */
       }
 
-      // فهرست پر است ولی صدای فارسی نیست → پخش بی‌صدا معنایی ندارد؛
-      // پیام کوتاه و واضح، بدون هیچ تلاشی در موتور.
-      if (currentVoices.length > 0 && !hasPersianVoice(currentVoices)) {
-        hardCancel();
-        setVoiceProblem('no-persian-voice');
-        setPlayState('idle');
-        return;
-      }
+      // نبودِ صدای فارسی دیگر از قبل «خطا» حساب نمی‌شود: خواندن با
+      // fallback خودِ مرورگر امتحان می‌شود و فقط شکستِ واقعیِ موتور
+      // پیام می‌گیرد.
 
       const chunks = splitForSpeech(text);
       if (chunks.length === 0) return;
 
       const gen = settleGeneration();
       hardCancel();
-      stopCloudAudio();
-      engineRef.current = 'browser';
 
       chunksRef.current = chunks;
       indexRef.current = 0;
@@ -780,204 +703,31 @@ export function useAssistantSpeech(): AssistantSpeech {
         speakIndex(gen, 0, 0);
       }
     },
-    [hardCancel, setPlayState, settleGeneration, speakIndex, stopCloudAudio, voices],
+    [hardCancel, setPlayState, settleGeneration, speakIndex],
   );
 
-  /** ترتیب جایگزین بعد از شکست صدای ابری: صدای مرورگر، وگرنه پیام کوتاه */
-  const fallbackToBrowser = useCallback(
-    (text: string, cloudErrorKind?: string) => {
-      if (!canSynthesize()) {
-        setVoiceProblem(cloudErrorKind === 'not-deployed' ? 'cloud-not-deployed' : 'cloud-failed');
-        setPlayState('idle');
-        return;
-      }
-      const synth = getSynth();
-      let list: SpeechSynthesisVoice[] = [];
-      if (synth) {
-        try {
-          list = synth.getVoices() ?? [];
-          if (list.length > 0) setVoices(list);
-        } catch {
-          list = [];
-        }
-      }
-      // فهرست پر است ولی فارسی ندارد → مرورگر هم نمی‌تواند؛ پیام کوتاه.
-      // (فهرست خالی یعنی «هنوز نامشخص» — مثل Chrome Android — پس مسیر
-      // مرورگر امتحان می‌شود و «آزمون شروع» صادقانه نتیجه را می‌گوید.)
-      if (list.length > 0 && !hasPersianVoice(list)) {
-        setVoiceProblem(cloudErrorKind === 'not-deployed' ? 'cloud-not-deployed' : 'cloud-failed');
-        setPlayState('idle');
-        return;
-      }
-      speakBrowser(text);
-    },
-    [speakBrowser, setPlayState],
-  );
-
-  const speakCloud = useCallback(
-    (text: string) => {
-      const gen = settleGeneration();
-      hardCancel();
-      stopCloudAudio();
-      setVoiceProblem(null);
-      engineRef.current = 'cloud';
-      cloudTextRef.current = text;
-
-      const el = ensureAudio();
-      if (!el) {
-        engineRef.current = null;
-        fallbackToBrowser(text);
-        return;
-      }
-      // بازکردن قفل autoplay موبایل همین‌جا، داخل لمس کاربر و پیش از
-      // هر await؛ پخشِ بی‌صدای کوتاه است و هر خطاش نادیده گرفته می‌شود
-      unlockAudio(el);
-
-      const controller = new AbortController();
-      cloudAbortRef.current = controller;
-      setLoadingAudio(true);
-
-      loadCloudAudio(text, controller.signal)
-        .then((blob) => {
-          if (gen !== generationRef.current) return; // کاربر رد شده است
-          cloudAbortRef.current = null;
-
-          let url: string | null = null;
-          try {
-            url = URL.createObjectURL(blob);
-          } catch {
-            url = null;
-          }
-          if (!url) {
-            setLoadingAudio(false);
-            engineRef.current = null;
-            fallbackToBrowser(text);
-            return;
-          }
-          audioUrlRef.current = url;
-
-          const freeUrl = () => {
-            if (audioUrlRef.current) {
-              try {
-                URL.revokeObjectURL(audioUrlRef.current);
-              } catch {
-                /* بی‌اهمیت */
-              }
-              audioUrlRef.current = null;
-            }
-          };
-
-          el.src = url;
-          el.onended = () => {
-            if (gen !== generationRef.current || engineRef.current !== 'cloud') return;
-            freeUrl();
-            engineRef.current = null;
-            setPlayState('idle');
-          };
-          el.onerror = () => {
-            if (gen !== generationRef.current || engineRef.current !== 'cloud') return;
-            // فایل سالم است ولی مرورگر پخشش نمی‌کند (فرمت/رمزگشایی) → جایگزین مرورگر
-            freeUrl();
-            engineRef.current = null;
-            fallbackToBrowser(text);
-          };
-
-          setLoadingAudio(false);
-          const attempt = (() => {
-            try {
-              return el.play();
-            } catch {
-              return null;
-            }
-          })();
-          if (!attempt || typeof attempt.then !== 'function') {
-            // محیط بسیار قدیمی بدون promise — فرض شروع پخش
-            setPlayState('playing');
-            return;
-          }
-          attempt
-            .then(() => {
-              if (gen !== generationRef.current || engineRef.current !== 'cloud') {
-                try {
-                  el.pause();
-                } catch {
-                  /* بی‌اهمیت */
-                }
-                return;
-              }
-              setPlayState('playing');
-            })
-            .catch(() => {
-              if (gen !== generationRef.current || engineRef.current !== 'cloud') return;
-              // پخش توسط سیاست مرورگر مسدود شد → جایگزین مرورگر
-              freeUrl();
-              engineRef.current = null;
-              fallbackToBrowser(text);
-            });
-        })
-        .catch((err: unknown) => {
-          if (gen !== generationRef.current) return;
-          cloudAbortRef.current = null;
-          setLoadingAudio(false);
-          engineRef.current = null;
-          const kind = (err as { kind?: string })?.kind;
-          fallbackToBrowser(text, kind);
-        });
-    },
-    [
-      ensureAudio,
-      fallbackToBrowser,
-      hardCancel,
-      setPlayState,
-      settleGeneration,
-      stopCloudAudio,
-      unlockAudio,
-    ],
-  );
-
-  /** نقطهٔ ورود: صدای ابری ← صدای مرورگر (ابری فقط وقتی زیرساخت هست و
-      مدیر هم آن را خاموش نکرده باشد؛ کل خاموش = سکوت کامل) */
+  /** نقطهٔ ورود: فقط صدای خودِ مرورگر (کلید خاموش = سکوت کامل) */
   const speak = useCallback(
     (text: string) => {
       if (!voiceMasterOn) return;
-      if (cloudActive) {
-        speakCloud(text);
-        return;
-      }
       speakBrowser(text);
     },
-    [voiceMasterOn, cloudActive, speakBrowser, speakCloud],
+    [voiceMasterOn, speakBrowser],
   );
 
   const stop = useCallback(() => {
     const gen = settleGeneration();
     hardCancel();
-    stopCloudAudio();
-    setLoadingAudio(false);
-    engineRef.current = null;
     chunksRef.current = [];
     indexRef.current = 0;
     setPlayState('idle');
     setVoiceProblem(null);
     void gen;
-  }, [hardCancel, setPlayState, settleGeneration, stopCloudAudio]);
+  }, [hardCancel, setPlayState, settleGeneration]);
 
-  /** مکث: در مسیر ابری مکث واقعی <audio> (پشتیبانی درست)؛ در مسیر
-      مرورگر همان مکث سطحِ اپِ قبلی، چون synth.pause() در Chrome
-      اندروید خراب است. */
+  /** مکث: همان مکث سطحِ اپ، چون synth.pause() در Chrome اندروید خراب است */
   const pause = useCallback(() => {
     if (stateRef.current !== 'playing') return;
-    if (engineRef.current === 'cloud') {
-      const el = audioElRef.current;
-      try {
-        el?.pause();
-      } catch {
-        /* بی‌اهمیت */
-      }
-      setPlayState('paused');
-      setVoiceProblem(null);
-      return;
-    }
     settleGeneration();
     pausePosRef.current = indexRef.current;
     hardCancel();
@@ -985,39 +735,9 @@ export function useAssistantSpeech(): AssistantSpeech {
     setVoiceProblem(null);
   }, [hardCancel, setPlayState, settleGeneration]);
 
-  /** ادامه: در مسیر ابری همان play() روی همان فایلِ حافظه‌ای (بدون
-      هیچ درخواست تازه‌ای)؛ در مسیر مرورگر از تکهٔ نگه‌داشت‌شده. */
+  /** ادامه: از همان تکهٔ نگه‌داشت‌شده، بدون هیچ درخواست تازه‌ای */
   const resume = useCallback(() => {
     if (stateRef.current !== 'paused') return;
-    if (engineRef.current === 'cloud') {
-      const el = audioElRef.current;
-      if (!el || !audioUrlRef.current) {
-        setPlayState('idle');
-        return;
-      }
-      setVoiceProblem(null);
-      const attempt = (() => {
-        try {
-          return el.play();
-        } catch {
-          return null;
-        }
-      })();
-      if (!attempt || typeof attempt.then !== 'function') {
-        setPlayState('playing');
-        return;
-      }
-      attempt
-        .then(() => {
-          if (engineRef.current === 'cloud') setPlayState('playing');
-        })
-        .catch(() => {
-          if (engineRef.current !== 'cloud') return;
-          setPlayState('idle');
-          setVoiceProblem('engine-stalled');
-        });
-      return;
-    }
     if (chunksRef.current.length === 0) {
       setPlayState('idle');
       return;
@@ -1084,7 +804,7 @@ export function useAssistantSpeech(): AssistantSpeech {
     available,
     status,
     enabled,
-    loading: loadingAudio,
+    loading: false, // صدای ابری دیگر وجود ندارد؛ هیچ بارگیری شبکه‌ای نیست
     speaking,
     paused,
     voiceProblem,

@@ -59,3 +59,87 @@ jobs:
 
       - name: Runtime smoke tests
         run: npm run smoke
+
+      # تشخیص مستقیم کلید TTS سمت OpenAI. اگر POST به تابع ما 429 بدهد،
+      # این گام مشخص می‌کند کلید نامعتبر است یا اعتبار/سهمیه حساب تمام شده.
+      # مقدار کلید هرگز چاپ نمی‌شود (گیت‌هاب هم خودش آن را *** می‌کند).
+      - name: Diagnose the OpenAI TTS key (key value is never printed)
+        env:
+          TTS_KEY: ${{ secrets.TTS_API_KEY }}
+        run: |
+          set -uo pipefail
+          if [ -z "${TTS_KEY:-}" ]; then
+            echo "::warning::TTS_API_KEY is not available to this run — key diagnosis skipped."
+            exit 0
+          fi
+          echo "secret present: yes (length ${#TTS_KEY} characters; value never printed)"
+
+          # 1) کلید معتبر است؟ فهرست مدل‌ها هزینه و سهمیه مصرف نمی‌کند
+          mcode=$(curl -sS -m 30 -o /tmp/models.json -w '%{http_code}' \
+                  -H "Authorization: Bearer ${TTS_KEY}" \
+                  https://api.openai.com/v1/models 2>/dev/null) || mcode="000"
+          echo "GET /v1/models -> HTTP ${mcode}"
+
+          # 2) همان درخواست صوتی که تابع ما می‌فرستد — مستقیم به OpenAI
+          scode=$(curl -sS -m 60 -o /tmp/oai.bin -w '%{http_code}' \
+                  -X POST -H "Authorization: Bearer ${TTS_KEY}" -H 'Content-Type: application/json' \
+                  --data '{"model":"gpt-4o-mini-tts","voice":"coral","input":"سلام","response_format":"mp3"}' \
+                  https://api.openai.com/v1/audio/speech 2>/dev/null) || scode="000"
+          ssize=$(wc -c < /tmp/oai.bin 2>/dev/null | tr -d ' ') || ssize=0
+          echo "POST /v1/audio/speech -> HTTP ${scode} (${ssize} bytes)"
+          body=$(head -c 400 /tmp/oai.bin 2>/dev/null | tr -d '\r\n')
+          echo "upstream body: ${body:-n/a}"
+
+          if [ "$scode" = "200" ] && [ "${ssize:-0}" -gt 1000 ]; then
+            echo "::notice::OPENAI KEY OK — direct TTS call returned HTTP 200 with ${ssize} bytes; /v1/models was HTTP ${mcode}. Any 429 from zhino-voice is therefore transient."
+          else
+            echo "::error::OPENAI TTS REJECTED the request — HTTP ${scode} (${ssize} bytes). Upstream said: ${body:-no body}. /v1/models HTTP ${mcode}. The key value is not printed."
+          fi
+          # تشخیص است، نه دروازهٔ کیفیت کد
+          exit 0
+
+      # Live synthetic check of the deployed cloud voice. Read-only for our
+      # infrastructure (one GET + one POST to the public endpoint, exactly the
+      # two calls the storefront makes) and it NEVER blocks the build: the
+      # result is reported as an annotation so it is visible on the run page.
+      - name: Live voice probe — GET health + real POST synthesis (non-blocking)
+        env:
+          VOICE_BASE: ${{ vars.VITE_SUPABASE_URL }}
+          VOICE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -uo pipefail
+          base="${VOICE_BASE:-https://kijhqsyftzufydonggeb.supabase.co}"; base="${base%/}"
+          url="${base}/functions/v1/zhino-voice"
+          key="${VOICE_KEY:-}"
+          auth=()
+          if [ -n "$key" ]; then auth=(-H "Authorization: Bearer ${key}" -H "apikey: ${key}"); fi
+
+          echo "===== GET ${url} ====="
+          gcode=$(curl -sS -m 30 -o /tmp/voice-get.json -w '%{http_code}' "${auth[@]}" "$url" 2>/dev/null) || gcode="000"
+          echo "HTTP ${gcode}"; head -c 400 /tmp/voice-get.json 2>/dev/null; echo
+
+          echo
+          echo "===== POST ${url} ====="
+          pcode=$(curl -sS -m 60 -D /tmp/voice.hdr -o /tmp/voice.bin -w '%{http_code}' \
+                  -X POST -H 'Content-Type: application/json' "${auth[@]}" \
+                  --data '{"text":"سلام، صدای ژینو"}' "$url" 2>/dev/null) || pcode="000"
+          ctype=$(sed -e 's/\r$//' /tmp/voice.hdr 2>/dev/null | awk 'tolower($1)=="content-type:"{print $2}' | head -1)
+          size=$(wc -c < /tmp/voice.bin 2>/dev/null | tr -d ' ') || size=0
+          echo "HTTP ${pcode} | content-type=${ctype:-n/a} | bytes=${size:-0}"
+          echo "--- response headers (the function never returns a key) ---"
+          sed -e 's/\r$//' /tmp/voice.hdr 2>/dev/null | head -12
+          case "${ctype:-}" in
+            audio/*) echo "--- first bytes ---"; head -c 4 /tmp/voice.bin | od -An -tx1 | head -1 ;;
+            *) echo "--- body (first 400 bytes) ---"; head -c 400 /tmp/voice.bin 2>/dev/null; echo ;;
+          esac
+
+          if [ "$pcode" = "200" ] && [ "${ctype:-audio/none}" = "audio/mpeg" ] && [ "${size:-0}" -gt 1000 ]; then
+            echo "::notice::LIVE VOICE OK — POST returned HTTP 200 ${ctype} with ${size} bytes of MP3."
+          else
+            # بدنهٔ پاسخ ما هیچ کلیدی ندارد (تست‌ها همین را قفل کرده‌اند)؛
+            # با `upstream` علت واقعی سمت سرویس TTS همین‌جا دیده می‌شود.
+            body=$(head -c 240 /tmp/voice.bin 2>/dev/null | tr -d '\r\n')
+            echo "::error::LIVE VOICE NOT OK — GET=${gcode}, POST=${pcode}, content-type=${ctype:-n/a}, bytes=${size:-0}, body=${body:-n/a}"
+          fi
+          # Diagnostic only: a voice outage must not fail unrelated pull requests.
+          exit 0

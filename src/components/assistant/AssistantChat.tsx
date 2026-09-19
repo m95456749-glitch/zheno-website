@@ -314,18 +314,12 @@ export default function AssistantChat({ chat, className }: Props) {
   // راهنمای کوتاه زیر کادر؛ فقط وقتی طول پیام به سقف نزدیک می‌شود، شمارنده جایش می‌آید
   const hint = remaining <= 80 ? `${remaining} نویسه باقی مانده` : 'برای ارسال، Enter را بزنید';
 
-  /** روشن/خاموش کردن خواندن پاسخ‌ها — اگر دستگاه صدای فارسی نداشت،
-      فقط یک خط کوتاه و واضح گفته می‌شود */
+  /** روشن/خاموش کردن خواندن پاسخ‌ها — حتی اگر دستگاه صدای فارسی
+      نداشته باشد خاموش نمی‌ماند: خواندن با fallback خودِ مرورگر
+      امتحان می‌شود و فقط شکستِ واقعیِ موتور پیام کوتاه می‌گیرد */
   const toggleVoice = () => {
     if (!voiceAvailable) {
       showVoiceNotice(VOICE_UNAVAILABLE_MSG);
-      return;
-    }
-    if (!voiceOn && voiceStatus === 'none') {
-      showVoiceNotice(
-        NO_PERSIAN_MSG,
-        isAndroidDevice() ? ANDROID_VOICE_HINT : null,
-      );
       return;
     }
     if (!voiceOn && voiceStatus === 'loading') {
@@ -366,13 +360,6 @@ export default function AssistantChat({ chat, className }: Props) {
     // اگر آماده‌سازی یا پخشِ پاسخ دیگری روی خط است، همان را قطع کن
     if (voiceLoading || voiceReading || voicePaused) {
       stop();
-    }
-    if (voiceStatus === 'none') {
-      showVoiceNotice(
-        NO_PERSIAN_MSG,
-        isAndroidDevice() ? ANDROID_VOICE_HINT : null,
-      );
-      return;
     }
     if (voiceStatus === 'loading') {
       // فهرست هنوز خالی است؛ امتحان می‌کنیم و «آزمون شروع» در هوک

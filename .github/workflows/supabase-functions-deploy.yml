@@ -31,8 +31,14 @@ name: Supabase deploy functions (manual)
 #   or sb_secret_…) do NOT work — the CLI cannot use data-plane keys.
 #
 # OPTIONAL repository secrets (each is conditional — set only what you have):
+#   TTS_API_KEY (+ TTS_API_URL, TTS_MODEL, TTS_VOICE_FEMALE, TTS_VOICE_MALE)
+#       — enables the cloud voice through OpenAI «gpt-4o-mini-tts»
+#         (zhino-voice answers 200 with audio). One key is enough; it is
+#         the only credential the voice function needs on this path.
 #   AZURE_SPEECH_KEY + AZURE_SPEECH_REGION (+ AZURE_SPEECH_VOICE)
-#       — enables the cloud voice (zhino-voice answers 200 with audio)
+#       — the alternate cloud voice provider (Azure AI Speech). Kept
+#         available: with both keys set, auto mode prefers OpenAI, so
+#         setting VOICE_PROVIDER (see VARIABLES) picks the provider.
 #   AI_API_KEY + AI_MODEL (+ AI_API_URL)
 #       — enables the chat AI (zhino-assistant answers with model replies)
 #
@@ -42,6 +48,9 @@ name: Supabase deploy functions (manual)
 #   it here adds no new exposure. If unset, the check falls back to an
 #   unauthenticated probe where "anything but 404" still proves the function
 #   exists.
+#   VOICE_PROVIDER — optional, not a secret: `openai` or `azure`. When it is
+#   left unset the voice function picks automatically (OpenAI if TTS_API_KEY
+#   exists, otherwise Azure).
 
 on:
   workflow_dispatch:
@@ -183,11 +192,79 @@ jobs:
           set -euo pipefail
           supabase functions deploy zhino-assistant --project-ref "$PROJECT_REF"
 
+      - name: Confirm the deploy + open zhino-voice to the browser (verify_jwt=false)
+        run: |
+          set -uo pipefail
+          ref="${PROJECT_REF:?the project ref is empty}"
+          api="https://api.supabase.com/v1/projects/${ref}/functions"
+
+          # 'supabase functions deploy' exiting 0 is not proof the function is
+          # live: the site only works when the Management API lists the slug.
+          # Read the authoritative list and fail loudly if it is missing.
+          list_functions() {
+            curl -sS -m 30 \
+              -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+              -H "Accept: application/json" \
+              "${api}" 2>/dev/null
+          }
+
+          echo "== functions in project ${ref} (Management API) =="
+          raw=$(list_functions) || raw=""
+          if [ -z "$raw" ]; then
+            echo "::error::Could not read the function list from the Management API — the deploy cannot be confirmed."
+            exit 1
+          fi
+          echo "$raw" | jq -r 'if type=="array" then (.[] | "\(.slug)\t\(.status)\tv\(.version)\tverify_jwt=\(.verify_jwt)") else "unexpected payload" end' 2>/dev/null \
+            || head -c 400 <<<"$raw"
+
+          if ! echo "$raw" | jq -e 'type=="array" and (map(.slug) | index("zhino-voice") != null)' >/dev/null 2>&1; then
+            echo "::error::zhino-voice is NOT in the project's function list even though 'supabase functions deploy' exited 0 — this is exactly what the storefront shows as «صدا در دسترس نیست» (its request gets 404). Re-run this workflow once; if it persists, deploy by hand: supabase functions deploy zhino-voice --project-ref ${ref}"
+            exit 1
+          fi
+          echo "ok: zhino-voice exists in the project."
+
+          # The storefront is anonymous: src/services/assistant/voice.ts sends
+          # the project's PUBLISHABLE key in Authorization + apikey, and the
+          # platform's verify_jwt gate only accepts a real user JWT — an API
+          # key is rejected with 401 BEFORE our code runs. So the gate is
+          # turned off for this one public endpoint. The function keeps its own
+          # guards (per-IP rate limit, 2000-char / 8KB caps, ALLOWED_ORIGINS,
+          # admin master switch) and never touches private data.
+          echo
+          echo "== set verify_jwt=false on zhino-voice =="
+          patch=$(curl -sS -m 30 -o /tmp/patch-voice.json -w '%{http_code}' -X PATCH \
+                  -H "Authorization: Bearer ${SUPABASE_ACCESS_TOKEN}" \
+                  -H "Content-Type: application/json" \
+                  -d '{"verify_jwt": false}' \
+                  "${api}/zhino-voice" 2>/dev/null) || patch="000"
+          echo "PATCH .../functions/zhino-voice -> HTTP ${patch}"
+          head -c 300 /tmp/patch-voice.json 2>/dev/null; echo
+          if [ "$patch" != "200" ]; then
+            echo "::error::Could not disable JWT verification on zhino-voice (HTTP ${patch}) — the browser would keep getting 401 from the platform."
+            exit 1
+          fi
+
+          echo
+          echo "== state after the change =="
+          raw2=$(list_functions) || raw2=""
+          echo "$raw2" | jq -r 'if type=="array" then (.[] | "\(.slug)\t\(.status)\tverify_jwt=\(.verify_jwt)") else "unexpected payload" end' 2>/dev/null || true
+          if echo "$raw2" | jq -e '(map(select(.slug=="zhino-voice")) | .[0] | .verify_jwt == false)' >/dev/null 2>&1; then
+            echo "ok: zhino-voice is deployed and callable without a user JWT."
+          else
+            echo "::warning::verify_jwt is not reported as false for zhino-voice — the browser may still be answered 401."
+          fi
+
       - name: Set Supabase secrets — only the names that were provided
         env:
-          # ONLY these six secrets are wired into this step — nothing else.
-          # An undefined repository secret evaluates to an empty string,
-          # which the conditionals below treat as "not provided".
+          # ONLY these names are wired into this step — nothing else.
+          # An undefined repository secret/variable evaluates to an empty
+          # string, which the conditionals below treat as "not provided".
+          VOICE_PROVIDER: ${{ vars.VOICE_PROVIDER }}
+          TTS_API_KEY: ${{ secrets.TTS_API_KEY }}
+          TTS_API_URL: ${{ secrets.TTS_API_URL }}
+          TTS_MODEL: ${{ secrets.TTS_MODEL }}
+          TTS_VOICE_FEMALE: ${{ secrets.TTS_VOICE_FEMALE }}
+          TTS_VOICE_MALE: ${{ secrets.TTS_VOICE_MALE }}
           AZURE_SPEECH_KEY: ${{ secrets.AZURE_SPEECH_KEY }}
           AZURE_SPEECH_REGION: ${{ secrets.AZURE_SPEECH_REGION }}
           AZURE_SPEECH_VOICE: ${{ secrets.AZURE_SPEECH_VOICE }}
@@ -199,6 +276,7 @@ jobs:
           # The values live in GitHub secrets and travel only inside this
           # command invocation; they are never echoed (and ::add-mask:: in
           # the guard step covers accidental repetition of the token).
+          echo "::add-mask::${TTS_API_KEY:-}"
           echo "::add-mask::${AZURE_SPEECH_KEY:-}"
           echo "::add-mask::${AI_API_KEY:-}"
 
@@ -208,6 +286,25 @@ jobs:
               echo "set ${2} on the Supabase project (value never printed)"
             fi
           }
+
+          if [ -n "${TTS_API_KEY:-}" ]; then
+            set_pair openai-tts TTS_API_KEY "${TTS_API_KEY}"
+            set_pair openai-tts TTS_API_URL "${TTS_API_URL:-}"
+            set_pair openai-tts TTS_MODEL "${TTS_MODEL:-}"
+            set_pair openai-tts TTS_VOICE_FEMALE "${TTS_VOICE_FEMALE:-}"
+            set_pair openai-tts TTS_VOICE_MALE "${TTS_VOICE_MALE:-}"
+          fi
+
+          # Not a secret — just which provider serves the voice. Empty means
+          # "auto" (OpenAI when TTS_API_KEY exists, otherwise Azure).
+          if [ -n "${VOICE_PROVIDER:-}" ]; then
+            case "${VOICE_PROVIDER}" in
+              openai|azure) set_pair voice-provider VOICE_PROVIDER "${VOICE_PROVIDER}" ;;
+              *)
+                echo "::error::VOICE_PROVIDER must be either 'openai' or 'azure' (got: ${VOICE_PROVIDER}). Leaving it unset so the function keeps choosing automatically."
+                ;;
+            esac
+          fi
 
           if [ -n "${AZURE_SPEECH_KEY:-}" ]; then
             if [ -z "${AZURE_SPEECH_REGION:-}" ]; then
@@ -227,8 +324,8 @@ jobs:
             set_pair ai-model AI_API_URL "${AI_API_URL:-}"
           fi
 
-          if [ -z "${AZURE_SPEECH_KEY:-}" ] && [ -z "${AI_API_KEY:-}" ]; then
-            echo "::notice::No Azure/AI secrets were provided as GitHub secrets — both functions are deployed, but cloud voice answers 501 (not_configured) and the chat AI stays off. Add AZURE_SPEECH_KEY + AZURE_SPEECH_REGION and/or AI_API_KEY + AI_MODEL under Settings > Secrets and variables > Actions, then re-run this workflow (re-running is safe: deploys are idempotent)."
+          if [ -z "${TTS_API_KEY:-}" ] && [ -z "${AZURE_SPEECH_KEY:-}" ] && [ -z "${AI_API_KEY:-}" ]; then
+            echo "::notice::No TTS/Azure/AI secrets were provided as GitHub secrets — both functions are deployed, but cloud voice answers 501 (not_configured) and the chat AI stays off. Add TTS_API_KEY (OpenAI gpt-4o-mini-tts) and/or AZURE_SPEECH_KEY + AZURE_SPEECH_REGION and/or AI_API_KEY + AI_MODEL under Settings > Secrets and variables > Actions, then re-run this workflow (re-running is safe: deploys are idempotent)."
           fi
 
       - name: Verify — live HTTP health check of both deployed functions
@@ -242,6 +339,15 @@ jobs:
           # website bundle, so using it here adds no new exposure).
           base="${PROJECT_URL:-https://${PROJECT_REF}.supabase.co}"; base="${base%/}"
           key="${PUBLIC_KEY:-}"
+          # A mismatch here means the site talks to a DIFFERENT project than the
+          # one this workflow deploys to — the function would exist and the
+          # storefront would still get 404.
+          canonical="https://${PROJECT_REF}.supabase.co"
+          echo "health base : ${base}"
+          echo "deployed to : ${canonical}"
+          if [ "$base" != "$canonical" ]; then
+            echo "::warning::VITE_SUPABASE_URL (${base}) is NOT the project this workflow deploys to (${canonical}). If these differ, the deployed functions can never be reached by the site — fix the repository variable or PROJECT_REF."
+          fi
           if [ -n "$key" ]; then
             echo "health check using the project's publishable key (public by design)"
           else
@@ -251,41 +357,125 @@ jobs:
           failures=0
           for fn in zhino-voice zhino-assistant; do
             echo "===== health: ${fn} ====="
-            if [ -n "$key" ]; then
-              code=$(curl -sS -m 30 -o /tmp/health-${fn}.json -w '%{http_code}' \
-                -H "Authorization: Bearer ${key}" -H "apikey: ${key}" \
-                "${base}/functions/v1/${fn}" 2>/dev/null) || code="000"
-            else
-              code=$(curl -sS -m 30 -o /tmp/health-${fn}.json -w '%{http_code}' \
-                "${base}/functions/v1/${fn}" 2>/dev/null) || code="000"
-            fi
-            echo "HTTP ${code}"
-            head -c 500 /tmp/health-${fn}.json 2>/dev/null; echo
+            code="000"
+            for attempt in 1 2 3; do
+              if [ -n "$key" ]; then
+                code=$(curl -sS -m 30 -D "/tmp/health-${fn}.hdr" -o "/tmp/health-${fn}.json" -w '%{http_code}' \
+                  -H "Authorization: Bearer ${key}" -H "apikey: ${key}" \
+                  "${base}/functions/v1/${fn}" 2>/dev/null) || code="000"
+              else
+                code=$(curl -sS -m 30 -D "/tmp/health-${fn}.hdr" -o "/tmp/health-${fn}.json" -w '%{http_code}' \
+                  "${base}/functions/v1/${fn}" 2>/dev/null) || code="000"
+              fi
+              echo "attempt ${attempt} -> HTTP ${code}"
+              if [ "$code" != "000" ]; then break; fi
+              sleep 10
+            done
+            grep -i '^sb-error-code:' "/tmp/health-${fn}.hdr" 2>/dev/null || true
+            head -c 500 "/tmp/health-${fn}.json" 2>/dev/null; echo
 
             case "$code" in
               404)
                 echo "::error::${fn} still answers 404 — the deploy did not take effect. Re-run the workflow once; if it persists, inspect the deploy step log."
                 failures=$((failures + 1)) ;;
+              401|403)
+                # The platform's verify_jwt gate answers 401 for a publishable
+                # key (it only accepts a real user JWT). For zhino-voice that is
+                # a hard failure: the storefront is anonymous and can never
+                # present a user JWT.
+                if [ "$fn" = "zhino-voice" ]; then
+                  echo "::error::${fn} answered ${code} — the platform JWT gate is still on, so every browser call dies before our code runs. The previous step must set verify_jwt=false for this public function."
+                  failures=$((failures + 1))
+                else
+                  echo "::warning::${fn} answered ${code} — deployed, but its JWT gate is on, so an anonymous storefront cannot call it."
+                fi ;;
               200)
                 echo "ok: ${fn} is deployed and answers 200."
-                if [ -n "$key" ] && [ -f /tmp/health-${fn}.json ]; then
-                  if grep -q '"configured":true' /tmp/health-${fn}.json; then
-                    echo "ok: ${fn} reports configured:true — its secrets are active."
+                if [ "$fn" = "zhino-voice" ] && [ -f "/tmp/health-${fn}.json" ]; then
+                  if grep -q '"configured":true' "/tmp/health-${fn}.json"; then
+                    echo "ok: ${fn} reports configured:true — its TTS secret is active."
                   else
-                    echo "note: ${fn} reports configured:false — deployed and reachable, but its secrets (Azure/AI) are not set yet, so it answers 501 for real requests until they are added."
+                    echo "::warning::${fn} reports configured:false — deployed and reachable, but no TTS secret is set (TTS_API_KEY / AZURE_SPEECH_KEY), so real requests answer 501 and the site falls back to the browser voice."
                   fi
                 fi ;;
               000)
-                # No answer at all: a transient runner network issue, NOT
-                # proof of (non-)existence — do not count it as a failure,
-                # the deploy step above already succeeded or failed loudly.
-                echo "::warning::${fn} could not be reached from the runner (no HTTP answer) — likely transient. Re-run the workflow to re-verify." ;;
+                # Not a pass: an unreachable endpoint proves nothing, and
+                # treating it as OK is how a missing deploy looks "green".
+                echo "::error::${fn} could not be reached after 3 attempts — the deploy cannot be confirmed, so this run is marked failed."
+                failures=$((failures + 1)) ;;
               *)
                 echo "note: ${fn} is deployed (any HTTP answer other than 404 proves existence); this probe got HTTP ${code}." ;;
             esac
           done
           [ "$failures" -eq 0 ] || exit 1
           echo "✅ Both functions answer — the 404 is gone."
+
+      - name: Real synthesis round trip (POST /functions/v1/zhino-voice)
+        env:
+          PROJECT_URL: ${{ vars.VITE_SUPABASE_URL }}
+          PUBLIC_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
+        run: |
+          set -uo pipefail
+          base="${PROJECT_URL:-https://${PROJECT_REF}.supabase.co}"; base="${base%/}"
+          url="${base}/functions/v1/zhino-voice"
+          key="${PUBLIC_KEY:-}"
+          # The exact request the storefront makes: one short Persian answer,
+          # publishable key in Authorization + apikey. Nothing secret is sent
+          # and the function never returns a key, so the response is safe to
+          # print. The audio itself is NOT printed — only its size and the
+          # first bytes (an MP3 starts with "ID3" or 0xFF 0xFx).
+          auth=()
+          if [ -n "$key" ]; then auth=(-H "Authorization: Bearer ${key}" -H "apikey: ${key}"); fi
+
+          code="000"; ctype=""; size=0
+          for attempt in 1 2 3; do
+            code=$(curl -sS -m 60 -D /tmp/tts.hdr -o /tmp/tts.bin -w '%{http_code}' \
+                   -X POST -H 'Content-Type: application/json' "${auth[@]}" \
+                   --data '{"text":"سلام، صدای ژینو"}' "$url" 2>/dev/null) || code="000"
+            ctype=$(sed -e 's/\r$//' /tmp/tts.hdr 2>/dev/null | awk 'tolower($1)=="content-type:"{print $2}' | head -1)
+            size=$(wc -c < /tmp/tts.bin 2>/dev/null | tr -d ' ') || size=0
+            echo "attempt ${attempt} -> HTTP ${code} | content-type=${ctype:-n/a} | bytes=${size:-0}"
+            # 501 = the secrets have not propagated to the function env yet;
+            # 000 = the runner got no answer. Both are worth one more try.
+            if [ "$code" = "200" ] && [ "${ctype:-}" != "" ]; then break; fi
+            if [ "$code" != "501" ] && [ "$code" != "000" ]; then break; fi
+            sleep 15
+          done
+
+          echo "--- response headers ---"
+          sed -e 's/\r$//' /tmp/tts.hdr 2>/dev/null | head -15
+          case "${ctype:-}" in
+            audio/*) : ;;
+            *) echo "--- response body (first 400 bytes; the function never puts a key in a response) ---"
+               head -c 400 /tmp/tts.bin 2>/dev/null; echo ;;
+          esac
+          echo "--- first bytes of the body ---"
+          head -c 4 /tmp/tts.bin 2>/dev/null | od -An -tx1 | head -1
+
+          case "$code" in
+            200)
+              case "${ctype:-}" in
+                audio/*)
+                  if [ "${size:-0}" -gt 1000 ]; then
+                    echo "::notice::zhino-voice POST OK — HTTP 200, ${ctype}, ${size} bytes of audio (real MP3 round trip through the TTS provider)."
+                  else
+                    echo "::error::zhino-voice POST returned 200 ${ctype} but only ${size} bytes — the audio looks truncated."
+                    exit 1
+                  fi ;;
+                *)
+                  echo "::error::zhino-voice POST answered 200 with content-type=${ctype:-n/a} instead of audio — see the body above for the upstream error."
+                  exit 1 ;;
+              esac ;;
+            501)
+              echo "::error::zhino-voice answered 501 not_configured — the TTS secret is not visible to the function env (set TTS_API_KEY, then re-run)."
+              exit 1 ;;
+            000)
+              echo "::error::zhino-voice POST got no HTTP answer after 3 attempts — the voice path cannot be confirmed, so this run is marked failed."
+              exit 1 ;;
+            *)
+              echo "::error::zhino-voice POST failed — HTTP ${code} (see the body above)."
+              exit 1 ;;
+          esac
 
       - name: Result summary
         if: always()
