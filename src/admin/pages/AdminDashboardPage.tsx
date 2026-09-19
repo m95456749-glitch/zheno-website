@@ -108,12 +108,13 @@ const SECTION_CARDS: SectionCard[] = [
 ];
 
 /**
- * مدیریت قیمت و تصویر محصول از قبل در صفحهٔ «محصولات» زندگی می‌کند؛
- * این دو میان‌بر مستقیم به همان منبع می‌روند و ماژول تکراری نمی‌سازند.
+ * دو میان‌بر مستقیم و جدا: «قیمت‌ها» همان صفحهٔ محصولات است (ستون
+ * قیمت و فرم ویرایش) و «تصاویر محصولات» به بخش اختصاصی گالری می‌رود
+ * (بارگذاری، جایگزینی، حذف با تأیید و انتخاب تصویر اصلی).
  */
 const PRODUCT_SHORTCUTS = [
   { id: 'prices', label: 'قیمت‌ها', to: '/admin/products?view=prices', icon: IconPrice },
-  { id: 'images', label: 'تصاویر محصولات', to: '/admin/products?view=images', icon: IconImage },
+  { id: 'images', label: 'تصاویر محصولات', to: '/admin/product-images', icon: IconImage },
 ];
 
 /** فلش گردِ کارت‌ها — در RTL به سمت چپ (مسیر پیش‌رو) اشاره می‌کند */

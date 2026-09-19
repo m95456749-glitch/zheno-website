@@ -41,9 +41,65 @@ for (const id of ['new-orders', 'preparing-orders', 'shipped-orders', 'completed
   mustInclude('src/services/dashboardPreferences.ts', `'${id}'`, `dashboard card contract: ${id}`);
 }
 
-for (const path of ['/admin/products?view=prices', '/admin/products?view=images']) {
-  mustInclude('src/admin/pages/AdminDashboardPage.tsx', path, `direct product focus: ${path}`);
+// «قیمت‌ها» stays a focus view of the products page. «تصاویر محصولات»
+// now has its own gallery section (upload / replace / delete / primary).
+mustInclude('src/admin/pages/AdminDashboardPage.tsx', '/admin/products?view=prices', 'direct product focus: /admin/products?view=prices');
+mustInclude('src/admin/pages/AdminDashboardPage.tsx', '/admin/product-images', 'direct product shortcut: /admin/product-images');
+
+/* ── «تصاویر محصولات» — the product image gallery contract ── */
+
+const IMAGES_MIGRATION = 'supabase/migrations/20260919000000_product_images.sql';
+for (const file of [
+  IMAGES_MIGRATION,
+  'src/services/productImages.ts',
+  'src/services/supabaseProductImages.ts',
+  'src/utils/imageFile.ts',
+  'src/admin/pages/AdminProductImagesPage.tsx',
+]) {
+  if (existsSync(join(root, file))) pass(`product images file exists: ${file}`);
+  else fail(`product images file is missing: ${file}`);
 }
+
+// Route + navigation reachability
+mustInclude('src/App.tsx', 'path="product-images"', 'admin route: product-images');
+mustInclude('src/admin/nav.ts', "to: '/admin/product-images'", 'admin nav entry: تصاویر محصولات');
+mustInclude('src/admin/nav.ts', "label: 'تصاویر محصولات'", 'admin nav label: تصاویر محصولات');
+
+// Database side: gallery table, RLS, admin-only writes, Storage bucket
+mustInclude(IMAGES_MIGRATION, 'create table if not exists public.product_images', 'product_images table');
+mustInclude(IMAGES_MIGRATION, 'alter table public.product_images enable row level security', 'product_images RLS enabled');
+mustInclude(IMAGES_MIGRATION, 'create policy product_images_admin_write', 'product_images admin-only write policy');
+mustInclude(IMAGES_MIGRATION, 'public.is_admin()', 'product_images policies use is_admin()');
+mustInclude(IMAGES_MIGRATION, "insert into storage.buckets", 'product-images storage bucket');
+mustInclude(IMAGES_MIGRATION, 'create policy product_images_storage_insert', 'storage insert policy');
+mustInclude(IMAGES_MIGRATION, 'create policy product_images_storage_delete', 'storage delete policy');
+mustInclude(IMAGES_MIGRATION, 'set_primary_product_image', 'atomic primary-image RPC');
+mustInclude(IMAGES_MIGRATION, 'image_url = image_row.storefront_url', 'primary image is mirrored into products.image_url');
+mustInclude(IMAGES_MIGRATION, "source = 'legacy'", 'existing site photos are registered as legacy');
+
+// The migration must not rewrite what the storefront already reads
+const imagesMigration = read(IMAGES_MIGRATION);
+if (!/update\s+public\.products(?!\s+set\s+image_url)/i.test(imagesMigration.replace(/\$\$[\s\S]*?\$\$/g, ''))) {
+  pass('migration body never rewrites products rows outside the RPC');
+} else {
+  fail('migration must not update products rows outside set_primary_product_image()');
+}
+
+// Client side: the storefront keeps reading the ONE field it always read
+mustInclude('src/services/supabaseProductImages.ts', 'set_primary_product_image', 'promotion goes through the database RPC');
+mustInclude('src/services/productImages.ts', 'products.image_url', 'gallery documents the storefront contract');
+mustInclude('src/services/productImages.ts', "image.source === 'upload'", 'only uploaded Storage objects are ever removed');
+mustInclude('src/utils/responsiveImages.ts', 'isAbsoluteUrl', 'absolute (Storage/data) image URLs bypass the site base');
+mustInclude('src/utils/imageFile.ts', 'MAX_IMAGE_BYTES', 'upload size limit is enforced in the browser too');
+mustInclude('src/utils/imageFile.ts', 'ACCEPTED_IMAGE_TYPES', 'upload type allowlist is enforced in the browser too');
+
+// UI: preview before saving, explicit confirmation, primary selection
+mustInclude('src/admin/pages/AdminProductImagesPage.tsx', 'prepareProductImage', 'the dialog previews the exact bytes it will send');
+mustInclude('src/admin/pages/AdminProductImagesPage.tsx', 'حذف قطعی تصویر', 'deletion asks for an explicit confirmation');
+mustInclude('src/admin/pages/AdminProductImagesPage.tsx', 'تصویر اصلی محصول شود', 'primary image can be chosen while uploading');
+mustInclude('src/admin/pages/AdminProductImagesPage.tsx', 'جایگزینی تصویر اصلی', 'replacing the current photo is a first-class action');
+mustInclude('src/admin/pages/AdminProductImagesPage.tsx', 'پیش‌نمایش', 'the manager sees a preview');
+mustInclude('src/admin/admin.css', '.adm-images-grid', 'gallery layout style');
 
 // The redesigned panel home is seven independent, side-by-side section
 // cards (icon + short title + one-line description + a round button) —
@@ -55,7 +111,7 @@ mustInclude('src/admin/pages/AdminDashboardPage.tsx', 'adm-card-action', 'dashbo
 mustInclude('src/admin/admin.css', '.adm-card-grid', 'dashboard card grid style');
 mustInclude('src/admin/pages/AdminAssistantPage.tsx', 'Accordion', 'assistant settings stay in collapsible groups');
 
-for (const path of ['/admin/dashboard', '/admin/products', '/admin/orders', '/admin/inventory', '/admin/recipes', '/admin/site-content', '/admin/settings']) {
+for (const path of ['/admin/dashboard', '/admin/products', '/admin/product-images', '/admin/orders', '/admin/inventory', '/admin/recipes', '/admin/site-content', '/admin/settings']) {
   mustInclude('src/admin/nav.ts', `to: '${path}'`, `admin route: ${path}`);
 }
 
