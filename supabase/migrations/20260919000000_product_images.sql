@@ -13,8 +13,15 @@
 --     storefront, cart and checkout render exactly as before.
 --   * No file in public/images/ is moved, renamed or removed. The
 --     existing photos are only REGISTERED here as source = 'legacy'
---     rows so the manager sees them in one gallery.
+--     rows so the manager sees them in one gallery — and only for
+--     products that have no gallery rows yet, so re-running this file
+--     can never disturb a gallery the panel already manages.
 --   * No row of any existing table is updated or removed by this file.
+--
+-- APPLY SAFETY: every statement in this file is idempotent (guards,
+-- create-or-replace, on-conflict). Applying it again to a project that
+-- already has some or all of these objects is a no-op that repairs a
+-- missing piece (e.g. the storage bucket) without failing.
 --
 -- SECURITY MODEL (same posture as the rest of the schema)
 --   * Reads: anonymous visitors see only images of ACTIVE products
@@ -206,7 +213,21 @@ create policy product_images_storage_delete on storage.objects for delete
 -- ── 5. register the photos the site already ships ───────────
 -- Read-only registration: products.image_url is NOT modified, so the
 -- verified seed counts (22 products, 22 'images/products/%' paths) stay
--- exactly as they are. Re-running is a no-op.
+-- exactly as they are.
+--
+-- RE-RUN SAFETY (this file is meant to be pasted into the SQL editor as
+-- often as needed — e.g. to heal a project where an earlier, partial
+-- apply created the table but not the bucket):
+--   * The NOT EXISTS guard registers the shipped photo ONLY for a
+--     product that has no gallery rows at all. A product the panel
+--     already manages — uploads, a promoted primary, a deliberately
+--     unregistered legacy row — is skipped untouched.
+--   * That guard is also what makes the second apply possible: without
+--     it, re-inserting is_primary = true rows would trip the
+--     product_images_one_primary partial unique index and abort the
+--     whole statement. ON CONFLICT targets only the path constraint;
+--     Postgres does NOT swallow conflicts of other unique indexes, so
+--     the guard (not the conflict clause) carries the idempotency.
 
 insert into public.product_images (
   product_id, storage_bucket, storage_path, storefront_url,
@@ -230,4 +251,9 @@ select
 from public.products p
 where p.image_url is not null
   and btrim(p.image_url) <> ''
+  and not exists (
+    select 1
+    from public.product_images existing
+    where existing.product_id = p.id
+  )
 on conflict (storage_bucket, storage_path) do nothing;

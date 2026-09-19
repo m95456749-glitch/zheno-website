@@ -76,6 +76,11 @@ mustInclude(IMAGES_MIGRATION, 'create policy product_images_storage_delete', 'st
 mustInclude(IMAGES_MIGRATION, 'set_primary_product_image', 'atomic primary-image RPC');
 mustInclude(IMAGES_MIGRATION, 'image_url = image_row.storefront_url', 'primary image is mirrored into products.image_url');
 mustInclude(IMAGES_MIGRATION, "source = 'legacy'", 'existing site photos are registered as legacy');
+// Re-applying the file must repair a partial apply, NEVER crash: the
+// registration INSERT is guarded so a product that already has gallery
+// rows is skipped (un-guarded re-runs tripped the one-primary-per-product
+// partial unique index and aborted the whole statement).
+mustInclude(IMAGES_MIGRATION, 'and not exists (', 'legacy re-registration is guarded (idempotent re-apply)');
 
 // The migration must not rewrite what the storefront already reads
 const imagesMigration = read(IMAGES_MIGRATION);

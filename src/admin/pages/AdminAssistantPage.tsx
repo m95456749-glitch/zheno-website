@@ -132,6 +132,9 @@ export default function AdminAssistantPage() {
   const liveSettings = useVoiceSettings();
   const speech = useAssistantSpeech();
   const [form, setForm] = useState<AssistantVoiceSettings>(() => getVoiceSettings());
+  /** آیا مدیر در حال ویرایش فرم است؟ تا ذخیره/بازنشانی، تنظیمات زندهٔ
+      رسیده از دیتابیس نباید ویرایش‌های روی صفحه را بازنویسی کنند. */
+  const dirtyRef = useRef(false);
   const [saved, setSaved] = useState(false);
   const [testNote, setNote] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
@@ -140,9 +143,18 @@ export default function AdminAssistantPage() {
   const [probing, setProbing] = useState(false);
   const [errorNote, setErrorNote] = useState<string | null>(null);
 
+  // همگام‌سازی فرم با تنظیمات زنده فقط وقتی فرم «تمیز» است: بار اولِ
+  // رسیدن اسنپ‌شات دیتابیس، بعد از ذخیره و بعد از بازنشانی. ویرایشِ
+  // در‌جریانِ مدیر هرگز زیر پا گذاشته نمی‌شود.
   useEffect(() => {
+    if (dirtyRef.current) return;
     setForm(liveSettings);
   }, [liveSettings]);
+
+  const editForm = (patch: Partial<AssistantVoiceSettings>) => {
+    dirtyRef.current = true;
+    setForm((current) => ({ ...current, ...patch }));
+  };
 
   const browserCapable = useMemo(
     () => typeof window !== 'undefined' && 'speechSynthesis' in window,
@@ -151,6 +163,7 @@ export default function AdminAssistantPage() {
 
   const save = () => {
     saveVoiceSettings(form);
+    dirtyRef.current = false;
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
   };
@@ -159,15 +172,29 @@ export default function AdminAssistantPage() {
      تا هوک همان چیزی را بشنوَد که مدیر روی صفحه می‌بیند */
   const pendingTest = useRef(false);
 
-  useEffect(() => {
-    if (!pendingTest.current) return;
-    pendingTest.current = false;
-    if (!liveSettings.voiceEnabled) {
-      setNote({ tone: 'err', text: 'کلید «صدای ربات» خاموش است؛ ابتدا آن را روشن کنید.' });
+  /** شروع واقعی پخش تست — با پیام‌های فارسی واضح برای هر مانع */
+  const beginTestPlayback = () => {
+    const now = getVoiceSettings();
+    if (!now.voiceEnabled) {
+      setNote({ tone: 'err', text: 'کلید «صدای ربات» خاموش است؛ ابتدا آن را روشن کنید و دوباره تست بگیرید.' });
+      return;
+    }
+    if (!speech.available) {
+      setNote({
+        tone: 'err',
+        text: 'صدا در دسترس نیست: مرورگر از پخش پشتیبانی نمی‌کند یا صدای ابری غیرفعال است. بخش «وضعیت سرویس» را ببینید.',
+      });
+      setErrorNote('پخش تست ممکن نشد — مرورگر این دستگاه صدای فارسی ندارد و صدای ابری هم فعال نیست.');
       return;
     }
     setNote({ tone: 'ok', text: 'در حال پخش تست… اگر چیزی نشنیدید، «وضعیت سرویس» را باز کنید.' });
     speech.speak(TEST_LINE);
+  };
+
+  useEffect(() => {
+    if (!pendingTest.current) return;
+    pendingTest.current = false;
+    beginTestPlayback();
     // فقط هنگام بالاامدن تنظیمات تازهٔ ذخیره‌شده اجرا می‌شود
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [liveSettings]);
@@ -182,20 +209,19 @@ export default function AdminAssistantPage() {
 
   const testVoice = () => {
     speech.stop();
-    saveVoiceSettings(form); // تست همان چیزی را می‌شنود که ذخیره می‌شود
+    if (!form.voiceEnabled) {
+      setNote({ tone: 'err', text: 'کلید «صدای ربات» خاموش است؛ ابتدا آن را روشن کنید و دوباره تست بگیرید.' });
+      return;
+    }
+    dirtyRef.current = false; // تست = ذخیرهٔ همان چیزی که روی صفحه است
+    saveVoiceSettings(form);
     pendingTest.current = true;
-    // اگر ذخیره هیچ تغییری نکرد، ممکن است افکت بالا اجرا نشود؛
-    // یک لحظه بعد به‌صورت دستی پخش را آغاز می‌کنیم
+    // اگر ذخیره هیچ تغییری در تنظیمات زنده ندهد، افکت بالا اجرا
+    // نمی‌شود؛ پس یک لحظه بعد خودمان پخش را آغاز می‌کنیم.
     window.setTimeout(() => {
       if (!pendingTest.current) return;
       pendingTest.current = false;
-      const now = getVoiceSettings();
-      if (!now.voiceEnabled) {
-        setNote({ tone: 'err', text: 'کلید «صدای ربات» خاموش است؛ ابتدا آن را روشن کنید.' });
-        return;
-      }
-      setNote({ tone: 'ok', text: 'در حال پخش تست… اگر چیزی نشنیدید، «وضعیت سرویس» را باز کنید.' });
-      speech.speak(TEST_LINE);
+      beginTestPlayback();
     }, 350);
   };
 
@@ -260,19 +286,19 @@ export default function AdminAssistantPage() {
             label="صدای ربات (کلید اصلی)"
             hint="با خاموش‌بودن این کلید، هیچ صدایی — نه ابری و نه مرورگر — پخش نمی‌شود و دکمه‌های صدا در گفتگو پنهان می‌شوند."
             checked={form.voiceEnabled}
-            onChange={(v) => setForm((f) => ({ ...f, voiceEnabled: v }))}
+            onChange={(v) => editForm({ voiceEnabled: v })}
           />
           <SwitchRow
             label="خواندن خودکار پاسخ‌های جدید"
             hint="با روشن‌بودن، هر پاسخ تازهٔ ربات یک‌بار خوانده می‌شود (مشتری دکمهٔ توقف را در گفتگو دارد)."
             checked={form.autoVoice}
-            onChange={(v) => setForm((f) => ({ ...f, autoVoice: v }))}
+            onChange={(v) => editForm({ autoVoice: v })}
           />
           <SwitchRow
             label="صدای ابری فارسی"
             hint="صدای طبیعی‌تر از سرور (Azure). اگر خاموش یا در دسترس نباشد، صدای مرورگر مشتری استفاده می‌شود."
             checked={form.cloudVoice}
-            onChange={(v) => setForm((f) => ({ ...f, cloudVoice: v }))}
+            onChange={(v) => editForm({ cloudVoice: v })}
           />
 
           <Field label="صدای فارسی" hint="پیش‌فرض «دیلارا» است؛ هر دو صدای استاندارد فارسی Azure هستند.">
@@ -280,10 +306,9 @@ export default function AdminAssistantPage() {
               className="adm-input"
               value={form.voiceName}
               onChange={(e) =>
-                setForm((f) => ({
-                  ...f,
+                editForm({
                   voiceName: e.target.value === 'fa-IR-FaridNeural' ? 'fa-IR-FaridNeural' : 'fa-IR-DilaraNeural',
-                }))
+                })
               }
             >
               {ASSISTANT_VOICE_OPTIONS.map((v) => (
@@ -298,7 +323,7 @@ export default function AdminAssistantPage() {
             <select
               className="adm-input"
               value={String(form.rate)}
-              onChange={(e) => setForm((f) => ({ ...f, rate: Number(e.target.value) }))}
+              onChange={(e) => editForm({ rate: Number(e.target.value) })}
             >
               {RATE_OPTIONS.map((r) => (
                 <option key={r.value} value={String(r.value)}>
@@ -345,7 +370,7 @@ export default function AdminAssistantPage() {
             label="پیشنهادهای شروع گفتگو"
             hint="چیپ‌های آماده‌ای مثل «پرفروش‌ترین شیرینی‌ها» که مشتری با یک لمس شروع می‌کند؛ با خاموش‌بودن، دیگر نمایش داده نمی‌شوند."
             checked={form.suggestions}
-            onChange={(v) => setForm((f) => ({ ...f, suggestions: v }))}
+            onChange={(v) => editForm({ suggestions: v })}
           />
 
           <Field
@@ -356,7 +381,7 @@ export default function AdminAssistantPage() {
               className="adm-input"
               value={form.tone}
               onChange={(e) =>
-                setForm((f) => ({ ...f, tone: e.target.value === 'formal' ? 'formal' : 'friendly' }))
+                editForm({ tone: e.target.value === 'formal' ? 'formal' : 'friendly' })
               }
             >
               {ASSISTANT_TONE_OPTIONS.map((t) => (
@@ -424,6 +449,7 @@ export default function AdminAssistantPage() {
             onClick={() => {
               if (window.confirm('تنظیمات ربات به مقادیر اولیه بازگردد؟')) {
                 resetVoiceSettings();
+                dirtyRef.current = false;
                 setForm({ ...DEFAULT_ASSISTANT_VOICE });
                 setNote(null);
               }

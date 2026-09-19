@@ -18,12 +18,14 @@
 //   دست‌نخورده بماند.
 // ============================================================
 
+import { useMemo, useRef } from 'react';
 import { createLocalStore, useLocalStore } from './localStore';
 import {
   getRemoteSiteData,
   pushRemoteVoiceSettings,
   runRemoteSiteWrite,
   useRemoteSiteData,
+  type RemoteSiteData,
 } from './siteDataSync';
 import { getSupabase } from './supabaseClient';
 
@@ -130,41 +132,65 @@ const store = createLocalStore<AssistantVoiceSettings>(
   sanitize,
 );
 
-/** ردیف‌های عمومی site_content از اسنپ‌شات دیتابیس (اگر بارگذاری شده باشد) */
-function remoteRows(): Record<string, unknown> {
-  const remote = getRemoteSiteData();
-  if (!remote) return {};
-  return (remote.content ?? {}) as unknown as Record<string, unknown>;
+/**
+ * آخرین ذخیرهٔ محلی مدیر (لحظهٔ ذخیره). تا وقتی اسنپ‌شات دیتابیس از این
+ * لحظه تازه‌تر نشده، مقدارهای محلی به‌عنوان «پیش‌نمایش فوری» روی نمایش
+ * ابری/اتصالی می‌نشینند — این همان وعدهٔ ذخیرهٔ مدیر است: تغییر باید
+ * بی‌درنگ روی همین دستگاه دیده شود و بعد از رسیدن پاسخ دیتابیس، حقیقتِ
+ * دیتابیس جایگزین می‌شود. اگر نوشتن روی دیتابیس شکست بخورد، اسنپ‌شاتِ
+ * تازه‌شده قدیمی می‌ماند و نمای به‌همراه بنر خطای فارسی به حقیقت برمی‌گردد.
+ */
+let lastLocalWriteAt = 0;
+
+function snapshotLoadedAtMs(remote: RemoteSiteData | null): number {
+  const parsed = remote ? Date.parse(remote.loadedAt) : Number.NaN;
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+/**
+ * ادغام تنظیمات: حالت محلی → همان ذخیرهٔ محلی؛ حالت متصل → ردیف‌های
+ * دیتابیس، مگر اینکه (الف) ردیفی وجود نداشته باشد که مقدار محلیِ
+ * دستگاه می‌آید، یا (ب) ذخیرهٔ محلی از آخرین اسنپ‌شات تازه‌تر باشد
+ * (پیش‌نمایش فوری تا پاسخ دیتابیس).
+ */
+function mergeSettings(
+  local: AssistantVoiceSettings,
+  remote: RemoteSiteData | null,
+): AssistantVoiceSettings {
+  if (getSupabase() === null) return local;
+  const rows = (remote?.content ?? {}) as unknown as Record<string, unknown>;
+  const optimisticLocal = lastLocalWriteAt > snapshotLoadedAtMs(remote);
+  const K = ASSISTANT_VOICE_DB_KEYS;
+  const flag = (key: string, localValue: boolean): boolean =>
+    optimisticLocal ? localValue : asOnFlag(rows[key], localValue);
+  const text = (key: string, localValue: string): unknown =>
+    optimisticLocal ? localValue : rows[key] ?? localValue;
+  return {
+    voiceEnabled: flag(K.voiceEnabled, local.voiceEnabled),
+    autoVoice: flag(K.autoVoice, local.autoVoice),
+    cloudVoice: flag(K.cloudVoice, local.cloudVoice),
+    voiceName: asVoiceName(text(K.voiceName, local.voiceName)),
+    rate: clampRate(Number(text(K.rate, String(local.rate)))),
+    suggestions: flag(K.suggestions, local.suggestions),
+    tone: asTone(text(K.tone, local.tone)),
+  };
+}
+
+function sameSettings(a: AssistantVoiceSettings, b: AssistantVoiceSettings): boolean {
+  return (
+    a.voiceEnabled === b.voiceEnabled &&
+    a.autoVoice === b.autoVoice &&
+    a.cloudVoice === b.cloudVoice &&
+    a.voiceName === b.voiceName &&
+    a.rate === b.rate &&
+    a.suggestions === b.suggestions &&
+    a.tone === b.tone
+  );
 }
 
 /** خواندن فعلی — اسنپ‌شات دیتابیس اگر هست، وگرنه پیش‌فرض + اورلی محلی */
 export function getVoiceSettings(): AssistantVoiceSettings {
-  const local = store.get();
-  const rows = remoteRows();
-  const hasRemote = getSupabase() !== null;
-  return {
-    voiceEnabled: hasRemote
-      ? asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.voiceEnabled], DEFAULT_ASSISTANT_VOICE.voiceEnabled)
-      : local.voiceEnabled,
-    autoVoice: hasRemote
-      ? asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.autoVoice], DEFAULT_ASSISTANT_VOICE.autoVoice)
-      : local.autoVoice,
-    cloudVoice: hasRemote
-      ? asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.cloudVoice], DEFAULT_ASSISTANT_VOICE.cloudVoice)
-      : local.cloudVoice,
-    voiceName: hasRemote
-      ? asVoiceName(rows[ASSISTANT_VOICE_DB_KEYS.voiceName] ?? local.voiceName)
-      : local.voiceName,
-    rate: hasRemote
-      ? clampRate(Number(rows[ASSISTANT_VOICE_DB_KEYS.rate] ?? local.rate))
-      : local.rate,
-    suggestions: hasRemote
-      ? asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.suggestions], DEFAULT_ASSISTANT_VOICE.suggestions)
-      : local.suggestions,
-    tone: hasRemote
-      ? asTone(rows[ASSISTANT_VOICE_DB_KEYS.tone] ?? local.tone)
-      : local.tone,
-  };
+  return mergeSettings(store.get(), getRemoteSiteData());
 }
 
 function toRows(next: AssistantVoiceSettings): Record<string, string> {
@@ -190,6 +216,7 @@ export function saveVoiceSettings(next: AssistantVoiceSettings): void {
     suggestions: next.suggestions === true,
     tone: asTone(next.tone),
   };
+  lastLocalWriteAt = Date.now();
   if (getSupabase()) {
     runRemoteSiteWrite('ذخیره تنظیمات صدای دستیار', () => pushRemoteVoiceSettings(toRows(clean)));
     // پیش‌نمایش فوری روی همین دستگاه تا پاسخ دیتابیس برسد
@@ -200,6 +227,7 @@ export function saveVoiceSettings(next: AssistantVoiceSettings): void {
 }
 
 export function resetVoiceSettings(): void {
+  lastLocalWriteAt = Date.now();
   if (getSupabase()) {
     runRemoteSiteWrite('بازنشانی تنظیمات صدای دستیار', () =>
       pushRemoteVoiceSettings(toRows(DEFAULT_ASSISTANT_VOICE)),
@@ -213,22 +241,21 @@ export function resetVoiceSettings(): void {
 /**
  * نمای reactive برای رابط کاربری — با ذخیرهٔ مدیر (local) یا رسیدن
  * اسنپ‌شات دیتابیس (remote) فوراً تازه می‌شود.
+ *
+ * ⚠️ قرارداد هویت: مرجع شیء برگشتی فقط وقتی عوض می‌شود که «مقدارها»
+ * عوض شده باشند. ساختن شیء تازه در هر رندر (الگوی قبلی) باعث حلقهٔ
+ * بی‌پایان رندر در صفحهٔ تنظیمات ربات می‌شد و عملاً هیچ کلیدی کار
+ * نمی‌کرد — این هویت پایدار، تضمینِ کارکرد دکمه‌هاست.
  */
 export function useVoiceSettings(): AssistantVoiceSettings {
   const local = useLocalStore(store);
-  void useRemoteSiteData();
-  const rows = remoteRows();
-  const hasRemote = getSupabase() !== null;
-  if (!hasRemote) return local;
-  return {
-    voiceEnabled: asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.voiceEnabled], DEFAULT_ASSISTANT_VOICE.voiceEnabled),
-    autoVoice: asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.autoVoice], DEFAULT_ASSISTANT_VOICE.autoVoice),
-    cloudVoice: asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.cloudVoice], DEFAULT_ASSISTANT_VOICE.cloudVoice),
-    voiceName: asVoiceName(rows[ASSISTANT_VOICE_DB_KEYS.voiceName] ?? local.voiceName),
-    rate: clampRate(Number(rows[ASSISTANT_VOICE_DB_KEYS.rate] ?? local.rate)),
-    suggestions: asOnFlag(rows[ASSISTANT_VOICE_DB_KEYS.suggestions], DEFAULT_ASSISTANT_VOICE.suggestions),
-    tone: asTone(rows[ASSISTANT_VOICE_DB_KEYS.tone] ?? local.tone),
-  };
+  const remote = useRemoteSiteData();
+  const merged = useMemo(() => mergeSettings(local, remote), [local, remote]);
+  const prevRef = useRef<AssistantVoiceSettings | null>(null);
+  if (prevRef.current === null || !sameSettings(prevRef.current, merged)) {
+    prevRef.current = merged;
+  }
+  return prevRef.current;
 }
 
 /** آیا «خواندن خودکار» برای این بازدیدکننده اجازه دارد؟ (کلید مدیر) */

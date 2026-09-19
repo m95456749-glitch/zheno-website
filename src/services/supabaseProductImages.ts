@@ -113,7 +113,7 @@ export function describeImageError(context: string, error: unknown): ProductImag
   }
   if (/bucket not found|does not have a bucket/i.test(lower)) {
     return new ProductImageError(
-      'فضای ذخیره‌سازی «product-images» در Supabase ساخته نشده است؛ مهاجرت تصاویر را اعمال کنید.',
+      'فضای ذخیره‌سازی «product-images» در Supabase ساخته نشده است؛ مهاجرت ۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql را در Supabase اعمال کنید (اجرا مجدد آن بدون خطا و بدون تغییر در داده‌هاست).',
       text,
     );
   }
