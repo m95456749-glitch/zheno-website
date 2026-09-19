@@ -1,0 +1,237 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 960" role="img" aria-label="Zheno assistant robot — static concept preview">
+  <defs>
+    <radialGradient id="creamR" cx="35%" cy="28%" r="80%">
+      <stop offset="0" stop-color="#F9F2E4"/>
+      <stop offset="0.45" stop-color="#F3E9D8"/>
+      <stop offset="0.8" stop-color="#E7DAC4"/>
+      <stop offset="1" stop-color="#D6C6AC"/>
+    </radialGradient>
+    <linearGradient id="creamL" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F7F0E1"/>
+      <stop offset="0.55" stop-color="#EFE4D1"/>
+      <stop offset="1" stop-color="#DACAB0"/>
+    </linearGradient>
+    <linearGradient id="creamLr" x1="1" y1="0" x2="0" y2="0">
+      <stop offset="0" stop-color="#F7F0E1"/>
+      <stop offset="0.55" stop-color="#EFE4D1"/>
+      <stop offset="1" stop-color="#DACAB0"/>
+    </linearGradient>
+    <radialGradient id="creamPod" cx="35%" cy="30%" r="80%">
+      <stop offset="0" stop-color="#F9F2E4"/>
+      <stop offset="1" stop-color="#DFD0B6"/>
+    </radialGradient>
+    <radialGradient id="maroon" cx="35%" cy="30%" r="85%">
+      <stop offset="0" stop-color="#9A605C"/>
+      <stop offset="0.55" stop-color="#804D4C"/>
+      <stop offset="1" stop-color="#5E3634"/>
+    </radialGradient>
+    <radialGradient id="gold" cx="35%" cy="30%" r="85%">
+      <stop offset="0" stop-color="#F2DCA9"/>
+      <stop offset="0.45" stop-color="#D2AF6C"/>
+      <stop offset="1" stop-color="#96752E"/>
+    </radialGradient>
+    <linearGradient id="goldV" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EAD097"/>
+      <stop offset="0.5" stop-color="#C9A55F"/>
+      <stop offset="1" stop-color="#8F6E2B"/>
+    </linearGradient>
+    <radialGradient id="screen" cx="42%" cy="34%" r="85%">
+      <stop offset="0" stop-color="#272524"/>
+      <stop offset="0.55" stop-color="#141312"/>
+      <stop offset="1" stop-color="#060605"/>
+    </radialGradient>
+    <filter id="b6" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="6"/>
+    </filter>
+    <filter id="b12" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="12"/>
+    </filter>
+    <clipPath id="headClip">
+      <ellipse cx="360" cy="262" rx="220" ry="134"/>
+      <rect x="150" y="196" width="420" height="132" rx="66"/>
+    </clipPath>
+    <clipPath id="torsoClip">
+      <path d="M 212,470 C 212,446 246,432 292,428 C 330,424 390,424 428,428 C 474,433 508,446 508,470 C 514,508 516,554 506,592 C 496,638 434,662 360,662 C 286,662 224,638 214,592 C 204,554 206,508 212,470 Z"/>
+    </clipPath>
+  </defs>
+
+  <!-- ground shadow -->
+  <ellipse cx="360" cy="874" rx="190" ry="24" fill="#D9C6AC" opacity="0.7" filter="url(#b12)"/>
+  <ellipse cx="360" cy="870" rx="115" ry="14" fill="#C6B193" opacity="0.55" filter="url(#b6)"/>
+
+  <!-- neck -->
+  <rect x="324" y="374" width="72" height="48" rx="13" fill="url(#goldV)"/>
+  <path d="M 330,392 H 390 M 330,402 H 390 M 330,412 H 390" stroke="#8A6A2C" stroke-width="3" opacity="0.45" fill="none"/>
+  <ellipse cx="360" cy="380" rx="46" ry="9" fill="#6E5522" opacity="0.35"/>
+
+  <!-- ===================== LEGS ===================== -->
+  <!-- left leg -->
+  <path d="M 281,666 C 278,698 270,748 268,788 C 267,806 283,814 303,814 C 323,814 339,806 338,788 C 336,748 328,698 325,666 C 317,657 289,657 281,666 Z" fill="url(#creamL)"/>
+  <circle cx="269" cy="796" r="12" fill="url(#gold)"/>
+  <circle cx="269" cy="796" r="4" fill="#6E5522" opacity="0.8"/>
+  <g transform="rotate(8 303 832)">
+    <rect x="253" y="842" width="100" height="22" rx="10" fill="url(#maroon)"/>
+    <path d="M 257,836 C 257,806 277,792 303,792 C 329,792 349,806 349,836 C 349,851 332,858 303,858 C 274,858 257,851 257,836 Z" fill="url(#creamR)"/>
+    <ellipse cx="290" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3"/>
+  </g>
+  <circle cx="303" cy="668" r="11" fill="url(#gold)"/>
+  <circle cx="303" cy="668" r="4" fill="#6E5522" opacity="0.8"/>
+  <!-- right leg -->
+  <path d="M 439,666 C 442,698 450,748 452,788 C 453,806 437,814 417,814 C 397,814 381,806 382,788 C 384,748 392,698 395,666 C 403,657 431,657 439,666 Z" fill="url(#creamLr)"/>
+  <circle cx="451" cy="796" r="12" fill="url(#gold)"/>
+  <circle cx="451" cy="796" r="4" fill="#6E5522" opacity="0.8"/>
+  <g transform="rotate(-8 417 832)">
+    <rect x="367" y="842" width="100" height="22" rx="10" fill="url(#maroon)"/>
+    <path d="M 371,836 C 371,806 391,792 417,792 C 443,792 463,806 463,836 C 463,851 446,858 417,858 C 388,858 371,851 371,836 Z" fill="url(#creamR)"/>
+    <ellipse cx="430" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3"/>
+  </g>
+  <circle cx="417" cy="668" r="11" fill="url(#gold)"/>
+  <circle cx="417" cy="668" r="4" fill="#6E5522" opacity="0.8"/>
+
+  <!-- ===================== TORSO ===================== -->
+  <g id="g-torso">
+  <path d="M 212,470 C 212,446 246,432 292,428 C 330,424 390,424 428,428 C 474,433 508,446 508,470 C 514,508 516,554 506,592 C 496,638 434,662 360,662 C 286,662 224,638 214,592 C 204,554 206,508 212,470 Z" fill="url(#creamR)"/>
+  <g clip-path="url(#torsoClip)">
+    <ellipse cx="360" cy="674" rx="175" ry="58" fill="#D5C9AE" opacity="0.55" filter="url(#b12)"/>
+    <ellipse cx="516" cy="534" rx="56" ry="115" fill="#D5C9AE" opacity="0.4" filter="url(#b12)"/>
+    <ellipse cx="204" cy="534" rx="46" ry="105" fill="#D5C9AE" opacity="0.3" filter="url(#b12)"/>
+    <path d="M 238,580 C 292,616 428,616 482,580" stroke="#CFC3A9" stroke-width="3" fill="none" opacity="0.8"/>
+  </g>
+  <!-- chest panel -->
+  <path d="M 292,478 C 292,466 302,459 316,459 L 404,459 C 418,459 428,466 428,478 L 424,530 C 422,549 408,558 392,558 L 328,558 C 312,558 298,549 296,530 Z" fill="url(#maroon)"/>
+  <path d="M 299,472 C 320,464 400,464 421,472" stroke="#A9706C" stroke-width="3" opacity="0.55" fill="none"/>
+  <circle cx="360" cy="492" r="9" fill="#F0A243" opacity="0.6" filter="url(#b6)"/>
+  <circle cx="360" cy="492" r="10" fill="url(#gold)"/>
+  <circle cx="360" cy="492" r="4.5" fill="#FFD98F"/>
+  </g>
+
+  <!-- hip brackets -->
+  <rect x="292" y="632" width="24" height="30" rx="7" fill="url(#goldV)"/>
+  <circle cx="304" cy="650" r="15" fill="url(#gold)"/>
+  <circle cx="304" cy="650" r="5" fill="#6E5522" opacity="0.8"/>
+  <rect x="404" y="632" width="24" height="30" rx="7" fill="url(#goldV)"/>
+  <circle cx="416" cy="650" r="15" fill="url(#gold)"/>
+  <circle cx="416" cy="650" r="5" fill="#6E5522" opacity="0.8"/>
+
+  <!-- ===================== ARMS ===================== -->
+  <!-- left arm -->
+  <g id="g-upper-l">
+  <line x1="198" y1="502" x2="186" y2="552" stroke="url(#creamL)" stroke-width="50" stroke-linecap="round"/>
+  <g id="g-fore-l">
+  <line x1="184" y1="560" x2="172" y2="628" stroke="url(#creamL)" stroke-width="54" stroke-linecap="round"/>
+  <!-- left hand -->
+  <line x1="154" y1="660" x2="151" y2="690" stroke="#DCCDB4" stroke-width="21" stroke-linecap="round"/>
+  <line x1="170" y1="664" x2="169" y2="696" stroke="#DCCDB4" stroke-width="21" stroke-linecap="round"/>
+  <line x1="186" y1="662" x2="187" y2="692" stroke="#DCCDB4" stroke-width="21" stroke-linecap="round"/>
+  <line x1="192" y1="650" x2="201" y2="663" stroke="#DCCDB4" stroke-width="19" stroke-linecap="round"/>
+  <line x1="154" y1="660" x2="151" y2="690" stroke="#F5ECDC" stroke-width="18" stroke-linecap="round"/>
+  <line x1="170" y1="664" x2="169" y2="696" stroke="#F5ECDC" stroke-width="18" stroke-linecap="round"/>
+  <line x1="186" y1="662" x2="187" y2="692" stroke="#F5ECDC" stroke-width="18" stroke-linecap="round"/>
+  <line x1="192" y1="650" x2="201" y2="663" stroke="#F5ECDC" stroke-width="16" stroke-linecap="round"/>
+  <line x1="153" y1="670" x2="152" y2="676" stroke="#7E4A48" stroke-width="13" stroke-linecap="round"/>
+  <line x1="170" y1="676" x2="169" y2="682" stroke="#7E4A48" stroke-width="13" stroke-linecap="round"/>
+  <line x1="186" y1="672" x2="187" y2="678" stroke="#7E4A48" stroke-width="13" stroke-linecap="round"/>
+  <line x1="196" y1="656" x2="199" y2="660" stroke="#7E4A48" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="170" cy="644" r="25" fill="url(#creamR)"/>
+  </g>
+  </g>
+  <circle cx="204" cy="472" r="42" fill="url(#creamR)"/>
+  <ellipse cx="184" cy="462" rx="24" ry="28" fill="url(#gold)" transform="rotate(-22 184 462)"/>
+  <ellipse cx="184" cy="462" rx="19" ry="23" fill="url(#maroon)" transform="rotate(-22 184 462)"/>
+  <circle cx="184" cy="462" r="7" fill="url(#gold)"/>
+  <circle cx="184" cy="462" r="2.5" fill="#6E5522" opacity="0.8"/>
+  <g id="g-elbow-l" transform="rotate(8 185 557)">
+    <rect x="157" y="542" width="56" height="30" rx="8" fill="url(#goldV)"/>
+    <path d="M 160,550 H 210 M 160,557 H 210 M 160,564 H 210" stroke="#8A6A2C" stroke-width="2" opacity="0.4" fill="none"/>
+  </g>
+  <!-- right arm -->
+  <g id="g-upper-r">
+  <line x1="522" y1="502" x2="534" y2="552" stroke="url(#creamLr)" stroke-width="50" stroke-linecap="round"/>
+  <g id="g-fore-r">
+  <line x1="536" y1="560" x2="548" y2="628" stroke="url(#creamLr)" stroke-width="54" stroke-linecap="round"/>
+  <!-- right hand -->
+  <line x1="566" y1="660" x2="569" y2="690" stroke="#DCCDB4" stroke-width="21" stroke-linecap="round"/>
+  <line x1="550" y1="664" x2="551" y2="696" stroke="#DCCDB4" stroke-width="21" stroke-linecap="round"/>
+  <line x1="534" y1="662" x2="533" y2="692" stroke="#DCCDB4" stroke-width="21" stroke-linecap="round"/>
+  <line x1="528" y1="650" x2="519" y2="663" stroke="#DCCDB4" stroke-width="19" stroke-linecap="round"/>
+  <line x1="566" y1="660" x2="569" y2="690" stroke="#F5ECDC" stroke-width="18" stroke-linecap="round"/>
+  <line x1="550" y1="664" x2="551" y2="696" stroke="#F5ECDC" stroke-width="18" stroke-linecap="round"/>
+  <line x1="534" y1="662" x2="533" y2="692" stroke="#F5ECDC" stroke-width="18" stroke-linecap="round"/>
+  <line x1="528" y1="650" x2="519" y2="663" stroke="#F5ECDC" stroke-width="16" stroke-linecap="round"/>
+  <line x1="567" y1="670" x2="568" y2="676" stroke="#7E4A48" stroke-width="13" stroke-linecap="round"/>
+  <line x1="550" y1="676" x2="551" y2="682" stroke="#7E4A48" stroke-width="13" stroke-linecap="round"/>
+  <line x1="534" y1="672" x2="533" y2="678" stroke="#7E4A48" stroke-width="13" stroke-linecap="round"/>
+  <line x1="524" y1="656" x2="521" y2="660" stroke="#7E4A48" stroke-width="12" stroke-linecap="round"/>
+  <circle cx="550" cy="644" r="25" fill="url(#creamR)"/>
+  </g>
+  </g>
+  <circle cx="516" cy="472" r="42" fill="url(#creamR)"/>
+  <ellipse cx="536" cy="462" rx="24" ry="28" fill="url(#gold)" transform="rotate(22 536 462)"/>
+  <ellipse cx="536" cy="462" rx="19" ry="23" fill="url(#maroon)" transform="rotate(22 536 462)"/>
+  <circle cx="536" cy="462" r="7" fill="url(#gold)"/>
+  <circle cx="536" cy="462" r="2.5" fill="#6E5522" opacity="0.8"/>
+  <g id="g-elbow-r" transform="rotate(-8 535 557)">
+    <rect x="507" y="542" width="56" height="30" rx="8" fill="url(#goldV)"/>
+    <path d="M 510,550 H 560 M 510,557 H 560 M 510,564 H 560" stroke="#8A6A2C" stroke-width="2" opacity="0.4" fill="none"/>
+  </g>
+
+  <!-- ===================== HEAD ===================== -->
+  <g id="g-head">
+  <ellipse cx="360" cy="262" rx="220" ry="134" fill="url(#creamR)"/>
+  <rect x="150" y="196" width="420" height="132" rx="66" fill="url(#creamR)"/>
+  <g clip-path="url(#headClip)">
+    <ellipse cx="360" cy="386" rx="220" ry="54" fill="#D5C9AE" opacity="0.45" filter="url(#b12)"/>
+    <ellipse cx="290" cy="166" rx="160" ry="48" fill="#FFFFFF" opacity="0.3" filter="url(#b12)"/>
+    <ellipse cx="566" cy="262" rx="48" ry="92" fill="#D5C9AE" opacity="0.3" filter="url(#b12)"/>
+  </g>
+
+  <!-- ear pods -->
+  <circle cx="138" cy="268" r="38" fill="url(#gold)"/>
+  <circle cx="138" cy="268" r="30" fill="url(#maroon)"/>
+  <circle cx="138" cy="268" r="14" fill="url(#creamPod)"/>
+  <circle cx="582" cy="268" r="38" fill="url(#gold)"/>
+  <circle cx="582" cy="268" r="30" fill="url(#maroon)"/>
+  <circle cx="582" cy="268" r="14" fill="url(#creamPod)"/>
+
+  <!-- antenna -->
+  <g id="g-antenna">
+  <path d="M 136,236 L 126,176" stroke="url(#goldV)" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="124" cy="168" r="10" fill="url(#gold)"/>
+  <circle cx="121" cy="164" r="3" fill="#FFFFFF" opacity="0.55"/>
+  </g>
+
+  <!-- visor -->
+  <rect x="168" y="170" width="384" height="188" rx="80" fill="#D8CDB5"/>
+  <rect x="174" y="176" width="372" height="176" rx="74" fill="url(#screen)"/>
+  <rect x="180" y="182" width="360" height="164" rx="70" fill="none" stroke="#3B3835" stroke-width="2" opacity="0.35"/>
+  <path d="M 240,206 C 310,182 410,182 480,206 C 486,209 486,216 480,218 C 410,198 310,198 240,218 C 234,216 234,209 240,206 Z" fill="#FFFFFF" opacity="0.12"/>
+  <ellipse cx="462" cy="214" rx="40" ry="13" fill="#FFFFFF" opacity="0.18" transform="rotate(-20 462 214)"/>
+  <ellipse cx="258" cy="332" rx="36" ry="10" fill="#FFFFFF" opacity="0.05" transform="rotate(-12 258 332)"/>
+
+  <!-- eyes (LED dots, warm glow) -->
+  <g id="g-eyes">
+    <g filter="url(#b6)" opacity="0.85">
+      <ellipse cx="292" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" stroke-width="14"/>
+      <ellipse cx="428" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" stroke-width="14"/>
+    </g>
+    <ellipse cx="292" cy="254" rx="30" ry="34" fill="none" stroke="#FFC673" stroke-width="7.5" stroke-dasharray="0.1 10.5" stroke-linecap="round"/>
+    <ellipse cx="428" cy="254" rx="30" ry="34" fill="none" stroke="#FFC673" stroke-width="7.5" stroke-dasharray="0.1 10.5" stroke-linecap="round"/>
+  </g>
+
+  <!-- mouth states (LED dots, warm glow) -->
+  <g id="g-mouth">
+    <g id="m-smile">
+      <path d="M 324,298 Q 360,320 396,298" fill="none" stroke="#F09F3C" stroke-width="12" stroke-linecap="round" filter="url(#b6)" opacity="0.85"/>
+      <path d="M 324,298 Q 360,320 396,298" fill="none" stroke="#FFC673" stroke-width="7.5" stroke-dasharray="0.1 9.65" stroke-linecap="round"/>
+    </g>
+    <g id="m-talk" opacity="0">
+      <ellipse id="m-talk-glow" cx="360" cy="308" rx="14" ry="8" fill="none" stroke="#F09F3C" stroke-width="12" filter="url(#b6)" opacity="0.85"/>
+      <ellipse id="m-talk-dots" cx="360" cy="308" rx="14" ry="8" fill="none" stroke="#FFC673" stroke-width="7" stroke-dasharray="0.1 8.2" stroke-linecap="round"/>
+    </g>
+    <g id="m-grin" opacity="0">
+      <path d="M 318,294 Q 360,332 402,294" fill="none" stroke="#F09F3C" stroke-width="12" stroke-linecap="round" filter="url(#b6)" opacity="0.85"/>
+      <path d="M 318,294 Q 360,332 402,294" fill="none" stroke="#FFC673" stroke-width="7.5" stroke-dasharray="0.1 9.4" stroke-linecap="round"/>
+    </g>
+  </g>
+  </g>
+</svg>

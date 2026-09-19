@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="fa">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zheno Assistant — Static Robot Preview (concept-A-v3)</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: radial-gradient(circle at 50% 42%, #F2E4D2 0%, #EBDCC9 55%, #E2D0BA 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    img.robot {
+      height: 96vh;
+      max-width: 94vw;
+      object-fit: contain;
+      display: block;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    .badge {
+      position: fixed;
+      bottom: 10px;
+      left: 0;
+      right: 0;
+      text-align: center;
+      font: 11px/1.6 ui-sans-serif, system-ui, sans-serif;
+      color: #b3a288;
+      letter-spacing: 0.03em;
+      direction: ltr;
+    }
+  </style>
+</head>
+<body>
+  <img class="robot" src="./robot.svg" alt="Zheno assistant robot — static concept preview" />
+  <div class="badge">Static preview — concept-A-v3 — no animation / no logic</div>
+</body>
+</html>

@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="fa">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Zhino Assistant — Live Robot Preview (concept-A-v3)</title>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body {
+      background: radial-gradient(circle at 50% 42%, #F2E4D2 0%, #EBDCC9 55%, #E2D0BA 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      font-family: ui-sans-serif, system-ui, "Segoe UI", Tahoma, sans-serif;
+    }
+    #stage {
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2vh 0 9vh;
+      box-sizing: border-box;
+    }
+    #stage svg {
+      height: 100%;
+      max-width: 94vw;
+      display: block;
+      user-select: none;
+    }
+    .ui {
+      position: fixed;
+      bottom: 18px;
+      left: 0; right: 0;
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      direction: rtl;
+    }
+    .ui button {
+      border: 1px solid #d8c6ac;
+      background: rgba(253, 248, 238, 0.85);
+      color: #7a4a44;
+      padding: 8px 18px;
+      border-radius: 999px;
+      font: 13px/1 inherit;
+      letter-spacing: 0.02em;
+      cursor: pointer;
+      backdrop-filter: blur(6px);
+      box-shadow: 0 2px 10px rgba(122, 74, 68, 0.10);
+      transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+    }
+    .ui button:hover { background: #fdf8ee; transform: translateY(-1px); }
+    .ui button[aria-pressed="true"] {
+      background: #7e4a48;
+      color: #f6ead9;
+      border-color: #7e4a48;
+      box-shadow: 0 4px 14px rgba(122, 74, 68, 0.28);
+    }
+    .badge {
+      position: fixed;
+      top: 12px;
+      left: 0; right: 0;
+      text-align: center;
+      font: 11px/1.6 ui-sans-serif, system-ui, sans-serif;
+      color: #b3a288;
+      letter-spacing: 0.03em;
+    }
+  </style>
+</head>
+<body>
+  <div class="badge">Live preview — concept-A-v3 — organic idle / thinking / speaking / greeting</div>
+  <div id="stage" aria-label="Zhino assistant robot — live preview"></div>
+  <div class="ui" id="ui">
+    <button data-state="idle" aria-pressed="true">حالت عادی</button>
+    <button data-state="thinking" aria-pressed="false">فکر کردن</button>
+    <button data-state="speaking" aria-pressed="false">صحبت کردن</button>
+    <button data-state="greeting" aria-pressed="false">سلام 👋</button>
+  </div>
+  <script src="./robot.js"></script>
+  <script>
+    fetch('./robot.svg')
+      .then(function (r) { return r.text(); })
+      .then(function (svg) {
+        document.getElementById('stage').innerHTML = svg;
+        window.ZhinoRobotInit();
+        var ui = document.getElementById('ui');
+        ui.addEventListener('click', function (ev) {
+          var b = ev.target.closest('button');
+          if (!b || !window.ZhinoRobot) return;
+          window.ZhinoRobot.set(b.dataset.state);
+          ui.querySelectorAll('button').forEach(function (x) {
+            x.setAttribute('aria-pressed', String(x === b));
+          });
+          if (b.dataset.state === 'greeting') {
+            setTimeout(function () {
+              var idle = ui.querySelector('[data-state="idle"]');
+              ui.querySelectorAll('button').forEach(function (x) {
+                x.setAttribute('aria-pressed', String(x === idle));
+              });
+            }, 3200);
+          }
+        });
+      })
+      .catch(function (e) {
+        document.getElementById('stage').textContent = 'preview failed: ' + e;
+      });
+  </script>
+</body>
+</html>
