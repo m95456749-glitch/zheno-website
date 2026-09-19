@@ -19,6 +19,11 @@
 //   V6 — input guards: empty text, over-long text, huge body
 //   V7 — per-IP rate limit holds after 30 requests
 //   V8 — no response body ever contains the configured key
+//   V11 — the customer's voice path is the browser's own engine: the
+//        speech hook has no cloud TTS code, every utterance is tagged
+//        fa-IR with the configured rate, the best fa-IR device voice is
+//        preferred, a missing Persian voice falls back instead of
+//        erroring, and the dormant function + TTS_API_KEY stay in place
 //   V10 — the OpenAI provider path: gpt-4o-mini-tts is called with the
 //        key only in the Authorization header, the admin voice/rate map
 //        onto the OpenAI voice + instructions, the Azure key is never
@@ -28,7 +33,7 @@
 // ============================================================
 
 import { buildSync } from 'esbuild';
-import { readFileSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -1082,6 +1087,92 @@ function assertNoKey(bodyText, label) {
 
   } finally {
     globalThis.fetch = realFetch;
+  }
+}
+
+/* ════════════════════════════════════════════════════════════
+   V11 — صدای مشتری فقط از موتور خودِ مرورگر می‌آید (رایگان، بدون
+   کلید، بدون شبکه). تابع ابری برای بازگشتِ احتمالی در ریپازیتوری
+   می‌ماند، ولی هیچ‌جای اپ صدا از سرور گرفته نمی‌شود.
+   ════════════════════════════════════════════════════════════ */
+{
+  const hook = readFileSync(
+    join(root, 'src', 'components', 'assistant', 'useAssistantSpeech.ts'),
+    'utf8',
+  );
+  const chat = readFileSync(
+    join(root, 'src', 'components', 'assistant', 'AssistantChat.tsx'),
+    'utf8',
+  );
+
+  // ۱) هوک صدا هیچ مسیر ابری ندارد
+  if (/services\/assistant\/voice/.test(hook)) {
+    fail('V11 — the speech hook still imports the cloud voice client');
+  } else if (/loadCloudAudio|speakCloud|isCloudVoiceConfigured/.test(hook)) {
+    fail('V11 — the speech hook still contains cloud TTS code');
+  } else {
+    ok('V11 — the speech hook has no cloud TTS path (no key, no network)');
+  }
+
+  const componentRoot = join(root, 'src', 'components');
+  const componentCloudImports = [];
+  const walkComponents = (dir) => {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
+      const file = join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walkComponents(file);
+      } else if (/\.(?:ts|tsx|js|jsx)$/.test(entry.name)) {
+        const source = readFileSync(file, 'utf8');
+        if (/from\s+['"](?:\.\.\/)+services\/assistant\/voice['"]/.test(source)) {
+          componentCloudImports.push(file);
+        }
+      }
+    }
+  };
+  walkComponents(componentRoot);
+  if (componentCloudImports.length === 0) {
+    ok('V11 — no component imports the cloud voice client');
+  } else {
+    fail(`V11 — component cloud imports remain: ${componentCloudImports.join(', ')}`);
+  }
+
+  // ۲) هر utterance فارسی و با سرعت تنظیم‌شده ساخته می‌شود
+  if (hook.includes("utterance.lang = voice?.lang || 'fa-IR'")) {
+    ok('V11 — every utterance is tagged fa-IR (Persian)');
+  } else {
+    fail('V11 — the utterance language is not pinned to fa-IR');
+  }
+  if (hook.includes('utterance.rate = rateRef.current')) {
+    ok('V11 — the configured speaking rate reaches the utterance');
+  } else {
+    fail('V11 — the configured speaking rate is not applied');
+  }
+
+  // ۳) بهترین صدای fa-IR انتخاب می‌شود و نبودِ صدای فارسی دیگر از
+  //    پیش «خطا» نیست — fallback خودِ مرورگر امتحان می‌شود
+  if (hook.includes("langOf(v) === 'fa-ir'")) {
+    ok('V11 — an exact fa-IR device voice is preferred');
+  } else {
+    fail('V11 — the exact fa-IR preference is missing');
+  }
+  if (/!hasPersianVoice\(currentVoices\)/.test(hook)) {
+    fail('V11 — a missing Persian voice still blocks reading before any attempt');
+  } else {
+    ok('V11 — a missing Persian voice falls back to the browser instead of erroring');
+  }
+  if (chat.includes("voiceStatus === 'none'")) {
+    fail('V11 — the chat still refuses to read when no Persian voice is listed');
+  } else {
+    ok('V11 — the chat no longer shows the no-Persian-voice message up front');
+  }
+
+  // ۴) تابع ابریِ خاموش و secret آن سرِ جایشان می‌مانند
+  const fn = readFileSync(FN_PATH, 'utf8');
+  const env = readFileSync(join(root, '.env.example'), 'utf8');
+  if (fn.includes('TTS_API_KEY') && env.includes('TTS_API_KEY')) {
+    ok('V11 — the dormant cloud function and TTS_API_KEY stay available for later');
+  } else {
+    fail('V11 — the cloud function or the TTS_API_KEY documentation disappeared');
   }
 }
 

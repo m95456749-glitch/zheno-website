@@ -26,8 +26,9 @@
 // defines) and drives it in jsdom against an engine model that
 // reproduces exactly those semantics. It proves the app:
 //
-//   S1 — no Persian voice on device   → short clear message,
-//        nothing handed to the engine, no stuck UI, chat intact
+//   S1 — no Persian voice on device   → reading is still attempted
+//        through the browser's own fallback (fa-IR); only after the
+//        engine proves silent does a short clear message appear
 //   S2 — Persian voice present        → full read, and play /
 //        pause / resume / stop all behave; re-reading after stop
 //        survives the cancel race
@@ -39,6 +40,9 @@
 //   S5 — the list LIES (fa listed but
 //        no data)                     → the onstart probe catches
 //        it, retries once, then explains clearly; no hang
+//   S6 — no Persian voice but the
+//        fallback CAN speak           → the answer is read and no
+//        error message is shown at all
 //
 // Usage:  npm run test:voice-android
 // ============================================================
@@ -102,6 +106,8 @@ class AndroidTtsEngine {
   constructor(opts = {}) {
     this.opts = opts;
     this.hasPersianData = opts.hasPersianData === true;
+    // some engines happily read Persian text with their default voice
+    this.fallbackSpeaks = opts.fallbackSpeaks === true;
     this.lateVoices = opts.lateVoices === true;
     this.stallOnce = opts.stallOnce === true;
     this.voices = [];
@@ -170,7 +176,12 @@ class AndroidTtsEngine {
     row.startTimer = setTimeout(() => {
       if (row.done) return;
       // bug #3: unsupported language → total silence, no events
-      if (typeof utterance.lang === 'string' && /^fa/i.test(utterance.lang) && !this.hasPersianData) {
+      if (
+        typeof utterance.lang === 'string' &&
+        /^fa/i.test(utterance.lang) &&
+        !this.hasPersianData &&
+        !this.fallbackSpeaks
+      ) {
         this.log.push('silent:unsupported-fa');
         row.done = true;
         return;
@@ -361,39 +372,56 @@ async function openAssistant(engine, { android = false } = {}) {
 const NO_PERSIAN = 'صدای فارسی روی این دستگاه نیست';
 const LOADING = 'در حال آماده‌سازی صدا';
 
-/* ── S1 — the device has no Persian voice (typical phone) ── */
+/* ── S1 — no Persian voice on device: the browser fallback is tried ── */
 {
-  console.log('\nS1 — no Persian voice on device…');
+  console.log('\nS1 — no Persian voice on device (the fallback is attempted)…');
   const engine = new AndroidTtsEngine({});
   const h = await openAssistant(engine, { android: true });
   try {
     // the customer switches reading on
     h.tap(h.document.querySelector('button.zhino-assistant-voice'));
-    const explained = await h.waitFor(() => h.text().includes(NO_PERSIAN));
-    if (explained) ok('S1 — a short, clear Persian message explains the situation');
-    else fail('S1 — no message when the device lacks a Persian voice');
-    if (h.text().includes('تبدیل متن به گفتار')) {
-      ok('S1 — on Android the hint points to the right settings screen');
+    await sleep(250);
+    if (h.text().includes(NO_PERSIAN)) {
+      fail('S1 — an error is shown before anything was even attempted');
     } else {
-      fail('S1 — the Android settings hint is missing');
+      ok('S1 — turning reading on raises no premature error');
     }
-    // and the conversation continues to work
+
+    // the conversation itself is untouched
     await h.send('قیمت ژله توت فرنگی چند است؟');
     const PRICE = '\u06f2\u06f0\u06f0\u066c\u06f0\u06f0\u06f0 \u062a\u0648\u0645\u0627\u0646';
     const answered = await h.waitFor(() => h.text().includes(PRICE));
     if (answered) ok('S1 — the answer is displayed as text, chat untouched');
     else fail('S1 — the chat answer never arrived: ' + h.text().slice(-160));
-    await sleep(400);
-    if (!engine.log.some((line) => line.startsWith('start:'))) {
-      ok('S1 — nothing was ever handed to the speech engine');
+
+    // reading IS attempted — Persian-tagged, with the engine's own fallback
+    const attempted = await h.waitFor(
+      () => engine.log.some((line) => line.startsWith('speak(lang=fa')),
+      9000,
+    );
+    if (attempted) ok('S1 — reading was attempted as fa-IR through the browser fallback');
+    else fail('S1 — nothing was handed to the speech engine: ' + engine.log.join(' | '));
+
+    // this device has no Persian data, so the engine stays silent and the
+    // honest explanation arrives only after the probe — never before
+    const silent = await h.waitFor(() => engine.log.includes('silent:unsupported-fa'), 9000);
+    if (silent) ok('S1 — the simulated device really has no Persian voice data');
+    else fail('S1 — the device unexpectedly spoke: ' + engine.log.join(' | '));
+    const explained = await h.waitFor(() => h.text().includes(NO_PERSIAN), 20000);
+    if (explained) ok('S1 — after the silent engine, a short clear message explains it');
+    else fail('S1 — no explanation although the engine could not speak');
+    if (h.text().includes('تبدیل متن به گفتار')) {
+      ok('S1 — on Android the hint points to the right settings screen');
     } else {
-      fail(`S1 — the engine started speaking: ${engine.log.join(' | ')}`);
+      fail('S1 — the Android settings hint is missing');
     }
-    if (!h.document.querySelector('.zhino-assistant-playback')) {
-      ok('S1 — no stuck «reading…» control left behind');
-    } else {
-      fail('S1 — the playback row is stuck on screen');
-    }
+
+    const idle = await h.waitFor(
+      () => !h.document.querySelector('.zhino-assistant-playback'),
+      20000,
+    );
+    if (idle) ok('S1 — no stuck «reading…» control left behind');
+    else fail('S1 — the playback row is stuck on screen');
     if (h.errors.length === 0) ok('S1 — no runtime errors');
     else fail('S1 — runtime errors: ' + h.errors.join(' | '));
   } finally {
@@ -597,6 +625,38 @@ const LOADING = 'در حال آماده‌سازی صدا';
     else fail('S5 — the chat broke after the failed read');
     if (h.errors.length === 0) ok('S5 — no runtime errors');
     else fail('S5 — runtime errors: ' + h.errors.join(' | '));
+  } finally {
+    h.close();
+  }
+}
+
+/* ── S6 — no Persian voice, but the engine's fallback really speaks ── */
+{
+  console.log('\nS6 — no Persian voice, the fallback voice speaks…');
+  const engine = new AndroidTtsEngine({ fallbackSpeaks: true });
+  const h = await openAssistant(engine, { android: true });
+  try {
+    h.tap(h.document.querySelector('button.zhino-assistant-voice'));
+    await h.waitFor(
+      () => h.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'true',
+    );
+    await h.send('قیمت ژله توت فرنگی چند است؟');
+    const started = await h.waitFor(() => engine.log.some((l) => l.startsWith('start:')), 9000);
+    if (started) ok('S6 — the fallback voice really reads the answer');
+    else fail('S6 — the fallback never spoke: ' + engine.log.join(' | '));
+    const done = await h.waitFor(() => engine.log.includes('end'), 25000);
+    if (done) ok('S6 — reading finished normally');
+    else fail('S6 — reading never finished: ' + engine.log.join(' | '));
+    await sleep(250);
+    if (h.text().includes(NO_PERSIAN) || h.text().includes('صدا این لحظه در دسترس نیست')) {
+      fail('S6 — an error message appeared although the fallback worked');
+    } else {
+      ok('S6 — no needless error message when the fallback works');
+    }
+    if (!h.document.querySelector('.zhino-assistant-playback')) ok('S6 — the UI is back to idle');
+    else fail('S6 — the playback row is stuck on screen');
+    if (h.errors.length === 0) ok('S6 — no runtime errors');
+    else fail('S6 — runtime errors: ' + h.errors.join(' | '));
   } finally {
     h.close();
   }

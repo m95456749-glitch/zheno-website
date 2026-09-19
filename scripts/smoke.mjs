@@ -2587,11 +2587,11 @@ async function openAssistantFromStore(dom, waitFor, text) {
   }
 }
 
-// ── 34e. Phase 9 — the device has no Persian voice (typical Android) ──
-// When getVoices() answers with only English voices, the app must never
-// hand anything to the speech engine, the customer sees one short clear
-// line (instead of silence or a stuck «reading…» state), and the chat is
-// untouched.
+// ── 34e. The device has no Persian voice — the browser fallback is tried ──
+// When getVoices() answers with only English voices, reading is still
+// attempted with lang="fa-IR" so the browser can use its own fallback.
+// A short clear line appears only after the engine really stayed silent,
+// and the chat is untouched either way.
 {
   const spoken = [];
   const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/assistant', {
@@ -2615,7 +2615,7 @@ async function openAssistantFromStore(dom, waitFor, text) {
         addEventListener: () => {},
         removeEventListener: () => {},
         speak(utterance) {
-          spoken.push(utterance.text);
+          spoken.push({ text: utterance.text, lang: utterance.lang });
         },
         cancel() {},
         pause: () => {},
@@ -2632,37 +2632,49 @@ async function openAssistantFromStore(dom, waitFor, text) {
       fail('no Persian voice — the sound switch is missing');
     } else {
       toggle.click();
-      const explained = await waitFor(() => text().includes('صدای فارسی روی این دستگاه نیست'));
-      if (!explained) fail('no Persian voice — toggling with no Persian voice left a dead button');
-      else ok('no Persian voice — a short, clear line explains the situation');
-      if (dom.window.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'false') {
-        ok('no Persian voice — reading is not switched on when nothing can speak');
+      const on = await waitFor(
+        () => dom.window.document.querySelector('button.zhino-assistant-voice').getAttribute('aria-pressed') === 'true',
+      );
+      if (!on) fail('no Persian voice — the switch refused to turn reading on');
+      else ok('no Persian voice — reading can still be switched on without a Persian voice');
+      await sleep(200);
+      if (text().includes('صدای فارسی روی این دستگاه نیست')) {
+        fail('no Persian voice — an error was shown before anything was attempted');
       } else {
-        fail('no Persian voice — reading switched on although nothing can speak');
+        ok('no Persian voice — no premature error message');
       }
     }
 
-    // A new answer arrives: reading must never be attempted, chat untouched
+    // A new answer arrives: it is handed to the engine, tagged Persian
     await sendChatMessage(dom, waitFor, 'قیمت ژله توت فرنگی چند است؟');
     const answered = await waitFor(() => text().includes('\u06f2\u06f0\u06f0\u066c\u06f0\u06f0\u06f0 \u062a\u0648\u0645\u0627\u0646'));
     if (!answered) fail('no Persian voice — the answer never arrived: ' + text().slice(-180));
     else ok('no Persian voice — the answer is displayed as text, exactly as before');
-    await sleep(400);
-    if (spoken.length === 0) ok('no Persian voice — nothing was handed to the speech engine');
-    else fail(`no Persian voice — the engine was asked to speak: ${spoken.join(' | ').slice(0, 120)}`);
 
-    // The read button under the answer must be honest as well
+    const attempted = await waitFor(() => spoken.length > 0, 9000);
+    if (!attempted) {
+      fail('no Persian voice — nothing was handed to the speech engine');
+    } else if (spoken.every((u) => /^fa/i.test(u.lang))) {
+      ok('no Persian voice — the fallback attempt is tagged Persian (fa-IR)');
+    } else {
+      fail('no Persian voice — wrong utterance language: ' + spoken.map((u) => u.lang).join(', '));
+    }
+
+    // This fake engine never starts, so the honest probe explains it
+    const explained = await waitFor(() => text().includes('صدای فارسی روی این دستگاه نیست'), 20000);
+    if (!explained) fail('no Persian voice — no explanation although the engine stayed silent');
+    else ok('no Persian voice — after the silent engine, a short clear line explains it');
+
+    // The read button under the answer behaves the same way: try, then explain
     const readButton = dom.window.document.querySelector('button.zhino-assistant-read');
     if (!readButton) {
       fail('no Persian voice — the read button disappeared');
     } else {
+      const before = spoken.length;
       readButton.click();
-      const explainedAgain = await waitFor(() => text().includes('صدای فارسی روی این دستگاه نیست'));
-      if (!explainedAgain) fail('no Persian voice — the read button did not explain itself');
-      else ok('no Persian voice — the read button explains itself too');
-      await sleep(300);
-      if (spoken.length === 0) ok('no Persian voice — the read button still speaks nothing');
-      else fail('no Persian voice — the read button sent text to the engine');
+      const tried = await waitFor(() => spoken.length > before, 9000);
+      if (!tried) fail('no Persian voice — the read button gave up without trying');
+      else ok('no Persian voice — the read button tries the browser fallback too');
     }
 
     expectNoInternalWording('no Persian voice', dom);
