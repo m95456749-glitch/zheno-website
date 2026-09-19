@@ -183,3 +183,58 @@ export function IconSearch({ className = 'h-5 w-5' }: IconProps) {
     </svg>
   );
 }
+
+/* ── «تصاویر محصولات» ─────────────────────────────────────── */
+
+export function IconUpload({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M10 13V3.8M6.6 7.2 10 3.8l3.4 3.4" />
+      <path d="M3.5 12.5v3A1.5 1.5 0 0 0 5 17h10a1.5 1.5 0 0 0 1.5-1.5v-3" />
+    </svg>
+  );
+}
+
+export function IconStar({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="m10 3.2 2.1 4.3 4.7.7-3.4 3.3.8 4.7-4.2-2.2-4.2 2.2.8-4.7L3.2 8.2l4.7-.7L10 3.2Z" />
+    </svg>
+  );
+}
+
+export function IconEye({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M2.8 10S5.6 5.2 10 5.2 17.2 10 17.2 10 14.4 14.8 10 14.8 2.8 10 2.8 10Z" />
+      <circle cx="10" cy="10" r="2.1" />
+    </svg>
+  );
+}
+
+export function IconRefresh({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M16 10a6 6 0 1 1-1.8-4.3" />
+      <path d="M16.4 3.6v3.2h-3.2" />
+    </svg>
+  );
+}
+
+export function IconCheck({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="m4 10.4 4 4L16 5.6" />
+    </svg>
+  );
+}
+
+export function IconAlert({ className = 'h-5 w-5' }: IconProps) {
+  return (
+    <svg {...svgProps(className)}>
+      <path d="M10 3.6 17.2 16.4H2.8L10 3.6Z" />
+      <path d="M10 8.4v3.4" />
+      <circle cx="10" cy="13.9" r="0.7" style={{ fill: 'var(--color-wine-950)' }} />
+    </svg>
+  );
+}

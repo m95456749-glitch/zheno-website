@@ -669,9 +669,79 @@ function expectNoErrors(label, errors) {
         expectContains('admin circular launchers', t, label);
       }
       const launcherHrefs = Array.from(document.querySelectorAll('a')).map((link) => link.getAttribute('href') ?? '');
-      for (const href of ['/admin/products?view=prices', '/admin/products?view=images']) {
+      for (const href of ['/admin/products?view=prices', '/admin/product-images']) {
         if (launcherHrefs.some((actual) => actual.endsWith(href))) ok(`admin circular launchers link to ${href}`);
         else fail(`admin circular launchers missing ${href}`);
+      }
+
+      // ── «تصاویر محصولات» — the dedicated gallery section ──
+      // Reached through the panel's own navigation, in demo mode (no
+      // Supabase configured): it must list every product with its
+      // flavour, offer upload/replace, and never pretend the photos
+      // reached a real store.
+      const waitForText = async (needle, ms = 12000) => {
+        const until = Date.now() + ms;
+        while (Date.now() < until) {
+          if (text().includes(needle)) return true;
+          await sleep(100);
+        }
+        return false;
+      };
+      const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+      if (!imagesLink) {
+        fail('admin images — the panel navigation has no link to /admin/product-images');
+      } else {
+        imagesLink.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+        if (await waitForText('بارگذاری تصویر')) ok('admin images — the gallery page renders through the panel nav');
+        else fail('admin images — the gallery page did not render: ' + text().slice(0, 220));
+
+        expectContains('admin images', text(), 'پودر ژله انار ژینو');
+        expectContains('admin images', text(), 'طعم');
+        expectContains('admin images', text(), 'جایگزینی تصویر اصلی');
+        expectContains('admin images', text(), 'گالری این محصول');
+        expectContains('admin images', text(), 'تصویر اصلی دارد');
+        // demo mode must stay honest about where the bytes would go
+        expectContains('admin images', text(), 'حالت نمایشی');
+        expectContains('admin images', text(), 'حافظهٔ همین مرورگر');
+        // the 22 committed photos are all registered in the gallery
+        const frames = document.querySelectorAll('.adm-image-card').length;
+        if (frames === 22) ok('admin images — all 22 products are listed with their photos');
+        else fail(`admin images — expected 22 product cards, found ${frames}`);
+
+        // Deleting always asks first, and the destructive button stays
+        // locked until the manager ticks the confirmation box.
+        const deleteControl = document.querySelector('button[aria-label^="حذف تصویر"]');
+        if (!deleteControl) {
+          fail('admin images — no delete control on a gallery thumbnail');
+        } else {
+          deleteControl.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+          if (await waitForText('حذف قطعی تصویر')) ok('admin images — deletion opens a confirmation dialog');
+          else fail('admin images — no confirmation dialog appeared before deleting');
+
+          const confirmButton = Array.from(document.querySelectorAll('button')).find((button) =>
+            button.textContent?.includes('حذف قطعی تصویر'),
+          );
+          if (confirmButton && confirmButton.disabled) {
+            ok('admin images — the destructive button is locked until the admin confirms');
+          } else {
+            fail('admin images — the destructive button was clickable without confirmation');
+          }
+          expectContains('admin images delete dialog', text(), 'سفارش‌ها، سبد خرید و قیمت‌ها دست‌نخورده می‌مانند');
+
+          const cancelButton = Array.from(document.querySelectorAll('button')).find((button) =>
+            button.textContent?.trim() === 'انصراف',
+          );
+          if (cancelButton) {
+            cancelButton.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+            const closed = await waitForText('گالری این محصول');
+            if (closed && !document.querySelector('.adm-modal')) ok('admin images — «انصراف» closes the dialog without deleting');
+            else fail('admin images — the delete dialog did not close on «انصراف»');
+          } else {
+            fail('admin images — the delete dialog has no «انصراف» button');
+          }
+        }
       }
       // the stat cards were removed, so their customization panel must be
       // gone too — a control that only stores preferences while no card is
@@ -1087,10 +1157,17 @@ function makeSupabaseStub({
   orders = [],
   orderItems = [],
   createOrder = 'accept',
+  images = null,
 } = {}) {
   const calls = [];
   const createdOrderPayloads = [];
   const orderStatusPatches = [];
+  const productPatches = [];
+  const insertedImages = [];
+  const deletedImageIds = [];
+  const primaryPromotions = [];
+  const uploadedObjects = [];
+  const removedObjects = [];
   const jwt = [
     Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
     Buffer.from(
@@ -1120,6 +1197,34 @@ function makeSupabaseStub({
       special: false,
     },
   ];
+
+  // ── gallery state (public.product_images + the Storage bucket) ──
+  // Seeded the way migration 20260919000000 seeds it: the photo the
+  // site already ships is registered as a 'legacy' primary row.
+  const shopImageUrl = products[0]?.image_url ?? 'images/products/jelly-strawberry.jpg';
+  const gallery = {
+    rows:
+      images ??
+      [
+        {
+          id: 'aaaaaaaa-0000-0000-0000-000000000001',
+          product_id: products[0]?.id ?? 'jelly-strawberry',
+          storage_bucket: 'site-public',
+          storage_path: shopImageUrl,
+          storefront_url: shopImageUrl,
+          alt_text: products[0]?.short_name ?? 'ژله توت فرنگی',
+          is_primary: true,
+          sort_order: 0,
+          width: null,
+          height: null,
+          mime_type: 'image/jpeg',
+          size_bytes: 0,
+          source: 'legacy',
+          created_at: '2026-09-12T08:00:00.000Z',
+        },
+      ],
+    seq: 0,
+  };
 
   const fetchImpl = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
@@ -1178,7 +1283,77 @@ function makeSupabaseStub({
       orderStatusPatches.push({ url, payload, headers });
       return new globalThis.Response(null, { status: 204 });
     }
+    // ── Storage: product photos (bucket 'product-images') ──
+    if (url.includes('/storage/v1/object/product-images') && (method === 'POST' || method === 'PUT')) {
+      const objectPath = decodeURIComponent(
+        url.split('/storage/v1/object/')[1].replace(/^product-images\//, ''),
+      );
+      uploadedObjects.push({ path: objectPath, headers, method });
+      return json({ Id: `storage-${uploadedObjects.length}`, Key: `product-images/${objectPath}` });
+    }
+    if (url.includes('/storage/v1/object/product-images') && method === 'DELETE') {
+      const payload = JSON.parse(body || '{}');
+      for (const prefix of payload.prefixes ?? []) removedObjects.push(prefix);
+      return json([]);
+    }
+
+    // ── public.product_images ──
+    if (url.includes('/rest/v1/rpc/set_primary_product_image')) {
+      const payload = JSON.parse(body || '{}');
+      primaryPromotions.push({ payload, headers });
+      const target = gallery.rows.find((row) => row.id === payload.p_image_id);
+      if (!target) return json({ message: 'image_not_found', details: null, hint: null }, 400);
+      // exactly what the SQL RPC does: one primary, mirrored into the shop
+      for (const row of gallery.rows) {
+        if (row.product_id === target.product_id) row.is_primary = false;
+      }
+      target.is_primary = true;
+      const shopRow = products.find((row) => row.id === target.product_id);
+      if (shopRow) shopRow.image_url = target.storefront_url;
+      return json(shopRow ? [shopRow] : []);
+    }
+    if (url.includes('/rest/v1/product_images') && method === 'POST') {
+      const payload = JSON.parse(body || '{}');
+      insertedImages.push({ payload, headers });
+      gallery.seq += 1;
+      const row = {
+        id: `bbbbbbbb-0000-0000-0000-0000000000${gallery.seq}`,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+        is_primary: false,
+        sort_order: 0,
+        uploaded_by: '00000000-0000-0000-0000-000000000001',
+        ...payload,
+      };
+      gallery.rows.push(row);
+      // .select().single() → PostgREST answers with ONE object
+      return json(row);
+    }
+    if (url.includes('/rest/v1/product_images') && method === 'PATCH') {
+      const payload = JSON.parse(body || '{}');
+      const idMatch = url.match(/[?&]id=eq\.([^&]+)/);
+      const row = gallery.rows.find((item) => item.id === (idMatch ? decodeURIComponent(idMatch[1]) : ''));
+      if (row && typeof payload.alt_text === 'string') row.alt_text = payload.alt_text;
+      return new globalThis.Response(null, { status: 204 });
+    }
+    if (url.includes('/rest/v1/product_images') && method === 'DELETE') {
+      const idMatch = url.match(/[?&]id=eq\.([^&]+)/);
+      const id = idMatch ? decodeURIComponent(idMatch[1]) : '';
+      deletedImageIds.push(id);
+      gallery.rows = gallery.rows.filter((row) => row.id !== id);
+      return json([]);
+    }
+    if (url.includes('/rest/v1/product_images')) return json(gallery.rows);
+
     if (url.includes('/rest/v1/products') && method === 'PATCH') {
+      const payload = JSON.parse(body || '{}');
+      const idMatch = url.match(/[?&]id=eq\.([^&]+)/);
+      const shopRow = products.find((row) => row.id === (idMatch ? decodeURIComponent(idMatch[1]) : row.id));
+      productPatches.push({ url, payload, headers });
+      // pushProductImageUrl() is the only writer of image_url here
+      if (shopRow && Object.prototype.hasOwnProperty.call(payload, 'image_url')) {
+        shopRow.image_url = payload.image_url;
+      }
       return new globalThis.Response(null, { status: 204 });
     }
     if (url.includes('/rest/v1/products')) return json(products);
@@ -1200,7 +1375,21 @@ function makeSupabaseStub({
     return json([]);
   };
 
-  return { fetchImpl, calls, jwt, createdOrderPayloads, orderStatusPatches };
+  return {
+    fetchImpl,
+    calls,
+    jwt,
+    createdOrderPayloads,
+    orderStatusPatches,
+    productPatches,
+    gallery,
+    products,
+    insertedImages,
+    deletedImageIds,
+    primaryPromotions,
+    uploadedObjects,
+    removedObjects,
+  };
 }
 
 /** Render a route in a jsdom with a stubbed network + optional seed. */
@@ -1259,6 +1448,237 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
 // anonymously, and the storefront must never depend on the
 // database to render.
 // ════════════════════════════════════════════════════════════
+
+// ── 20b. Connected mode — «تصاویر محصولات» end to end ──────
+// The whole gallery write path against a Supabase-shaped API:
+//   upload → Storage object → product_images row → atomic promotion
+//   → products.image_url (the ONE field the storefront reads),
+// then a confirmed delete that hands the shop back to the previous
+// photo. Also proves the two safety promises: a committed site photo
+// is never deleted, and no write ever leaves the browser anonymous.
+{
+  const stub = makeSupabaseStub();
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/login', {
+    stub,
+    seed: (win) => {
+      // jsdom has no image decoder: report the pixels and skip the
+      // canvas round-trip (prepareProductImage keeps the original bytes
+      // when there is no 2D context — exactly the documented fallback).
+      win.createImageBitmap = async () => ({ width: 1600, height: 1200, close() {} });
+    },
+  });
+
+  const setReactValue = (input, value) => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+  const click = (element) =>
+    element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  const findButton = (label) =>
+    Array.from(document.querySelectorAll('button')).find((button) =>
+      (button.textContent ?? '').includes(label),
+    );
+
+  const signedIn = await (async () => {
+    if (!(await waitFor(() => document.querySelector('input[autocomplete="username"]')))) return false;
+    setReactValue(document.querySelector('input[autocomplete="username"]'), 'admin@example.com');
+    setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
+    document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    return waitFor(() => text().includes('متصل به دیتابیس'));
+  })();
+  if (!signedIn) {
+    fail('connected images — the admin session did not open: ' + text().slice(0, 200));
+  } else {
+    // ── the gallery is reached through the panel's own navigation ──
+    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
+      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+    );
+    if (!imagesLink) fail('connected images — no navigation link to /admin/product-images');
+    else click(imagesLink);
+    const onGallery = await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+    if (onGallery) ok('connected images — the gallery reads product_images from the database');
+    else fail('connected images — the gallery did not render: ' + text().slice(0, 200));
+
+    if (stub.calls.some((call) => call.url.includes('/rest/v1/product_images') && call.method === 'GET')) {
+      ok('connected images — GET /rest/v1/product_images was issued');
+    } else {
+      fail('connected images — the gallery never read product_images');
+    }
+    expectContains('connected images', text(), 'فایل سایت');
+    expectContains('connected images', text(), 'product-images');
+    expectContains('connected images', text(), 'پودر ژله توت فرنگی ژینو');
+    expectContains('connected images', text(), 'توت فرنگی');
+
+    // ── replace the primary photo ─────────────────────────────
+    const replaceButton = findButton('جایگزینی تصویر اصلی');
+    if (!replaceButton) {
+      fail('connected images — «جایگزینی تصویر اصلی» is missing');
+    } else {
+      click(replaceButton);
+      const dialogOpen = await waitFor(() => text().includes('تصویر را اینجا رها کنید'));
+      if (!dialogOpen) fail('connected images — the upload dialog did not open');
+
+      const fileInput = document.querySelector('input[data-testid="product-image-file"]');
+      if (!fileInput) {
+        fail('connected images — no file input in the upload dialog');
+      } else {
+        const file = new dom.window.File(['fake-jpeg-bytes-for-the-smoke-test'], 'new-photo.jpg', {
+          type: 'image/jpeg',
+        });
+        Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+        fileInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+
+        const previewed = await waitFor(() => text().includes('حجم اصلی'));
+        if (previewed) ok('connected images — the photo is previewed before anything is sent');
+        else fail('connected images — no preview was rendered: ' + text().slice(0, 200));
+
+        const saveButton = findButton('ذخیره و جایگزینی');
+        if (!saveButton) fail('connected images — the save button is missing');
+        else click(saveButton);
+
+        const promoted = await waitFor(() => stub.primaryPromotions.length > 0);
+        if (promoted) ok('connected images — promotion went through the set_primary_product_image RPC');
+        else fail('connected images — the RPC was never called: ' + text().slice(0, 200));
+
+        const upload = stub.uploadedObjects[0];
+        if (upload && upload.path.startsWith('products/jelly-strawberry/')) {
+          ok('connected images — the object path is scoped to the product');
+        } else {
+          fail(`connected images — unexpected Storage path: ${upload ? upload.path : 'no upload'}`);
+        }
+        if (upload && upload.headers['x-upsert'] === 'false') {
+          ok('connected images — uploads never silently overwrite an object (x-upsert: false)');
+        } else {
+          fail(`connected images — unexpected x-upsert header: ${upload ? upload.headers['x-upsert'] : 'no upload'}`);
+        }
+        if (upload && /^Bearer ey/.test(upload.headers.authorization ?? '')) {
+          ok('connected images — the Storage write carries the signed-in admin JWT');
+        } else {
+          fail('connected images — the Storage write was not authenticated');
+        }
+
+        const insert = stub.insertedImages[0];
+        if (insert && insert.payload.is_primary === false) {
+          ok('connected images — the row is inserted non-primary (only the RPC promotes)');
+        } else {
+          fail(`connected images — unexpected insert payload: ${JSON.stringify(insert?.payload)}`);
+        }
+        if (
+          insert &&
+          insert.payload.source === 'upload' &&
+          insert.payload.storage_bucket === 'product-images' &&
+          insert.payload.product_id === 'jelly-strawberry'
+        ) {
+          ok('connected images — the row records product, bucket and source');
+        } else {
+          fail('connected images — the insert payload is missing product/bucket/source');
+        }
+        const publicUrl = insert?.payload.storefront_url ?? '';
+        if (/^https:\/\/.+\/storage\/v1\/object\/public\/product-images\//.test(publicUrl)) {
+          ok('connected images — the row stores the public Storage URL the shop will read');
+        } else {
+          fail(`connected images — unexpected storefront_url: ${publicUrl}`);
+        }
+        if (publicUrl && stub.products[0].image_url === publicUrl) {
+          ok('connected images — promotion mirrored the URL into products.image_url');
+        } else {
+          fail(`connected images — products.image_url is ${stub.products[0].image_url}`);
+        }
+
+        // the committed site photo survives a replacement
+        if (stub.deletedImageIds.length === 0 && stub.removedObjects.length === 0) {
+          ok('connected images — replacing never deletes the committed site photo');
+        } else {
+          fail(`connected images — a legacy photo was removed: ${JSON.stringify(stub.deletedImageIds)}`);
+        }
+        if (stub.gallery.rows.length === 2) ok('connected images — the gallery keeps both photos');
+        else fail(`connected images — expected 2 gallery rows, found ${stub.gallery.rows.length}`);
+        expectContains('connected images', text(), '۲ تصویر');
+
+        // ── delete the uploaded photo, with confirmation ───────
+        const deletePrimary = document.querySelector('button[aria-label^="حذف تصویر اصلی"]');
+        if (!deletePrimary) {
+          fail('connected images — no delete control for the primary photo');
+        } else {
+          click(deletePrimary);
+          const askedFirst = await waitFor(() => text().includes('حذف قطعی تصویر'));
+          if (askedFirst) ok('connected images — deleting asks for an explicit confirmation');
+          else fail('connected images — no confirmation dialog before deleting');
+
+          const confirmButton = findButton('حذف قطعی تصویر');
+          if (confirmButton && confirmButton.disabled) {
+            ok('connected images — the destructive button stays locked until the admin confirms');
+          } else {
+            fail('connected images — the destructive button was clickable without confirmation');
+          }
+
+          const box = document.querySelector('.adm-confirm-row input[type="checkbox"]');
+          if (!box) fail('connected images — the confirmation checkbox is missing');
+          else box.click();
+
+          const unlocked = await waitFor(() => {
+            const button = findButton('حذف قطعی تصویر');
+            return Boolean(button) && !button.disabled;
+          });
+          if (!unlocked) fail('connected images — the confirmation checkbox did not unlock the button');
+          else click(findButton('حذف قطعی تصویر'));
+
+          const removed = await waitFor(() => stub.removedObjects.length > 0);
+          if (removed) ok('connected images — the uploaded object was removed from Storage');
+          else fail('connected images — the Storage object was never removed');
+
+          if (stub.deletedImageIds.length === 1 && stub.deletedImageIds[0].startsWith('bbbbbbbb')) {
+            ok('connected images — only the uploaded gallery row was deleted');
+          } else {
+            fail(`connected images — unexpected deleted rows: ${JSON.stringify(stub.deletedImageIds)}`);
+          }
+          if (upload && stub.removedObjects[0] === upload.path) {
+            ok('connected images — the exact uploaded path was removed');
+          } else {
+            fail(`connected images — removed ${JSON.stringify(stub.removedObjects)}, uploaded ${upload?.path}`);
+          }
+          if (stub.primaryPromotions.length === 2) {
+            ok('connected images — the previous photo was promoted again through the same RPC');
+          } else {
+            fail(`connected images — expected 2 promotions, saw ${stub.primaryPromotions.length}`);
+          }
+          if (stub.products[0].image_url === 'images/products/jelly-strawberry.jpg') {
+            ok('connected images — the shop falls back to the previous photo, never to a dead URL');
+          } else {
+            fail(`connected images — after the delete, image_url is ${stub.products[0].image_url}`);
+          }
+          const settled = await waitFor(() => text().includes('۱ تصویر'));
+          if (settled) ok('connected images — the gallery re-read the database after the delete');
+          else fail('connected images — the gallery did not refresh after the delete');
+        }
+      }
+    }
+
+    // ── credential hygiene for every image write ──────────────
+    const writes = stub.calls.filter((call) => call.method !== 'GET' && !call.url.includes('/auth/v1/'));
+    if (writes.length > 0 && writes.every((call) => /^Bearer ey/.test(call.headers.authorization ?? ''))) {
+      ok(`connected images — all ${writes.length} gallery write(s) are authenticated (no anonymous write)`);
+    } else {
+      fail(`connected images — ${writes.length} write(s), unauthenticated: ${JSON.stringify(writes.map((c) => c.method + ' ' + c.url))}`);
+    }
+    const PUBLISHABLE = 'sb_publishable_smoke_test_key';
+    if (writes.every((call) => call.headers.apikey === PUBLISHABLE || !call.headers.apikey)) {
+      ok('connected images — the apikey header is only the publishable key');
+    } else {
+      fail(`connected images — unexpected apikey header: ${writes.map((c) => c.headers.apikey).join(', ')}`);
+    }
+    if (!JSON.stringify(stub.calls).includes('sb_secret') && !JSON.stringify(stub.calls).includes('service_role')) {
+      ok('connected images — no secret/service_role material in any request');
+    } else {
+      fail('connected images — a secret/service_role value appeared in a request');
+    }
+  }
+
+  dom.window.close();
+  const fatal = errors.filter((e) => !/Not implemented/i.test(e));
+  if (fatal.length === 0) ok('connected images — no runtime errors');
+  else fail('connected images runtime errors:\n    - ' + fatal.join('\n    - '));
+}
 
 // ── 21. A non-admin account cannot open the panel ───────────
 // The database's is_admin() answers false: login must fail with a

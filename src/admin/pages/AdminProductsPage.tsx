@@ -9,7 +9,7 @@
 // ============================================================
 
 import { useMemo, useState } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { FLAVORS, getFlavor } from '../../data/products';
 import type { FlavorId, Product, ProductCategory } from '../../types';
 import {
@@ -153,9 +153,20 @@ export default function AdminProductsPage() {
         <div className="adm-products-focus mb-5" role="status">
           <span>
             تمرکز فعلی: <strong>{focus === 'prices' ? 'قیمت‌ها' : 'تصاویر محصولات'}</strong>
-            <small>{focus === 'prices' ? 'قیمت هر محصول در ستون قیمت و فرم ویرایش قابل تغییر است.' : 'پیش‌نمایش تصویر در فهرست و مسیر تصویر در فرم ویرایش قابل مدیریت است.'}</small>
+            <small>
+              {focus === 'prices'
+                ? 'قیمت هر محصول در ستون قیمت و فرم ویرایش قابل تغییر است.'
+                : 'بارگذاری، جایگزینی، حذف و انتخاب تصویر اصلی در بخش «تصاویر محصولات» انجام می‌شود.'}
+            </small>
           </span>
-          <button type="button" onClick={() => setSearchParams({})} className="adm-quiet-link">نمایش همه</button>
+          <span className="flex items-center gap-3">
+            {focus === 'images' && (
+              <Link to="/admin/product-images" className="adm-quiet-link">
+                بازکردن گالری تصاویر
+              </Link>
+            )}
+            <button type="button" onClick={() => setSearchParams({})} className="adm-quiet-link">نمایش همه</button>
+          </span>
         </div>
       )}
 
@@ -546,7 +557,7 @@ function ProductFormModal({
           </Field>
           <Field
             label="تصویر محصول"
-            hint="مسیر images/ یا نشانی https://؛ آپلود فایل در این فاز عمداً اضافه نشده است."
+            hint="مسیر images/ یا نشانی https:// — برای بارگذاری، جایگزینی و حذف فایل تصویر، از بخش «تصاویر محصولات» استفاده کنید."
             error={errors.imageUrl}
           >
             <input

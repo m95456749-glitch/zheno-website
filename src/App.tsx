@@ -34,6 +34,7 @@ import AdminGate from './admin/AdminGate';
 import AdminLoginPage from './admin/pages/AdminLoginPage';
 import AdminDashboardPage from './admin/pages/AdminDashboardPage';
 import AdminProductsPage from './admin/pages/AdminProductsPage';
+import AdminProductImagesPage from './admin/pages/AdminProductImagesPage';
 import AdminOrdersPage from './admin/pages/AdminOrdersPage';
 import AdminInventoryPage from './admin/pages/AdminInventoryPage';
 import AdminRecipesPage from './admin/pages/AdminRecipesPage';
@@ -86,6 +87,9 @@ export default function App() {
           <Route index element={<Navigate to="/admin/dashboard" replace />} />
           <Route path="dashboard" element={<AdminDashboardPage />} />
           <Route path="products" element={<AdminProductsPage />} />
+          {/* «تصاویر محصولات» — گالری هر محصول: بارگذاری، جایگزینی،
+              حذف با تأیید و انتخاب تصویر اصلی (Supabase Storage) */}
+          <Route path="product-images" element={<AdminProductImagesPage />} />
           <Route path="orders" element={<AdminOrdersPage />} />
           <Route path="inventory" element={<AdminInventoryPage />} />
           <Route path="recipes" element={<AdminRecipesPage />} />
