@@ -126,14 +126,19 @@ export default function AssistantChat({ chat, className }: Props) {
   } = useAssistantSpeech();
   const voiceSite = useVoiceSettings();
   const [ideasOpen, setIdeasOpen] = useState(false);
-  const [voiceNotice, setVoiceNotice] = useState<string | null>(null);
-  const [voiceHint, setVoiceHint] = useState<string | null>(null);
+  /**
+   * پیام کوتاه صوتی — یک دولت واحد برای «متن اصلی + راهنمای اختیاری».
+   * قبلاً دو دولت جدا بودند و افکت پاک‌سازی در سوارشدن صفحه یک
+   * setVoiceHint(null) زودتر از لمس کاربر در صف می‌گذاشت که می‌توانست
+   * راهنمای فارسیِ همان لمس را ببلعد (رقابت رویداد/افکت). با دولتِ
+   * واحد، هیچ شکافی بین متن و راهنما وجود ندارد.
+   */
+  const [voiceNote, setVoiceNote] = useState<{ main: string; hint: string | null } | null>(null);
   const [readingId, setReadingId] = useState<number | null>(null);
   const spokenId = useRef(0);
 
   const showVoiceNotice = (main: string, hint: string | null = null) => {
-    setVoiceNotice(main);
-    setVoiceHint(hint);
+    setVoiceNote({ main, hint });
   };
 
   useEffect(() => {
@@ -171,16 +176,10 @@ export default function AssistantChat({ chat, className }: Props) {
   }, [messages.length]);
 
   useEffect(() => {
-    if (!voiceNotice) {
-      setVoiceHint(null);
-      return;
-    }
-    const timer = window.setTimeout(() => {
-      setVoiceNotice(null);
-      setVoiceHint(null);
-    }, 6000);
+    if (!voiceNote) return;
+    const timer = window.setTimeout(() => setVoiceNote(null), 6000);
     return () => window.clearTimeout(timer);
-  }, [voiceNotice]);
+  }, [voiceNote]);
 
   useEffect(() => {
     if (!voiceReading && !voicePaused && !voiceLoading) {
@@ -524,10 +523,10 @@ export default function AssistantChat({ chat, className }: Props) {
           )}
         </div>
 
-        {(voiceNotice || voiceHint) && (
+        {voiceNote && (
           <div role="status" className="zhino-assistant-voice-notes">
-            {voiceNotice && <p className="zhino-assistant-voice-note">{voiceNotice}</p>}
-            {voiceHint && <p className="zhino-assistant-voice-note zhino-assistant-voice-note-hint">{voiceHint}</p>}
+            <p className="zhino-assistant-voice-note">{voiceNote.main}</p>
+            {voiceNote.hint && <p className="zhino-assistant-voice-note zhino-assistant-voice-note-hint">{voiceNote.hint}</p>}
           </div>
         )}
 
