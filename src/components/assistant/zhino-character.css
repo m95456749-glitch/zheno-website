@@ -1,0 +1,275 @@
+/* ============================================================
+   ZHINO — کاراکتر سه‌بعدی دستیار ژینو - استایل‌ها
+   انیمیشن‌های نرم، طبیعی، با easing مناسب
+   بدون lag، فقط transform و opacity
+   ============================================================ */
+
+.zhino-char-root {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  user-select: none;
+  -webkit-user-select: none;
+  contain: layout paint;
+}
+
+.zhino-char-svg {
+  display: block;
+  overflow: visible;
+  filter: drop-shadow(0 12px 20px rgba(42, 11, 18, 0.12));
+  will-change: transform;
+}
+
+/* تنفس بسیار ملایم بدن */
+.zhino-char-root:not(.is-compact) .zc-body-group {
+  animation: zc-breathe 3.8s ease-in-out infinite;
+  transform-origin: 100px 155px;
+}
+
+@keyframes zc-breathe {
+  0%, 100% { transform: scaleY(1) translateY(0); }
+  50% { transform: scaleY(1.015) translateY(-0.8px); }
+}
+
+/* سر - شناوری بسیار ظریف */
+.zhino-char-root:not(.is-compact) .zc-head-group {
+  animation: zc-head-float 5.2s ease-in-out infinite;
+}
+
+@keyframes zc-head-float {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-1px) rotate(0.3deg); }
+  75% { transform: translateY(0.5px) rotate(-0.2deg); }
+}
+
+/* در حالت compact فقط تنفس سر */
+.zhino-char-root.is-compact .zc-head-group {
+  animation: zc-head-float-compact 4.5s ease-in-out infinite;
+}
+
+@keyframes zc-head-float-compact {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-0.6px); }
+}
+
+/* پلک‌ها */
+.zc-eyelid-top {
+  transform-origin: center top;
+  transform: scaleY(0);
+  opacity: 0;
+  transition: transform 0.12s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.12s ease;
+  will-change: transform;
+}
+
+.zc-eyelid-top.is-closed {
+  transform: scaleY(1);
+  opacity: 1;
+}
+
+/* مردمک - حرکت نرم */
+.zc-pupil-group {
+  transition: transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+/* دست چپ - سلام */
+.zc-arm-left {
+  transition: transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 68px 134px;
+}
+
+.zc-arm-left.is-waving {
+  animation: zc-wave 0.9s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+@keyframes zc-wave {
+  0% { transform: rotate(-8deg) translateY(0); }
+  25% { transform: rotate(18deg) translateY(-2px); }
+  50% { transform: rotate(-6deg) translateY(0); }
+  75% { transform: rotate(16deg) translateY(-1px); }
+  100% { transform: rotate(-8deg) translateY(0); }
+}
+
+.zc-arm-left.is-thinking {
+  transform: rotate(-28deg) translate(-6px, -8px);
+}
+
+/* دست راست - محصول */
+.zc-arm-right {
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 132px 134px;
+}
+
+.zc-arm-right.is-lifted {
+  transform: rotate(-12deg) translateY(-6px);
+}
+
+.zc-product-group {
+  transition: transform 0.6s cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center bottom;
+  animation: zc-product-idle 4.2s ease-in-out infinite;
+}
+
+.zc-arm-right.is-lifted .zc-product-group {
+  animation: zc-product-lift 0.7s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes zc-product-idle {
+  0%, 100% { transform: translate(148px, 150px) rotate(0deg); }
+  50% { transform: translate(148px, 148.5px) rotate(1deg); }
+}
+
+@keyframes zc-product-lift {
+  0% { transform: translate(148px, 150px) rotate(0deg) scale(1); }
+  50% { transform: translate(146px, 138px) rotate(-6deg) scale(1.08); }
+  100% { transform: translate(144px, 142px) rotate(-3deg) scale(1.05); }
+}
+
+/* جعبه محصول - درخشش */
+.zc-product-box {
+  transition: transform 0.4s ease, filter 0.4s ease;
+}
+
+.zhino-char-root:hover .zc-product-box {
+  transform: scale(1.03);
+  filter: drop-shadow(0 6px 12px rgba(113, 49, 59, 0.18));
+}
+
+/* پاها - تکان بسیار ظریف */
+.zc-legs {
+  animation: zc-legs-sway 6s ease-in-out infinite;
+  transform-origin: 100px 176px;
+}
+
+@keyframes zc-legs-sway {
+  0%, 100% { transform: translateX(0); }
+  50% { transform: translateX(0.3px); }
+}
+
+/* حالت فکر کردن - سر کج */
+.zhino-char-root.is-thinking .zc-head-group {
+  animation: zc-thinking-head 3.5s ease-in-out infinite;
+}
+
+@keyframes zc-thinking-head {
+  0%, 100% { transform: rotate(-2deg) translateY(0); }
+  50% { transform: rotate(-4deg) translateY(-0.5px); }
+}
+
+.zhino-char-root.is-thinking .zc-body-group {
+  animation: zc-thinking-body 3.5s ease-in-out infinite;
+}
+
+@keyframes zc-thinking-body {
+  0%, 100% { transform: scaleY(1) rotate(0deg); }
+  50% { transform: scaleY(1.01) rotate(-1deg); }
+}
+
+/* حالت صحبت - تکان سر هماهنگ با ریتم */
+.zhino-char-root.is-speaking .zc-head-group {
+  animation: zc-speaking-head 0.9s ease-in-out infinite;
+}
+
+@keyframes zc-speaking-head {
+  0%, 100% { transform: translateY(0) rotate(0deg); }
+  25% { transform: translateY(-0.8px) rotate(0.4deg); }
+  75% { transform: translateY(0.3px) rotate(-0.2deg); }
+}
+
+.zhino-char-root.is-speaking .zc-body-group {
+  animation: zc-speaking-body 0.9s ease-in-out infinite;
+}
+
+@keyframes zc-speaking-body {
+  0%, 100% { transform: scaleY(1); }
+  50% { transform: scaleY(1.012); }
+}
+
+/* دهان */
+.zc-mouth-path {
+  transition: d 0.15s ease, opacity 0.15s ease;
+}
+
+/* سایه زمین - تنفس */
+.zc-ground-shadow {
+  animation: zc-ground-breathe 3.8s ease-in-out infinite;
+  transform-origin: 100px 238px;
+}
+
+@keyframes zc-ground-breathe {
+  0%, 100% { transform: scaleX(1); opacity: 0.09; }
+  50% { transform: scaleX(1.08); opacity: 0.07; }
+}
+
+/* حالت سلام - ورود */
+.zhino-char-root.is-greeting .zc-head-group {
+  animation: zc-greeting-enter 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+@keyframes zc-greeting-enter {
+  0% { transform: translateY(-22px) scale(0.88) rotate(-4deg); opacity: 0; }
+  60% { transform: translateY(3px) scale(1.04) rotate(2deg); opacity: 1; }
+  100% { transform: translateY(0) scale(1) rotate(0deg); opacity: 1; }
+}
+
+.zhino-char-root.is-greeting .zc-body-group {
+  animation: zc-greeting-body 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.1s both;
+}
+
+@keyframes zc-greeting-body {
+  0% { transform: translateY(-14px) scale(0.92); opacity: 0; }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+
+/* واکنش‌گرا */
+@media (max-width: 640px) {
+  .zhino-char-svg {
+    filter: drop-shadow(0 8px 14px rgba(42, 11, 18, 0.1));
+  }
+}
+
+/* کاهش حرکت */
+@media (prefers-reduced-motion: reduce) {
+  .zc-body-group,
+  .zc-head-group,
+  .zc-legs,
+  .zc-product-group,
+  .zc-ground-shadow,
+  .zc-arm-left,
+  .zc-arm-right,
+  .zhino-char-root.is-thinking .zc-head-group,
+  .zhino-char-root.is-thinking .zc-body-group,
+  .zhino-char-root.is-speaking .zc-head-group,
+  .zhino-char-root.is-speaking .zc-body-group,
+  .zhino-char-root.is-greeting .zc-head-group,
+  .zhino-char-root.is-greeting .zc-body-group {
+    animation: none !important;
+    transform: none !important;
+  }
+  .zc-pupil-group,
+  .zc-arm-left,
+  .zc-arm-right {
+    transition: none !important;
+  }
+}
+
+/* هاله تنفس */
+.zc-breath {
+  position: absolute;
+  inset: -8%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 30%, rgba(224, 208, 171, 0.12) 0%, transparent 65%);
+  pointer-events: none;
+  animation: zc-breath-glow 4s ease-in-out infinite;
+  opacity: 0.6;
+}
+
+@keyframes zc-breath-glow {
+  0%, 100% { transform: scale(0.96); opacity: 0.5; }
+  50% { transform: scale(1.04); opacity: 0.7; }
+}
+
+.zhino-char-root.is-compact .zc-breath {
+  display: none;
+}
