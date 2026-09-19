@@ -10,6 +10,7 @@ import {
   IconAssistant,
   IconContent,
   IconDashboard,
+  IconImage,
   IconInventory,
   IconOrders,
   IconProducts,
@@ -43,6 +44,12 @@ export const ADMIN_NAV: AdminNavItem[] = [
     label: 'محصولات',
     desc: 'افزودن، ویرایش و مدیریت محصولات فروشگاه',
     icon: IconProducts,
+  },
+  {
+    to: '/admin/product-images',
+    label: 'تصاویر محصولات',
+    desc: 'بارگذاری، جایگزینی و حذف تصویر هر محصول و انتخاب تصویر اصلی',
+    icon: IconImage,
   },
   {
     to: '/admin/orders',

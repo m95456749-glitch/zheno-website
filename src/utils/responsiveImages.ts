@@ -81,13 +81,21 @@ const DERIVATIVES: Record<string, Derivative> = {
   ...PRODUCT_DERIVATIVES,
 };
 
+/** True for a URL that needs no mount-point resolution. */
+function isAbsoluteUrl(url: string): boolean {
+  return /^(https?:)?\/\//i.test(url) || url.startsWith('/') || url.startsWith('data:') || url.startsWith('blob:');
+}
+
 /**
  * Resolve a catalog image path to its responsive sources.
  * `imageUrl` may be a site-root-relative path (catalog form) or an
- * already-resolved absolute URL (hero slides) — both are handled.
+ * already-resolved absolute URL — the hero slides, a Supabase Storage
+ * photo uploaded from the admin panel (https://…) and the demo-mode
+ * data URLs all take this branch and are passed through untouched, so
+ * they can never be prefixed with the site mount point.
  */
 export function getResponsiveSource(imageUrl: string): ResponsiveSource {
-  const fallbackSrc = imageUrl.startsWith('/') ? imageUrl : withSiteBase(imageUrl);
+  const fallbackSrc = isAbsoluteUrl(imageUrl) ? imageUrl : withSiteBase(imageUrl);
   const key = imageUrl.replace(/^\/zheno-website\//, '').replace(/^\//, '');
   const derivative = DERIVATIVES[key];
   if (!derivative) {
