@@ -1158,8 +1158,13 @@ function makeSupabaseStub({
   orderItems = [],
   createOrder = 'accept',
   images = null,
+  // true ⇒ the Storage bucket does not exist yet (the live project's
+  // failure state before the images migration is applied). Flipping
+  // stub.flags.bucketMissing to false simulates applying the migration.
+  bucketMissing = false,
 } = {}) {
   const calls = [];
+  const flags = { bucketMissing };
   const createdOrderPayloads = [];
   const orderStatusPatches = [];
   const productPatches = [];
@@ -1285,6 +1290,10 @@ function makeSupabaseStub({
     }
     // ── Storage: product photos (bucket 'product-images') ──
     if (url.includes('/storage/v1/object/product-images') && (method === 'POST' || method === 'PUT')) {
+      if (flags.bucketMissing) {
+        // exactly what Supabase Storage answers when the bucket does not exist
+        return json({ statusCode: '404', error: 'Bucket not found', message: 'Bucket not found' }, 400);
+      }
       const objectPath = decodeURIComponent(
         url.split('/storage/v1/object/')[1].replace(/^product-images\//, ''),
       );
@@ -1379,6 +1388,7 @@ function makeSupabaseStub({
     fetchImpl,
     calls,
     jwt,
+    flags,
     createdOrderPayloads,
     orderStatusPatches,
     productPatches,
@@ -1508,6 +1518,9 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
     expectContains('connected images', text(), 'product-images');
     expectContains('connected images', text(), 'پودر ژله توت فرنگی ژینو');
     expectContains('connected images', text(), 'توت فرنگی');
+    // wording: «صفحهٔ پرداخت» — never a phrase that looks like an error banner
+    expectContains('connected images', text(), 'صفحهٔ پرداخت');
+    expectNotContains('connected images', text(), 'تسویه‌حساب نمایش داده می‌شود');
 
     // ── replace the primary photo ─────────────────────────────
     const replaceButton = findButton('جایگزینی تصویر اصلی');
@@ -1678,6 +1691,286 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   const fatal = errors.filter((e) => !/Not implemented/i.test(e));
   if (fatal.length === 0) ok('connected images — no runtime errors');
   else fail('connected images runtime errors:\n    - ' + fatal.join('\n    - '));
+}
+
+// ── 20c. The reported live failure: bucket missing ─────────
+// Storage answers «Bucket not found» because the images migration was
+// never (fully) applied on the project. The panel must:
+//   1. show ONE honest Persian banner that names the missing bucket AND
+//      the exact migration file, instead of dying mid-write;
+//   2. leave zero damage: no uploaded object, no gallery row, no delete,
+//      no rewrite of the shop's image field;
+//   3. recover on the spot once the migration is applied — the same
+//      dialog retries and the same file goes through.
+{
+  const stub = makeSupabaseStub({ bucketMissing: true });
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/login', {
+    stub,
+    seed: (win) => {
+      win.createImageBitmap = async () => ({ width: 1600, height: 1200, close() {} });
+    },
+  });
+
+  const setReactValue = (input, value) => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+  const click = (element) =>
+    element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  const findButton = (label) =>
+    Array.from(document.querySelectorAll('button')).find((button) =>
+      (button.textContent ?? '').includes(label),
+    );
+
+  const signedIn = await (async () => {
+    if (!(await waitFor(() => document.querySelector('input[autocomplete="username"]')))) return false;
+    setReactValue(document.querySelector('input[autocomplete="username"]'), 'admin@example.com');
+    setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
+    document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    return waitFor(() => text().includes('متصل به دیتابیس'));
+  })();
+  if (!signedIn) {
+    fail('bucket-missing — the admin session did not open: ' + text().slice(0, 200));
+  } else {
+    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
+      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+    );
+    if (!imagesLink) fail('bucket-missing — no navigation link to /admin/product-images');
+    else click(imagesLink);
+    await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+
+    const replaceButton = findButton('جایگزینی تصویر اصلی');
+    if (!replaceButton) {
+      fail('bucket-missing — «جایگزینی تصویر اصلی» is missing');
+    } else {
+      click(replaceButton);
+      await waitFor(() => text().includes('تصویر را اینجا رها کنید'));
+      const fileInput = document.querySelector('input[data-testid="product-image-file"]');
+      if (!fileInput) {
+        fail('bucket-missing — no file input in the upload dialog');
+      } else {
+        const file = new dom.window.File(['fake-jpeg-bytes-for-the-smoke-test'], 'replacement.jpg', {
+          type: 'image/jpeg',
+        });
+        Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+        fileInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        await waitFor(() => text().includes('حجم اصلی'));
+
+        const firstSave = findButton('ذخیره و جایگزینی');
+        if (!firstSave) fail('bucket-missing — the save button is missing');
+        else click(firstSave);
+        const bannerShown = await waitFor(() =>
+          text().includes('فضای ذخیره‌سازی «product-images»'),
+        );
+        if (bannerShown) ok('bucket-missing — the Persian «bucket missing» banner is shown verbatim');
+        else fail('bucket-missing — no bucket error banner: ' + text().slice(0, 200));
+
+        if (bannerShown && text().includes('۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql')) {
+          ok('bucket-missing — the banner names the exact migration file to apply');
+        } else {
+          fail('bucket-missing — the banner does not name the migration file');
+        }
+
+        // zero damage from the refused write
+        if (stub.uploadedObjects.length === 0) ok('bucket-missing — nothing was uploaded');
+        else fail(`bucket-missing — an object was uploaded: ${JSON.stringify(stub.uploadedObjects)}`);
+        if (stub.insertedImages.length === 0) ok('bucket-missing — no orphan gallery row was created');
+        else fail('bucket-missing — a gallery row was inserted despite the failed upload');
+        if (stub.removedObjects.length === 0 && stub.deletedImageIds.length === 0) {
+          ok('bucket-missing — nothing was deleted while cleaning up');
+        } else {
+          fail('bucket-missing — a delete happened for a write that never landed');
+        }
+        const stillShown = stub.products[0].image_url === 'images/products/jelly-strawberry.jpg';
+        if (stillShown && stub.gallery.rows.length === 1) {
+          ok('bucket-missing — the shop still shows the committed photo (no broken storefront)');
+        } else {
+          fail(`bucket-missing — storefront field = ${stub.products[0].image_url}`);
+        }
+
+        // the admin runs the migration → the same retry now succeeds
+        stub.flags.bucketMissing = false;
+        const retrySave = findButton('ذخیره و جایگزینی');
+        if (!retrySave || retrySave.disabled) fail('bucket-missing — the dialog did not stay open for an in-place retry');
+        else click(retrySave);
+        const promoted = await waitFor(() => stub.primaryPromotions.length > 0);
+        if (promoted) ok('bucket-missing — after applying the migration the RETRY succeeds');
+        else fail('bucket-missing — the retry after healing never promoted: ' + text().slice(0, 200));
+
+        const upload = stub.uploadedObjects[0];
+        if (upload && upload.path.startsWith('products/jelly-strawberry/')) {
+          ok('bucket-missing — the healed upload lands in the product-images bucket');
+        } else {
+          fail(`bucket-missing — healed upload path: ${upload ? upload.path : 'none'}`);
+        }
+        if (stub.products[0].image_url.includes('/storage/v1/object/public/product-images/')) {
+          ok('bucket-missing — the storefront now points at the uploaded photo');
+        } else {
+          fail(`bucket-missing — image_url after heal: ${stub.products[0].image_url}`);
+        }
+        const healed = await waitFor(() => !text().includes('مهاجرت ۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql'));
+        if (healed) ok('bucket-missing — the error banner cleared after the successful retry');
+        else fail('bucket-missing — the stale error banner never cleared');
+      }
+    }
+  }
+
+  dom.window.close();
+  const fatal = errors.filter((e) => !/Not implemented/i.test(e));
+  if (fatal.length === 0) ok('bucket-missing — no runtime errors');
+  else fail('bucket-missing runtime errors:\n    - ' + fatal.join('\n    - '));
+}
+
+// ── 20d. Gallery curation: alt text, star-promote, lightbox ─
+// The remaining «تصاویر محصولات» verbs end to end, still against the
+// Supabase-shaped stub: a plain ADD leaves the current primary alone;
+// the manager edits the alt text (PATCH row), promotes the new photo
+// with the star button (the same RPC), and opens the large preview.
+{
+  const stub = makeSupabaseStub();
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/login', {
+    stub,
+    seed: (win) => {
+      win.createImageBitmap = async () => ({ width: 1600, height: 1200, close() {} });
+    },
+  });
+
+  const setReactValue = (input, value) => {
+    Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+    input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+  };
+  const click = (element) =>
+    element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  const findButton = (label) =>
+    Array.from(document.querySelectorAll('button')).find((button) =>
+      (button.textContent ?? '').includes(label),
+    );
+
+  const signedIn = await (async () => {
+    if (!(await waitFor(() => document.querySelector('input[autocomplete="username"]')))) return false;
+    setReactValue(document.querySelector('input[autocomplete="username"]'), 'admin@example.com');
+    setReactValue(document.querySelector('input[type="password"]'), 'correct-horse-battery');
+    document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+    return waitFor(() => text().includes('متصل به دیتابیس'));
+  })();
+  if (!signedIn) {
+    fail('gallery curation — the admin session did not open: ' + text().slice(0, 200));
+  } else {
+    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
+      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+    );
+    if (!imagesLink) fail('gallery curation — no navigation link to /admin/product-images');
+    else click(imagesLink);
+    await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+
+    // ── ADD a second photo without touching the current primary ──
+    click(findButton('بارگذاری تصویر'));
+    await waitFor(() => text().includes('تصویر را اینجا رها کنید'));
+    const fileInput = document.querySelector('input[data-testid="product-image-file"]');
+    const file = new dom.window.File(['fake-jpeg-bytes-curation'], 'curation.jpg', { type: 'image/jpeg' });
+    Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+    fileInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+    await waitFor(() => text().includes('حجم اصلی'));
+    click(findButton('ذخیره و بارگذاری'));
+
+    const added = await waitFor(() => stub.insertedImages.length === 1 && text().includes('۲ تصویر'));
+    if (added) ok('gallery curation — the second photo is added to the gallery');
+    else fail('gallery curation — the plain add never landed: ' + text().slice(0, 200));
+    if (stub.insertedImages[0]?.payload.is_primary === false && stub.primaryPromotions.length === 0) {
+      ok('gallery curation — a plain ADD never hijacks the current primary');
+    } else {
+      fail('gallery curation — the add unexpectedly promoted the new photo');
+    }
+    if (stub.products[0].image_url === 'images/products/jelly-strawberry.jpg') {
+      ok('gallery curation — the shop still shows the previous primary');
+    } else {
+      fail(`gallery curation — shop field changed during add: ${stub.products[0].image_url}`);
+    }
+    const uploadRow = stub.gallery.rows.find((row) => row.source === 'upload');
+
+    // ── save the alt text (متن جایگزین) ──
+    const altButton = document.querySelector('button[aria-label="ویرایش توضیح شمارهٔ ۲ ژله توت فرنگی"]');
+    if (!altButton) {
+      fail('gallery curation — the alt-text edit control is missing');
+    } else {
+      click(altButton);
+      const dialogOpen = await waitFor(() => document.querySelector('.adm-modal input'));
+      if (!dialogOpen) fail('gallery curation — the alt-text dialog did not open');
+      else {
+        setReactValue(document.querySelector('.adm-modal input'), 'عکس تازهٔ ژله توت فرنگی');
+        click(findButton('ذخیره'));
+        const patched = await waitFor(() =>
+          stub.calls.some((call) =>
+            call.url.includes('/rest/v1/product_images') &&
+            call.method === 'PATCH' &&
+            call.body.includes('عکس تازهٔ ژله توت فرنگی'),
+          ),
+        );
+        if (patched && stub.gallery.rows.find((row) => row.id === uploadRow?.id)?.alt_text === 'عکس تازهٔ ژله توت فرنگی') {
+          ok('gallery curation — the alt text is PATCHed into the database row');
+        } else {
+          fail('gallery curation — the alt text never reached the database');
+        }
+      }
+    }
+
+    // ── promote with the star button ──
+    const star = document.querySelector('button[aria-label="انتخاب به‌عنوان تصویر اصلی شمارهٔ ۲ ژله توت فرنگی"]');
+    if (!star) {
+      fail('gallery curation — the star (make primary) control is missing');
+    } else {
+      click(star);
+      const promoted = await waitFor(() => stub.primaryPromotions.length === 1);
+      if (promoted && stub.primaryPromotions[0].payload.p_image_id === uploadRow?.id) {
+        ok('gallery curation — the star button promotes through set_primary_product_image');
+      } else if (!promoted) {
+        fail('gallery curation — the star button never called the RPC: ' + text().slice(0, 160));
+      }
+      const newUrl = uploadRow?.storefront_url ?? '';
+      if (newUrl && stub.products[0].image_url === newUrl) {
+        ok('gallery curation — the promoted photo now feeds the storefront (card/details/cart/checkout)');
+      } else {
+        fail(`gallery curation — after promote, image_url is ${stub.products[0].image_url}`);
+      }
+      const primaryCount = stub.gallery.rows.filter((row) => row.is_primary).length;
+      if (primaryCount === 1) ok('gallery curation — exactly one primary after the switch');
+      else fail(`gallery curation — ${primaryCount} primaries after the switch`);
+    }
+
+    // ── large preview (lightbox) with the fresh alt text ──
+    await waitFor(() => document.querySelector('button[aria-label="پیش‌نمایش اصلی ژله توت فرنگی"]'));
+    const previewThumb = document.querySelector('button[aria-label="پیش‌نمایش اصلی ژله توت فرنگی"]');
+    if (!previewThumb) {
+      fail('gallery curation — the primary thumbnail did not move to the new photo');
+    } else {
+      click(previewThumb);
+      const lightboxShown = await waitFor(() => document.querySelector('.adm-lightbox'));
+      if (lightboxShown) ok('gallery curation — the large preview opens from the thumbnail');
+      else fail('gallery curation — the lightbox did not open');
+      if (lightboxShown && text().includes('عکس تازهٔ ژله توت فرنگی')) {
+        ok('gallery curation — the preview shows the freshly saved alt text');
+      } else if (lightboxShown) {
+        fail('gallery curation — the saved alt text is not what the lightbox shows');
+      }
+      const closeButton = document.querySelector('.adm-lightbox-close');
+      if (closeButton) click(closeButton);
+      const closed = await waitFor(() => !document.querySelector('.adm-lightbox'));
+      if (closed) ok('gallery curation — the lightbox closes cleanly');
+      else fail('gallery curation — the lightbox never closed');
+    }
+
+    // zero damage across all curation steps
+    if (stub.removedObjects.length === 0 && stub.deletedImageIds.length === 0) {
+      ok('gallery curation — no object or row was deleted anywhere');
+    } else {
+      fail('gallery curation — an unexpected delete happened');
+    }
+  }
+
+  dom.window.close();
+  const fatal = errors.filter((e) => !/Not implemented/i.test(e));
+  if (fatal.length === 0) ok('gallery curation — no runtime errors');
+  else fail('gallery curation runtime errors:\n    - ' + fatal.join('\n    - '));
 }
 
 // ── 21. A non-admin account cannot open the panel ───────────

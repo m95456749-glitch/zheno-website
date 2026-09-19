@@ -168,7 +168,9 @@ localStorage) کار می‌کند.
 بخش «تصاویر محصولات» پنل، تنها بخش سایت است که فایل تولید می‌کند؛ برای همین
 یک لایهٔ جدا و صریح دارد.
 
-**دیتابیس و Storage** (مهاجرت `supabase/migrations/20260919000000_product_images.sql`):
+**دیتابیس و Storage** (مهاجرت `supabase/migrations/20260919000000_product_images.sql` —
+راهنمای اجرای امن و بدون خطای مجددش در
+[`supabase/APPLY-PRODUCT-IMAGES.md`](./supabase/APPLY-PRODUCT-IMAGES.md)):
 
 | چیزی که ساخته می‌شود | نقش |
 |---|---|
