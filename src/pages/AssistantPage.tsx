@@ -65,7 +65,21 @@ export default function AssistantPage() {
 
   return (
     <div className="zhino-assistant-page">
-      {/* ── سربرگ بسیار ساده: نشان، عنوان، گفتگوی تازه، بازگشت ── */}
+      {/* ── دکمه بازگشت به سایت — بالای سمت چپ، ثابت، Premium ── */}
+      <button
+        type="button"
+        className="zhino-assistant-back-site"
+        onClick={goHome}
+        aria-label="بازگشت به سایت"
+        title="بازگشت به سایت"
+      >
+        <svg viewBox="0 0 20 20" fill="none" className="zhino-assistant-back-site-icon" aria-hidden="true">
+          <path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        <span>بازگشت به سایت</span>
+      </button>
+
+      {/* ── سربرگ بسیار ساده: نشان، عنوان، گفتگوی تازه ── */}
       <header className="zhino-assistant-topbar">
         <span className="zhino-assistant-brand">
           <span className="zhino-assistant-brand-mark">
