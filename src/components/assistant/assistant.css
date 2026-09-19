@@ -117,6 +117,41 @@
   display: block;
 }
 
+/* آواتار جدید - کاراکتر سه‌بعدی */
+.zhino-avatar-wrap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 0;
+}
+
+.zhino-assistant-medallion .zhino-avatar-wrap {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.zhino-assistant-brand-mark .zhino-avatar-wrap {
+  width: 100%;
+  height: 100%;
+}
+
+.zhino-assistant-avatar .zhino-avatar-wrap {
+  width: 100%;
+  height: 100%;
+  border-radius: inherit;
+  overflow: hidden;
+}
+
+.zhino-assistant-avatar {
+  overflow: hidden;
+}
+
+.zhino-assistant-brand-mark {
+  overflow: hidden;
+}
+
 /* نشان «تازه» — نقطهٔ ثابت طلایی، بدون چشمک؛ بعد از اولین بازدید می‌رود */
 .zhino-assistant-dot {
   position: absolute;
@@ -1979,6 +2014,136 @@
    ۷) کاهش حرکت — حرکت دائمی حذف می‌شود، همه‌چیز خوانا می‌ماند
    ============================================================ */
 
+/* ============================================================
+   ۸) کاراکتر سه‌بعدی جدید - خوشامدگویی
+   ============================================================ */
+
+.zhino-welcome-new {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: min(100%, 380px);
+  margin-inline: auto;
+  margin-bottom: 0.5rem;
+  contain: layout paint;
+  user-select: none;
+}
+
+.zhino-welcome-new::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 280px;
+  height: 180px;
+  transform: translate(-50%, -55%);
+  border-radius: 9999px;
+  background: radial-gradient(ellipse at center, rgba(224, 208, 171, 0.28) 0%, rgba(113, 49, 59, 0.07) 55%, transparent 75%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+.zhino-welcome-bubble {
+  position: relative;
+  z-index: 3;
+  background: rgba(42, 11, 18, 0.94);
+  color: var(--color-gold-300, #E0D0AB);
+  border: 1px solid rgba(184, 154, 98, 0.45);
+  box-shadow: 0 8px 18px -6px rgba(42, 11, 18, 0.6);
+  padding: 0.32rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin-bottom: 0.35rem;
+  animation: zhino-welcome-bubble-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both, zhino-welcome-bubble-float 3s ease-in-out 0.8s infinite;
+  transition: opacity 0.4s ease, transform 0.4s ease;
+}
+
+.zhino-welcome-bubble.is-hidden {
+  opacity: 0;
+  transform: translateY(-8px) scale(0.9);
+  pointer-events: none;
+}
+
+.zhino-welcome-bubble-tail {
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  width: 10px;
+  height: 10px;
+  background: rgba(42, 11, 18, 0.94);
+  border-right: 1px solid rgba(184, 154, 98, 0.45);
+  border-bottom: 1px solid rgba(184, 154, 98, 0.45);
+  transform: translateX(-50%) rotate(45deg);
+}
+
+@keyframes zhino-welcome-bubble-in {
+  0% { opacity: 0; transform: translateY(10px) scale(0.7); }
+  100% { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes zhino-welcome-bubble-float {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+
+.zhino-welcome-char-btn {
+  position: relative;
+  z-index: 2;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  border-radius: 50%;
+  transition: transform 0.25s ease;
+}
+
+.zhino-welcome-char-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(184, 154, 98, 0.6);
+}
+
+.zhino-welcome-char-btn:active {
+  transform: scale(0.98);
+}
+
+.zhino-welcome-char {
+  display: block;
+  width: clamp(180px, 55vw, 220px) !important;
+  height: clamp(180px, 55vw, 220px) !important;
+}
+
+.zhino-welcome-char .zhino-char-svg {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+.zhino-welcome-hint {
+  margin-top: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--color-mocha-light, #9A8A7D);
+  text-align: center;
+  line-height: 1.7;
+  opacity: 0.85;
+  animation: zhino-assistant-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.4s both;
+}
+
+@media (max-width: 639px) {
+  .zhino-welcome-new {
+    max-width: 320px;
+  }
+  .zhino-welcome-new::before {
+    width: 240px;
+    height: 150px;
+  }
+  .zhino-welcome-bubble {
+    font-size: 0.76rem;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .zhino-assistant-float,
   .zhino-assistant-welcome-mark img,
@@ -1995,7 +2160,9 @@
   .zhino-anim-product.is-custard,
   .zhino-welcome-stage.is-settled .zhino-anim-bot-wrap,
   .zhino-welcome-stage.is-settled .zhino-anim-product.is-jelly,
-  .zhino-welcome-stage.is-settled .zhino-anim-product.is-custard {
+  .zhino-welcome-stage.is-settled .zhino-anim-product.is-custard,
+  .zhino-welcome-bubble,
+  .zhino-welcome-new::before {
     animation: none !important;
     transform: none !important;
     opacity: 1 !important;
@@ -2009,7 +2176,8 @@
     transform: translate(0, -50%) !important;
   }
 
-  .zhino-anim-speech-bubble {
+  .zhino-anim-speech-bubble,
+  .zhino-welcome-bubble-tail {
     display: none !important;
   }
 
@@ -2036,7 +2204,9 @@
   .zhino-assistant-send:hover,
   .zhino-assistant-send:active,
   .zhino-assistant-ghost:hover,
-  .zhino-assistant-ghost:active {
+  .zhino-assistant-ghost:active,
+  .zhino-welcome-char-btn:hover,
+  .zhino-welcome-char-btn:active {
     transform: none;
   }
 }

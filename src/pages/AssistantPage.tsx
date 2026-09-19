@@ -69,7 +69,7 @@ export default function AssistantPage() {
       <header className="zhino-assistant-topbar">
         <span className="zhino-assistant-brand">
           <span className="zhino-assistant-brand-mark">
-            <AssistantAvatar />
+            <AssistantAvatar compact={true} size={36} mode="idle" />
           </span>
           <span className="zhino-assistant-brand-text">
             <span className="zhino-assistant-brand-name">Zhino</span>
