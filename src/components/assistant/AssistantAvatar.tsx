@@ -1,35 +1,36 @@
 // ============================================================
-// ZHINO — آواتار جدید ربات دستیار ژینو
-// بازطراحی کامل: کاراکتر سه‌بعدی Premium، زنده و دوست‌داشتنی
-// - چشم‌های بزرگ و قابل حرکت
-// - لبخند و حالات صورت
-// - بدن کامل (در حالت full) با دست و پا
-// - محصول «محصولات ژله و کاستر» در دست
-// - انیمیشن‌های طبیعی: پلک زدن نامنظم، نگاه زنده، تنفس
+// ZHINO — آواتار دستیار ژینو (مدالیون سه‌بعدی)
+//
+// بازطراحی کامل: به‌جای تصویر ثابت، یک مدالیون فلزی طلایی مات با
+// میدان زرشکی و سرِ زندهٔ ربات داخل آن (ZhinoMedallion). آواتار با
+// حالت گفتگو واکنش نشان می‌دهد: هالهٔ نور عوض می‌شود و چشم‌ها/دهان
+// ربات حرکت می‌کنند.
+//
+// اندازه از ظرف‌های همیشگی (سربرگ، ردیف پیام، دکمهٔ شناور) می‌آید و
+// مدالیون کل ظرف را پر می‌کند؛ prop size برای استفادهٔ آزاد بیرون
+// این ظرف‌ها نگه داشته شده است.
 // ============================================================
 
-import ZhinoCharacter from './ZhinoCharacter';
+import ZhinoMedallion, { type ZhinoMedallionMode } from './ZhinoMedallion';
 import { cn } from '../../utils/cn';
 
-type AvatarMode = 'idle' | 'greeting' | 'thinking' | 'speaking' | 'waving';
+type AvatarMode = 'idle' | 'greeting' | 'thinking' | 'speaking' | 'waving' | 'happy';
 
 interface Props {
   className?: string;
   alt?: string;
   mode?: AvatarMode;
   size?: number;
+  /** فقط سر (مدالیون) — همان حالت پیش‌فرض مدالیون */
   compact?: boolean;
 }
 
 export default function AssistantAvatar({ className, mode = 'idle', size, compact = true }: Props) {
-  // سایز پیش‌فرض بر اساس محل استفاده
-  // compact=true -> فقط سر، مناسب آواتارهای کوچک چت و هدر
-  // compact=false -> بدن کامل، مناسب صفحه خوشامد
-  const computedSize = size ?? (compact ? 56 : 200);
-
+  const style = size ? { display: 'inline-flex', width: size, height: size } : { display: 'inline-flex', width: '100%', height: '100%' };
+  void compact;
   return (
-    <span className={cn('zhino-avatar-wrap', className)} style={{ display: 'inline-flex' }}>
-      <ZhinoCharacter mode={mode} size={computedSize} compact={compact} showProduct={!compact} />
+    <span className={cn('zhino-avatar-wrap', className)} style={style}>
+      <ZhinoMedallion mode={mode as ZhinoMedallionMode} />
     </span>
   );
 }

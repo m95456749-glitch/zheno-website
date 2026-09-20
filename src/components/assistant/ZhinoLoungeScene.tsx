@@ -1,20 +1,23 @@
 // ============================================================
-// ZHINO — «لَونج لوکس ژینو» — صحنهٔ میزبان ربات در صفحهٔ /assistant
+// ZHINO — «استودیوی ژینو» — صحنهٔ میزبان ربات در صفحهٔ /assistant
 //
-// بازطراحی پروفایل ربات (ترکیب کانسپت B + A):
-//   • پایه B: اتاق گرم کرمی — قوس نیش، لامپ آویز، ریسهٔ نور،
-//     قفسهٔ ژله، کانتر ZHINO، قالیچه، گلدان، محصولات ژله و کاستر
-//   • لوکس A: هالهٔ نور سینمایی، قاب طلایی، جزئیات شیشه‌ای،
-//     پلاک نام و پیل وضعیت
+// بازطراحی کامل فضای بالای چت (ترکیب گرمای کانسپت B + سینمایی کانسپت A):
+//   • اتاقک/استودیوی اختصاصی ربات: طاق نیش با نور گرمِ نفس‌کش، لامپ
+//     آویز با مخروط نور، ریسهٔ نور، قفسهٔ ژله، گلدان، قالیچهٔ زرشکی
+//   • میز کوچک کنار ربات با محصولات واقعی فروشگاه (ژلهٔ قالبی، کاستر،
+//     گنبد شیشه‌ای) — رنگ و نام از کاتالوگ واقعی، نه تستی
+//   • عمق سه‌بعدی: سه لایهٔ پارالاکس (دور/میانه/ربات) که با اشاره‌گر
+//     کاربر آرام جابه‌جا می‌شوند + شناوری بسیار ظریف دوربین
+//   • ربات قهرمان صحنه است: بزرگ، تمام‌قد، وسط طاق — با پلک، نگاه،
+//     تنفس، سلام، فکر کردن، صحبت و حالت خوشحال
 //
-// ربات همان هویت concept-A-v3 است و زنده می‌ماند: پلک، نگاه (به
-// اشاره‌گر)، تنفس، سلام، فکر کردن و صحبت. جایگاه انیمیشن‌های آینده
-// همین ریگ است — state بیرونی فقط با mode به آن گوشزد می‌شود.
+// حالت‌ها (از گفتگوی واقعی): idle / thinking / speaking / happy
+// محصولات صحنه فقط «جزئیات محیط»اند؛ لمس هر محصول = پرسش واقعی از
+// دستیار (اطلاعات از سیستم واقعی فروشگاه).
 //
 // نکته‌های فنی:
 //   • انیمیشن‌ها فقط transform/opacity — بدون jank
-//   • با تغییر ارتفاع اتاق (حالت چت) viewBox پویا کل صحنه را نشان
-//     می‌دهد و برچسب‌های قیمت باز-جای‌گذاری می‌شوند
+//   • با تغییر ارتفاع اتاق (حالت چت) viewBox پویا کل صحنه را نشان می‌دهد
 //   • در jsdom (تست‌های smoke) همهٔ APIهای اختیاری guard شده‌اند
 // ============================================================
 
@@ -26,12 +29,13 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
-  type ReactNode,
 } from 'react';
 import { ASSISTANT_TAGLINE } from './assistantData';
+import { FLAVORS } from '../../data/products';
+import { useCatalog } from '../../services/catalog';
 import './zhino-lounge.css';
 
-export type ZhinoLoungeMode = 'idle' | 'thinking' | 'speaking';
+export type ZhinoLoungeMode = 'idle' | 'thinking' | 'speaking' | 'happy';
 
 export interface ZhinoLoungeHandle {
   /** سلام ربات — روی ورود به صفحه و شروع گفتگوی تازه */
@@ -39,12 +43,14 @@ export interface ZhinoLoungeHandle {
 }
 
 interface Props {
-  /** حالت ربات — از وضعیت واقعی گفتگو (thinking / پاسخ تازه) می‌آید */
+  /** حالت ربات — از وضعیت واقعی گفتگو می‌آید */
   mode?: ZhinoLoungeMode;
   /** گفتگو هنوز تازه است؟ (صحنهٔ بزرگ + حباب خوش‌آمد) */
   fresh?: boolean;
   /** جملهٔ حباب خوش‌آمد */
   welcomeLine?: string;
+  /** لمس محصولات صحنه → پرسش واقعی از دستیار */
+  onAsk?: (question: string) => void;
 }
 
 /* ── پالت — همان هویت برند ── */
@@ -84,13 +90,6 @@ const CREAM_L_STOPS = (
     <stop offset="1" stopColor="#DACAB0" />
   </>
 );
-const CREAM_LR_STOPS = (
-  <>
-    <stop offset="0" stopColor="#F7F0E1" />
-    <stop offset="0.55" stopColor="#EFE4D1" />
-    <stop offset="1" stopColor="#DACAB0" />
-  </>
-);
 const SCREEN_STOPS = (
   <>
     <stop offset="0" stopColor="#272524" />
@@ -99,29 +98,22 @@ const SCREEN_STOPS = (
   </>
 );
 
-/* جمله‌های لمس محصولات — نمایشی و دوست‌داشتنی */
-const JAR_LINES: Record<string, string> = {
-  'انار': 'این ژلهٔ اناره! قرمزِ درخشان، محبوبِ همهٔ مهمانی‌ها 😍',
-  'پرتقال': 'ژلهٔ پرتقال زیر گنبد شیشه‌ای! انگار برش صبحگاهی پرتقال توی بسته است 🍊',
-  'کیوی': 'ژلهٔ کیوی! سبز و شاد — بچه‌ها عاشقش می‌شوند 🥝',
-  'بلوبری': 'و این هم ژلهٔ بلوبری؛ آبیِ آرام و خوش‌طعم 🫐',
-  'کاستر': 'کاستر محلبی‌وانیلی! نرم و خوش‌عطر — ستارهٔ سینی دسر 🍮',
-};
-
 const STATUS_LABEL: Record<ZhinoLoungeMode, string> = {
   idle: 'آنلاین و آمادهٔ گفتگو',
   thinking: 'در حال فکر کردن…',
   speaking: 'در حال پاسخ…',
+  happy: 'خوشحال از معرفی محصول',
 };
 
-/** موتور زندهٔ ربات — همان ریگ concept-A-v3 */
+/** موتور زندهٔ ربات + پارالاکس صحنه */
 interface LoungeEngine {
   set: (mode: ZhinoLoungeMode) => void;
   wave: () => void;
   grin: (ms: number) => void;
+  destroy: () => void;
 }
 
-function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
+function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null): LoungeEngine | null {
   if (!root) return null;
   const $ = (id: string): SVGElement | null => root.querySelector(`#${id}`);
   const els = {
@@ -140,12 +132,15 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
     grin: $('m-grin'),
     talkGlow: $('m-talk-glow'),
     talkDots: $('m-talk-dots'),
+    far: $('zl-far'),
+    mid: $('zl-mid'),
+    hero: $('zl-hero'),
   } as Record<string, SVGElement | null>;
   if (!els.head || !els.eyes || !els.torso || !els.antenna) return null;
 
   const R = Math.random;
   const seeds: number[] = [];
-  for (let i = 0; i < 14; i++) seeds.push(R() * Math.PI * 2);
+  for (let i = 0; i < 16; i++) seeds.push(R() * Math.PI * 2);
 
   const noise = (t: number, i: number, speed = 1): number => {
     const s = seeds[i % seeds.length];
@@ -173,13 +168,14 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
 
   type Mode = ZhinoLoungeMode;
   let state: Mode = 'idle';
-  const w = { idle: 1, thinking: 0, speaking: 0 };
-  const target = { idle: 1, thinking: 0, speaking: 0 };
+  const w = { idle: 1, thinking: 0, speaking: 0, happy: 0 };
+  const target = { idle: 1, thinking: 0, speaking: 0, happy: 0 };
   let waveT0 = -100;
   let thinkSide = R() < 0.5 ? -1 : 1;
   let speechSeed = R() * 10;
   let clock = 0;
   let grinUntil = -1;
+  let happyClassOn = false;
 
   const set = (s: Mode) => {
     if (!(s in target)) return;
@@ -198,14 +194,16 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
     grinUntil = clock + ms / 1000;
   };
 
-  /* نگاه به اشاره‌گر کاربر */
+  /* نگاه به اشاره‌گر کاربر + پارالاکس لایه‌ها */
   const ptr = { x: 0, y: 0 };
   const ptrT = { x: 0, y: 0 };
+  const par = { x: 0, y: 0 };
   const onPointer = (e: PointerEvent) => {
-    const r = root.getBoundingClientRect();
+    const host = room ?? root;
+    const r = host.getBoundingClientRect();
     if (r.width < 2) return;
     const hx = r.left + r.width * 0.5;
-    const hy = r.top + r.height * 0.3;
+    const hy = r.top + r.height * 0.32;
     ptrT.x = clamp((e.clientX - hx) / (r.width * 0.5), -1, 1);
     ptrT.y = clamp((e.clientY - hy) / (r.height * 0.5), -1, 1);
   };
@@ -268,6 +266,10 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
         tx = (R() - 0.5) * 7;
         ty = (R() - 0.5) * 4;
         hold = 0.55;
+      } else if (w.happy > 0.4) {
+        tx = (R() - 0.5) * 5;
+        ty = 1.5 + R() * 1.5;
+        hold = 0.7;
       } else {
         tx = (R() - 0.5) * 11;
         ty = (R() - 0.5) * 5;
@@ -302,7 +304,9 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
       else if (wp < 3.0) raise = 1 - ease((wp - 2.35) / 0.65);
       else raise = 0;
     }
-    const grin = t < grinUntil ? 1 : 0;
+    const grinOn = t < grinUntil ? 1 : 0;
+    const happy = w.happy;
+    const bounceEnv = happy * Math.abs(Math.sin(t * Math.PI * 1.15 + 0.4));
     const syl = Math.pow(Math.max(0, Math.sin(t * 2 * Math.PI * 2.7 + speechSeed)), 0.65);
     const gate = clamp(noise(t, 7, 0.5) * 0.9 + 0.62, 0, 1);
     const talkAmp = w.speaking * gate;
@@ -310,38 +314,63 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
 
     const brPhase = t * 2 * Math.PI * 0.235 + 0.7 * noise(t, 3, 0.11);
     const br = 1 + reduce * 0.011 * Math.sin(brPhase);
-    const torsoTy = reduce * 0.9 * Math.sin(brPhase);
-    const torsoRot = reduce * 0.35 * noise(t, 9, 0.17);
+    const torsoTy = reduce * (0.9 * Math.sin(brPhase) - 3.1 * bounceEnv);
+    const torsoRot = reduce * (0.35 * noise(t, 9, 0.17) + happy * 1.4 * Math.sin(t * Math.PI * 1.15));
 
     const hr =
       reduce *
       (1.05 * noise(t, 0, 0.19) +
         w.thinking * (1.6 * Math.sin(t * 0.7 + seeds[2]) + 1.2 * thinkSide) +
         w.speaking * 1.5 * syl * gate +
+        happy * 2.4 * Math.sin(t * Math.PI * 1.15 + 0.6) +
         raise * 1.9 * thinkSide * 0.6 +
         ptr.x * 2.6);
     const hx = reduce * (1.4 * noise(t, 1, 0.15) + w.thinking * 1.2 * thinkSide + ptr.x * 2.2);
-    const hy = reduce * (-1.1 * (br - 1) * 90 + w.thinking * 1.4 + raise * -1.0 + ptr.y * 2.0);
+    const hy =
+      reduce *
+      (-1.1 * (br - 1) * 90 + w.thinking * 1.4 + happy * -1.6 * bounceEnv + raise * -1.0 + ptr.y * 2.0);
 
     const antTarget =
-      -hr * 1.9 + reduce * (1.5 * noise(t, 4, 0.55)) * (0.55 + w.thinking * 0.9 + raise * 1.1 + w.speaking * 0.5);
+      -hr * 1.9 +
+      reduce *
+        (1.5 * noise(t, 4, 0.55)) *
+        (0.55 + w.thinking * 0.9 + raise * 1.1 + w.speaking * 0.5 + happy * 1.6) -
+      happy * 6 * Math.sin(t * Math.PI * 2.3);
     antV += ((antTarget - antA) * 46 - antV * 7.5) * dt;
     antA += antV * dt;
 
     stepGaze(t, dt);
     const bs = blinkScale(t);
-    const squint = 1 - 0.16 * raise;
+    /* چشم‌های خندان: باریک و کمی بالا */
+    const happySquint = 1 - 0.52 * happy;
+    const squint = (1 - 0.16 * raise) * happySquint;
+    const eyeLift = -1.6 * happy;
 
     const talkOp = clamp(w.speaking * 1.25, 0, 1) * clamp(gate * 2.2, 0, 1);
-    const grinOp = clamp(Math.max(raise * 1.1, grin), 0, 1);
+    const grinOp = clamp(Math.max(raise * 1.1, grinOn, happy), 0, 1);
     const smileOp = clamp(1 - talkOp * 0.92 - grinOp * 0.85, 0, 1);
     const mrx = 13 + 8 * open;
     const mry = 3 + 12 * open;
 
-    const aL = reduce * (0.9 * noise(t, 8, 0.21) + w.speaking * 2.2 * Math.sin(t * 1.9 + 1.2) * gate);
-    const fL = reduce * (1.3 * noise(t, 10, 0.29) + w.speaking * 5.5 * Math.sin(t * 2 * Math.PI * 0.85 + 0.4) * gate);
-    const aR = reduce * (0.9 * noise(t, 11, 0.23)) - raise * 107;
-    const fR = reduce * (1.3 * noise(t, 12, 0.31)) + raise * (-140 + 16 * Math.sin(t * 2 * Math.PI * 1.9 + 0.7));
+    /* بازوی چپ: فکر کردن → دست به چانه؛ صحبت → ژست؛ خوشحال → بالا */
+    const aL =
+      reduce *
+        (0.9 * noise(t, 8, 0.21) +
+          w.speaking * 2.2 * Math.sin(t * 1.9 + 1.2) * gate +
+          w.thinking * -7 +
+          happy * -14) -
+      happy * 6 * bounceEnv;
+    const fL =
+      reduce *
+        (1.3 * noise(t, 10, 0.29) +
+          w.speaking * 5.5 * Math.sin(t * 2 * Math.PI * 0.85 + 0.4) * gate +
+          w.thinking * -34) -
+      happy * (26 + 7 * Math.sin(t * 6.2));
+    const aR = reduce * (0.9 * noise(t, 11, 0.23) + w.thinking * 3) - raise * 107 - happy * (10 + 5 * bounceEnv);
+    const fR =
+      reduce * (1.3 * noise(t, 12, 0.31)) +
+      raise * (-140 + 16 * Math.sin(t * 2 * Math.PI * 1.9 + 0.7)) -
+      happy * (22 + 7 * Math.sin(t * 6.2 + 1.3));
 
     els.torso?.setAttribute(
       'transform',
@@ -354,7 +383,7 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
     els.antenna?.setAttribute('transform', `rotate(${antA.toFixed(2)} 136 236)`);
     els.eyes?.setAttribute(
       'transform',
-      `translate(${gx.toFixed(2)} ${gy.toFixed(2)}) translate(360 254) scale(1 ${(bs * squint).toFixed(3)}) translate(-360 -254)`,
+      `translate(${gx.toFixed(2)} ${(gy + eyeLift).toFixed(2)}) translate(360 254) scale(1 ${(bs * squint).toFixed(3)}) translate(-360 -254)`,
     );
     els.armL?.setAttribute('transform', `rotate(${aL.toFixed(2)} 204 472)`);
     els.foreL?.setAttribute('transform', `rotate(${fL.toFixed(2)} 185 557)`);
@@ -369,6 +398,26 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
     els.talkGlow?.setAttribute('ry', mry.toFixed(2));
     els.talkDots?.setAttribute('rx', mrx.toFixed(2));
     els.talkDots?.setAttribute('ry', mry.toFixed(2));
+
+    /* پارالاکس سه‌لایه — عمق استودیو */
+    par.x += (ptrT.x - par.x) * Math.min(1, dt * 2.1);
+    par.y += (ptrT.y - par.y) * Math.min(1, dt * 2.1);
+    const dx = reduce * (par.x + 0.18 * noise(t, 13, 0.12));
+    const dy = reduce * (par.y + 0.14 * noise(t, 14, 0.1));
+    els.far?.setAttribute('transform', `translate(${(-dx * 4.5).toFixed(2)} ${(-dy * 2.6).toFixed(2)})`);
+    els.mid?.setAttribute('transform', `translate(${(-dx * 8.5).toFixed(2)} ${(-dy * 4.6).toFixed(2)})`);
+    els.hero?.setAttribute('transform', `translate(${(-dx * 13).toFixed(2)} ${(-dy * 7).toFixed(2)})`);
+    if (room) {
+      room.style.setProperty('--zl-px', `${(dx * 10).toFixed(2)}px`);
+      room.style.setProperty('--zl-py', `${(dy * 6).toFixed(2)}px`);
+    }
+
+    /* کلاس حالت خوشحال برای جرقه‌ها/نور CSS */
+    const wantHappy = happy > 0.45;
+    if (wantHappy !== happyClassOn) {
+      happyClassOn = wantHappy;
+      root.classList.toggle('zl-is-happy', wantHappy);
+    }
   };
 
   const frame = (ts: number) => {
@@ -398,31 +447,40 @@ function buildLoungeEngine(root: SVGSVGElement | null): LoungeEngine | null {
     set,
     wave,
     grin,
-    /* متغیرهای داخلی برای cleanup */
     destroy: () => {
       if (raf) window.cancelAnimationFrame(raf);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('pointermove', onPointer);
       window.removeEventListener('pointerdown', onPointer);
     },
-  } as LoungeEngine & { destroy: () => void };
+  };
 }
 
 const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoungeScene(
-  { mode = 'idle', fresh = true, welcomeLine },
+  { mode = 'idle', fresh = true, welcomeLine, onAsk },
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement | null>(null);
   const roomRef = useRef<HTMLDivElement | null>(null);
-  const jellyAnchorRef = useRef<SVGCircleElement | null>(null);
-  const custardAnchorRef = useRef<SVGCircleElement | null>(null);
-  const tagJellyRef = useRef<HTMLButtonElement | null>(null);
-  const tagCustardRef = useRef<HTMLButtonElement | null>(null);
-  const engineRef = useRef<(LoungeEngine & { destroy: () => void }) | null>(null);
+  const engineRef = useRef<LoungeEngine | null>(null);
 
   const [bubble, setBubble] = useState<{ text: string; dots?: boolean }>({ text: '' });
-  const bubbleTextRef = useRef('');
   const typeTimerRef = useRef<number | null>(null);
+
+  /* محصولات واقعی فروشگاه برای قفسه و میز استودیو */
+  const catalog = useCatalog();
+  const shelf = useMemo(() => {
+    const jellies = catalog.filter((p) => p.category === 'jelly').slice(0, 3);
+    const custard = catalog.find((p) => p.category === 'custard');
+    const heroJelly = jellies[0];
+    return {
+      jellies,
+      custard,
+      heroJelly,
+      jellyColor: heroJelly ? FLAVORS[heroJelly.flavorId]?.color ?? '#C34A57' : '#C34A57',
+      shelfColors: jellies.map((p) => FLAVORS[p.flavorId]?.color ?? '#C34A57'),
+    };
+  }, [catalog]);
 
   useImperativeHandle(
     ref,
@@ -432,9 +490,9 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     [],
   );
 
-  /* ── موتور زندهٔ ربات ── */
+  /* ── موتور زندهٔ ربات ─ */
   useEffect(() => {
-    engineRef.current = buildLoungeEngine(svgRef.current) as (LoungeEngine & { destroy: () => void }) | null;
+    engineRef.current = buildLoungeEngine(svgRef.current, roomRef.current);
     const engine = engineRef.current;
     const intro = window.setTimeout(() => engine?.wave(), 700);
     return () => {
@@ -456,7 +514,6 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
       setBubble({ text: '', dots: true });
       return;
     }
-    bubbleTextRef.current = text;
     setBubble({ text: '' });
     let i = 0;
     const stepSize = Math.max(2, Math.round(text.length / 70));
@@ -487,41 +544,22 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     [],
   );
 
-  /* ── چیدمان واکنش‌گرا: viewBox پویا + جای برچسب‌های قیمت ── */
+  /* ── چیدمان واکنش‌گرا: viewBox پویا ── */
   useEffect(() => {
     const room = roomRef.current;
     const svg = svgRef.current;
     if (!room || !svg) return;
 
-    const place = (
-      tag: HTMLElement | null,
-      anchor: SVGCircleElement | null,
-      dx: number,
-      dy: number,
-    ) => {
-      if (!tag || !anchor) return;
-      const rr = room.getBoundingClientRect();
-      const ar = anchor.getBoundingClientRect();
-      if (rr.width < 2 || ar.width === 0) return;
-      const x = ar.left - rr.left + dx;
-      const y = ar.top - rr.top + dy;
-      const w = tag.offsetWidth || 150;
-      const h = tag.offsetHeight || 28;
-      tag.style.left = `${Math.max(8, Math.min(rr.width - w - 8, x))}px`;
-      tag.style.top = `${Math.max(8, Math.min(rr.height - h - 8, y))}px`;
-      tag.classList.add('is-set');
-    };
-
     const layout = () => {
       const rr = room.getBoundingClientRect();
       if (rr.width < 2 || rr.height < 2) return;
-      /* پنجرهٔ دید همیشه تمام ارتفاع صحنه را نشان می‌دهد — هیچ‌گاه
-         چیزی از بالا بریده نمی‌شود؛ عرض بر اساس نسبت واقعی اتاق */
-      const vbw = Math.max(430, Math.min(1600, 680 * (rr.width / rr.height)));
-      const x0 = 380 - vbw / 2 + (vbw < 620 ? 12 : 0);
-      svg.setAttribute('viewBox', `${x0.toFixed(1)} 0 ${vbw.toFixed(1)} 680`);
-      place(tagJellyRef.current, jellyAnchorRef.current, -((tagJellyRef.current?.offsetWidth || 150) * 0.55), -32);
-      place(tagCustardRef.current, custardAnchorRef.current, 8, -14);
+      /* حالت تازه: کل استودیو دیده می‌شود؛ حالت گفتگو: قاب روی
+         سر و تنهٔ ربات کراپ می‌شود تا قهرمان صحنه بزرگ بماند. */
+      const vbh = fresh ? 680 : 360;
+      const y0 = fresh ? 0 : 80;
+      const vbw = Math.max(520, Math.min(1600, vbh * (rr.width / rr.height)));
+      const x0 = 380 - vbw / 2;
+      svg.setAttribute('viewBox', `${x0.toFixed(1)} ${y0} ${vbw.toFixed(1)} ${vbh}`);
     };
 
     layout();
@@ -543,38 +581,31 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     };
   }, [fresh]);
 
-  /* ── لمس محصولات: لرزش ژله + لبخند + حباب معرفی ── */
+  /* ── لمس محصولات: لرزش نرم + پرسش واقعی از دستیار ── */
   const jiggle = (el: SVGGraphicsElement | null) => {
     if (!el || typeof el.animate !== 'function') return;
     el.animate(
       [
         { transform: 'scale(1,1)' },
-        { transform: 'scale(1.06,0.9) rotate(-2deg)' },
-        { transform: 'scale(0.95,1.07) rotate(2deg)' },
-        { transform: 'scale(1.03,0.96) rotate(-1deg)' },
-        { transform: 'scale(0.99,1.02) rotate(0.6deg)' },
+        { transform: 'scale(1.05,0.92) rotate(-1.6deg)' },
+        { transform: 'scale(0.96,1.05) rotate(1.4deg)' },
+        { transform: 'scale(1.02,0.98) rotate(-0.7deg)' },
         { transform: 'scale(1,1)' },
       ],
-      { duration: 900, easing: 'cubic-bezier(.36,.07,.19,.97)' },
+      { duration: 850, easing: 'cubic-bezier(.36,.07,.19,.97)' },
     );
+  };
+
+  const askAbout = (label: string) => {
+    engineRef.current?.grin(1500);
+    onAsk?.(`قیمت و موجودی ${label} چطور است؟`);
   };
 
   const onJarClick = (e: ReactMouseEvent<SVGGElement>) => {
     const inner = e.currentTarget.querySelector('.zl-jelly-inner') as SVGGraphicsElement | null;
     jiggle(inner);
-    const flavor = e.currentTarget.getAttribute('data-flavor');
-    engineRef.current?.grin(1600);
-    if (flavor && JAR_LINES[flavor]) say(JAR_LINES[flavor]);
-  };
-
-  const onProductTag = (e: ReactMouseEvent<HTMLButtonElement>) => {
-    const kind = e.currentTarget.getAttribute('data-prod');
-    engineRef.current?.grin(1800);
-    say(
-      kind === 'jelly'
-        ? 'ژلهٔ انار ژینو — بستهٔ ۲۵۰ گرمی. رنگش روی میز مهمانی معجزه می‌کند!'
-        : 'کاستر محلبی‌وانیلی ژینو — بستهٔ ۲۵۰ گرمی. عطر محلبی همهٔ خانه را برمی‌دارد 🍮',
-    );
+    const label = e.currentTarget.getAttribute('data-label');
+    if (label) askAbout(label);
   };
 
   const onRoomClick = (e: ReactMouseEvent<SVGSVGElement>) => {
@@ -587,75 +618,61 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
   /* ذرات طلایی معلق — یک‌بار برای هر نصب */
   const motes = useMemo(
     () =>
-      Array.from({ length: 12 }, (_, i) => ({
+      Array.from({ length: 14 }, (_, i) => ({
         id: i,
         size: 2 + Math.random() * 3.5,
-        left: 10 + Math.random() * 80,
-        top: 34 + Math.random() * 58,
-        opacity: 0.3 + Math.random() * 0.45,
-        dx: (Math.random() - 0.5) * 46,
-        duration: 10 + Math.random() * 13,
-        delay: -Math.random() * 15,
+        left: 8 + Math.random() * 84,
+        top: 30 + Math.random() * 62,
+        opacity: 0.35 + Math.random() * 0.45,
+        dx: (Math.random() - 0.5) * 52,
+        duration: 11 + Math.random() * 14,
+        delay: -Math.random() * 16,
       })),
     [],
   );
 
-  /* قفسه و کانتر — ژله‌ها در گروه بیرونیِ ثابت جاسازی شده‌اند تا
-     انیمیشن CSS هرگز جای‌شان را عوض نکند */
-  const jar = (
-    flavor: string,
-    x: number,
-    y: number,
-    children: ReactNode,
-    delay?: number,
-  ): ReactNode => (
-    <g transform={`translate(${x} ${y})`}>
-      <g
-        className="zl-jar zl-wobble zl-jelly-inner"
-        data-flavor={flavor}
-        style={delay ? { animationDelay: `${delay}s` } : undefined}
-        onClick={onJarClick}
-      >
-        {children}
+  /** شیشهٔ ژله قفسه (جزئیات محیط — رنگ از کاتالوگ واقعی) */
+  const shelfJar = (key: string, x: number, color: string, label: string, delay?: number) => (
+    <g key={key} transform={`translate(${x} 86)`}>
+      <g className="zl-jar zl-wobble zl-tap" data-label={label} style={delay ? { animationDelay: `${delay}s` } : undefined} onClick={onJarClick}>
+        <g className="zl-jelly-inner">
+          <rect x="0" y="26" width="42" height="38" rx="9" fill="rgba(255,255,255,.5)" stroke="#D9C6A6" strokeWidth="1.4" />
+          <rect x="3.2" y="33" width="35.6" height="27.5" rx="6.5" fill={color} />
+          <ellipse cx="14" cy="41" rx="6" ry="9" fill="#FFFFFF" opacity=".3" />
+          <rect x="-2" y="18.5" width="46" height="11" rx="5.5" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.1" />
+          <circle cx="21" cy="24" r="2.4" fill="url(#zl-gold)" />
+        </g>
       </g>
     </g>
   );
 
   return (
-    <section className={`zl-hero${fresh ? '' : ' is-compact'}`} aria-label="لَونج ربات ژینو">
+    <section className={`zl-hero${fresh ? '' : ' is-compact'}`} aria-label="استودیوی ربات ژینو">
       <div className="zl-room" ref={roomRef}>
         <svg
           ref={svgRef}
           viewBox="0 0 760 680"
           role="img"
-          aria-label="اتاق ربات ژینو با قفسهٔ ژله و کانتر محصولات"
+          aria-label="استودیوی گرم دستیار ژینو با ربات زنده، قفسهٔ ژله و میز محصولات"
           onClick={onRoomClick}
         >
           <defs>
             <linearGradient id="zl-wall" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#F9F1E3" />
-              <stop offset="1" stopColor="#F1E2CB" />
+              <stop offset="0" stopColor="#F7EEDF" />
+              <stop offset="1" stopColor="#EEDFC6" />
             </linearGradient>
             <linearGradient id="zl-band" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#F2DFDA" />
-              <stop offset="1" stopColor="#EED4CC" />
+              <stop offset="0" stopColor="#F0DCD6" />
+              <stop offset="1" stopColor="#EBD0C8" />
             </linearGradient>
-            <radialGradient id="zl-niche" cx="50%" cy="34%" r="72%">
-              <stop offset="0" stopColor="#FBEFD9" />
-              <stop offset="0.62" stopColor="#F4E3C8" />
-              <stop offset="1" stopColor="#E9D3B2" />
+            <radialGradient id="zl-niche" cx="50%" cy="30%" r="76%">
+              <stop offset="0" stopColor="#FCEFD6" />
+              <stop offset="0.6" stopColor="#F4E2C4" />
+              <stop offset="1" stopColor="#E7CFA9" />
             </radialGradient>
             <linearGradient id="zl-floor" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#EDDEC4" />
-              <stop offset="1" stopColor="#E4D1B2" />
-            </linearGradient>
-            <linearGradient id="zl-counterTop" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#FCF6EA" />
-              <stop offset="1" stopColor="#EBD9BC" />
-            </linearGradient>
-            <linearGradient id="zl-counterFront" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#F3E6CF" />
-              <stop offset="1" stopColor="#E4CFAE" />
+              <stop offset="0" stopColor="#EAD9BC" />
+              <stop offset="1" stopColor="#DCC49F" />
             </linearGradient>
             <linearGradient id="zl-goldV" x1="0" y1="0" x2="0" y2="1">
               {GOLD_V_STOPS}
@@ -673,7 +690,7 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
               {CREAM_L_STOPS}
             </linearGradient>
             <linearGradient id="zl-creamLr" x1="1" y1="0" x2="0" y2="0">
-              {CREAM_LR_STOPS}
+              {CREAM_L_STOPS}
             </linearGradient>
             <radialGradient id="zl-creamPod" cx="35%" cy="30%" r="80%">
               <stop offset="0" stopColor="#F9F2E4" />
@@ -697,19 +714,33 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
               <stop offset="1" stopColor="rgba(255,222,150,0)" />
             </radialGradient>
             <radialGradient id="zl-warmCone" cx="50%" cy="0%" r="100%">
-              <stop offset="0" stopColor="rgba(255,226,160,.4)" />
-              <stop offset="0.65" stopColor="rgba(255,226,160,.12)" />
+              <stop offset="0" stopColor="rgba(255,224,150,.5)" />
+              <stop offset="0.6" stopColor="rgba(255,224,150,.14)" />
+              <stop offset="1" stopColor="rgba(255,224,150,0)" />
+            </radialGradient>
+            <radialGradient id="zl-keyGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stopColor="rgba(255,232,176,.6)" />
+              <stop offset="0.55" stopColor="rgba(255,226,160,.22)" />
               <stop offset="1" stopColor="rgba(255,226,160,0)" />
             </radialGradient>
             <radialGradient id="zl-headHalo" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="rgba(238,217,164,.5)" />
-              <stop offset="0.6" stopColor="rgba(238,217,164,.18)" />
-              <stop offset="1" stopColor="rgba(238,217,164,0)" />
+              <stop offset="0" stopColor="rgba(240,216,158,.55)" />
+              <stop offset="0.6" stopColor="rgba(240,216,158,.2)" />
+              <stop offset="1" stopColor="rgba(240,216,158,0)" />
             </radialGradient>
             <radialGradient id="zl-wineHalo" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="rgba(122,42,54,.16)" />
+              <stop offset="0" stopColor="rgba(122,42,54,.18)" />
               <stop offset="1" stopColor="rgba(122,42,54,0)" />
             </radialGradient>
+            <linearGradient id="zl-glass" x1="0" y1="0" x2="0.6" y2="1">
+              <stop offset="0" stopColor="rgba(255,255,255,.55)" />
+              <stop offset="0.5" stopColor="rgba(255,255,255,.16)" />
+              <stop offset="1" stopColor="rgba(255,255,255,.05)" />
+            </linearGradient>
+            <linearGradient id="zl-tableTop" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#FCF5E7" />
+              <stop offset="1" stopColor="#E9D6B6" />
+            </linearGradient>
             <clipPath id="zl-headClip">
               <ellipse cx="360" cy="262" rx="220" ry="134" />
               <rect x="150" y="196" width="420" height="132" rx="66" />
@@ -719,598 +750,491 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
             </clipPath>
           </defs>
 
-          {/* دیوار و کف — پهن‌تر از قاب برای همهٔ نسبت‌ها */}
-          <rect x="-900" width="3400" height="574" fill="url(#zl-wall)" />
-          <rect x="-900" width="3400" height="86" fill="url(#zl-band)" />
-          <rect x="-900" y="86" width="3400" height="6" fill="url(#zl-goldV)" />
-          <rect x="-900" y="92" width="3400" height="2" fill="#8F6E2B" opacity=".35" />
-          <rect x="-900" y="560" width="3400" height="120" fill="url(#zl-floor)" />
-          <rect x="-900" y="556" width="3400" height="7" fill="#E2CBA8" opacity=".8" />
-          <rect x="-900" y="563" width="3400" height="2" fill="#D5BC95" opacity=".5" />
-          <ellipse cx="92" cy="612" rx="96" ry="18" fill="rgba(255,226,160,.4)" filter="url(#zl-b8)" />
-          <ellipse cx="668" cy="612" rx="96" ry="18" fill="rgba(255,226,160,.4)" filter="url(#zl-b8)" />
+          {/* ═══ لایهٔ دور: دیوار، طاق، نورها، قفسه، گلدان ═══ */}
+          <g id="zl-far">
+            <rect x="-900" width="3400" height="574" fill="url(#zl-wall)" />
+            <rect x="-900" width="3400" height="86" fill="url(#zl-band)" />
+            <rect x="-900" y="86" width="3400" height="6" fill="url(#zl-goldV)" />
+            <rect x="-900" y="92" width="3400" height="2" fill="#8F6E2B" opacity=".35" />
+            <rect x="-900" y="560" width="3400" height="120" fill="url(#zl-floor)" />
+            <rect x="-900" y="556" width="3400" height="7" fill="#DFC69F" opacity=".8" />
+            <rect x="-900" y="563" width="3400" height="2" fill="#CDB287" opacity=".5" />
 
-          {/* قوس نیش پشت ربات */}
-          <g>
-            <path d="M 236,560 L 236,300 Q 236,150 380,150 Q 524,150 524,300 L 524,560 Z" fill="url(#zl-niche)" />
-            <path
-              d="M 236,560 L 236,300 Q 236,150 380,150 Q 524,150 524,300 L 524,560"
-              fill="none"
-              stroke="#D9BE97"
-              strokeWidth="3"
-              opacity=".8"
-            />
-            <path
-              d="M 248,560 L 248,302 Q 248,162 380,162 Q 512,162 512,302 L 512,560"
-              fill="none"
-              stroke="#C9A55F"
-              strokeWidth="1.4"
-              opacity=".5"
-              strokeDasharray="1 7"
-              strokeLinecap="round"
-            />
-            <ellipse cx="380" cy="330" rx="150" ry="180" fill="rgba(255,232,180,.4)" filter="url(#zl-b16)" />
-            <path
-              d="M 285,205 C 268,300 270,430 292,532"
-              stroke="rgba(255,255,255,.55)"
-              strokeWidth="6"
-              fill="none"
-              strokeLinecap="round"
-              opacity=".38"
-              filter="url(#zl-b4)"
-            />
-            <path
-              d="M 478,215 C 492,300 491,420 472,520"
-              stroke="rgba(255,255,255,.4)"
-              strokeWidth="4"
-              fill="none"
-              strokeLinecap="round"
-              opacity=".24"
-              filter="url(#zl-b4)"
-            />
-          </g>
+            {/* نور کلیدی گرم — آرام جابه‌جا می‌شود */}
+            <ellipse id="zl-keylight" cx="380" cy="300" rx="290" ry="250" fill="url(#zl-keyGlow)" />
 
-          {/* ریسهٔ نور بالای قوس */}
-          <path
-            d="M 236,270 Q 240,170 380,158 Q 520,170 524,270"
-            fill="none"
-            stroke="#C9A55F"
-            strokeWidth="1.6"
-            opacity=".55"
-          />
-          <g fill="#F2C879">
-            <circle className="zl-bulb" cx="262" cy="222" r="4" />
-            <circle className="zl-bulb" cx="288" cy="182" r="4" />
-            <circle className="zl-bulb" cx="328" cy="164" r="4" />
-            <circle className="zl-bulb" cx="380" cy="158" r="4.6" />
-            <circle className="zl-bulb" cx="432" cy="164" r="4" />
-            <circle className="zl-bulb" cx="472" cy="182" r="4" />
-            <circle className="zl-bulb" cx="498" cy="222" r="4" />
-          </g>
-          <g fill="url(#zl-bulbG)" opacity=".8">
-            <circle className="zl-bulb" cx="262" cy="222" r="10" />
-            <circle className="zl-bulb" cx="288" cy="182" r="10" />
-            <circle className="zl-bulb" cx="328" cy="164" r="10" />
-            <circle className="zl-bulb" cx="380" cy="158" r="13" />
-            <circle className="zl-bulb" cx="432" cy="164" r="10" />
-            <circle className="zl-bulb" cx="472" cy="182" r="10" />
-            <circle className="zl-bulb" cx="498" cy="222" r="10" />
-          </g>
-
-          {/* لامپ آویز */}
-          <g>
-            <line x1="380" y1="0" x2="380" y2="52" stroke="#8A6A2C" strokeWidth="2.4" />
-            <path d="M 348,86 Q 348,54 380,54 Q 412,54 412,86 Z" fill="#71313B" />
-            <path d="M 348,86 Q 348,54 380,54 Q 412,54 412,86" fill="none" stroke="#5A1725" strokeWidth="2" />
-            <path d="M 352,80 Q 356,60 380,58" stroke="#A9706C" strokeWidth="2" fill="none" opacity=".6" />
-            <rect x="344" y="84" width="72" height="7" rx="3.5" fill="url(#zl-goldV)" />
-            <ellipse cx="380" cy="96" rx="17" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
-            <circle cx="380" cy="95" r="5.5" fill="#FFEDBE" />
-            <polygon points="380,98 236,560 524,560" fill="url(#zl-warmCone)" opacity=".55" />
-            <polygon points="380,98 320,560 440,560" fill="url(#zl-warmCone)" opacity=".4" />
-          </g>
-
-          {/* قفسهٔ بالا-چپ: ژله‌ها */}
-          <g>
-            <rect x="150" y="150" width="180" height="12" rx="6" fill="#E0C69E" />
-            <rect x="150" y="160" width="180" height="5" rx="2.5" fill="#C8A97B" opacity=".7" />
-            <rect x="164" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
-            <rect x="306" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
-            {jar(
-              'انار',
-              188,
-              82,
-              <>
-                <rect x="0" y="26" width="46" height="40" rx="9" fill="rgba(255,255,255,.55)" stroke="#D9C6A6" strokeWidth="1.5" />
-                <rect x="3.5" y="34" width="39" height="29" rx="6.5" fill="#C34A57" />
-                <ellipse cx="16" cy="42" rx="7" ry="10" fill="#FFFFFF" opacity=".3" />
-                <rect x="-2" y="18" width="50" height="12" rx="6" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.2" />
-                <circle cx="23" cy="24" r="2.6" fill="url(#zl-gold)" />
-              </>,
-            )}
-            {jar(
-              'پرتقال',
-              242,
-              82,
-              <>
-                <rect x="0" y="26" width="46" height="40" rx="9" fill="rgba(255,255,255,.55)" stroke="#D9C6A6" strokeWidth="1.5" />
-                <rect x="3.5" y="34" width="39" height="29" rx="6.5" fill="#E28B36" />
-                <ellipse cx="16" cy="42" rx="7" ry="10" fill="#FFFFFF" opacity=".3" />
-                <rect x="-2" y="18" width="50" height="12" rx="6" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.2" />
-                <circle cx="23" cy="24" r="2.6" fill="url(#zl-gold)" />
-              </>,
-              1.8,
-            )}
-            {jar(
-              'کیوی',
-              296,
-              82,
-              <>
-                <rect x="0" y="26" width="46" height="40" rx="9" fill="rgba(255,255,255,.55)" stroke="#D9C6A6" strokeWidth="1.5" />
-                <rect x="3.5" y="34" width="39" height="29" rx="6.5" fill="#7CA653" />
-                <ellipse cx="16" cy="42" rx="7" ry="10" fill="#FFFFFF" opacity=".3" />
-                <rect x="-2" y="18" width="50" height="12" rx="6" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.2" />
-                <circle cx="23" cy="24" r="2.6" fill="url(#zl-gold)" />
-              </>,
-              3.4,
-            )}
-          </g>
-
-          {/* گلدان کنار راست (حاشیهٔ صحنه) */}
-          <g transform="translate(-52 0)">
-            <g className="zl-leaf">
-              <path d="M 700,470 C 676,430 668,392 686,352 C 700,386 706,424 712,462 Z" fill="#8FAF6C" />
-              <path d="M 704,470 C 722,436 734,404 726,366 C 708,398 700,432 694,464 Z" fill="#7CA653" />
-              <path d="M 700,468 C 698,430 702,398 712,376" stroke="#6B8F49" strokeWidth="2" fill="none" opacity=".6" />
-            </g>
-            <path d="M 682,468 L 724,468 L 716,516 L 690,516 Z" fill="#B14A57" />
-            <rect x="678" y="462" width="50" height="12" rx="5" fill="#C45763" />
-            <ellipse cx="712" cy="516" rx="26" ry="6" fill="#C9A97B" opacity=".5" filter="url(#zl-b4)" />
-          </g>
-
-          {/* قالیچه */}
-          <g>
-            <ellipse cx="380" cy="634" rx="252" ry="34" fill="#71313B" />
-            <ellipse cx="380" cy="634" rx="252" ry="34" fill="none" stroke="#5A1725" strokeWidth="3" />
-            <ellipse
-              cx="380"
-              cy="634"
-              rx="216"
-              ry="27"
-              fill="none"
-              stroke="#C9A55F"
-              strokeWidth="1.6"
-              strokeDasharray="6 8"
-              opacity=".8"
-            />
-            <ellipse cx="380" cy="634" rx="170" ry="20" fill="none" stroke="#E8D5B5" strokeWidth="1.2" opacity=".55" />
-            <circle cx="290" cy="634" r="3.4" fill="#E8D5B5" opacity=".8" />
-            <circle cx="380" cy="634" r="3.4" fill="#E8D5B5" opacity=".8" />
-            <circle cx="470" cy="634" r="3.4" fill="#E8D5B5" opacity=".8" />
-          </g>
-
-          {/* نورپردازی سینمایی ربات */}
-          <ellipse cx="380" cy="300" rx="180" ry="190" fill="url(#zl-wineHalo)" />
-          <ellipse className="zl-haloBreath" cx="380" cy="245" rx="135" ry="125" fill="url(#zl-headHalo)" />
-          <ellipse cx="380" cy="560" rx="150" ry="20" fill="rgba(90,23,37,.16)" filter="url(#zl-b8)" />
-
-          {/* ═══ ربات ژینو — ریگ زندهٔ concept-A-v3 ═══ */}
-          <g transform="translate(164 58) scale(0.6)">
-            <rect x="324" y="374" width="72" height="48" rx="13" fill="url(#zl-goldV)" />
-            <path
-              d="M 330,392 H 390 M 330,402 H 390 M 330,412 H 390"
-              stroke="#8A6A2C"
-              strokeWidth="3"
-              opacity="0.45"
-              fill="none"
-            />
-            <ellipse cx="360" cy="380" rx="46" ry="9" fill="#6E5522" opacity="0.35" />
-            <path
-              d="M 281,666 C 278,698 270,748 268,788 C 267,806 283,814 303,814 C 323,814 339,806 338,788 C 336,748 328,698 325,666 C 317,657 289,657 281,666 Z"
-              fill="url(#zl-creamL)"
-            />
-            <circle cx="269" cy="796" r="12" fill="url(#zl-gold)" />
-            <circle cx="269" cy="796" r="4" fill="#6E5522" opacity="0.8" />
-            <g transform="rotate(8 303 832)">
-              <rect x="253" y="842" width="100" height="22" rx="10" fill="url(#zl-maroon)" />
-              <path
-                d="M 257,836 C 257,806 277,792 303,792 C 329,792 349,806 349,836 C 349,851 332,858 303,858 C 274,858 257,851 257,836 Z"
-                fill="url(#zl-creamR)"
-              />
-              <ellipse cx="290" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3" />
-            </g>
-            <circle cx="303" cy="668" r="11" fill="url(#zl-gold)" />
-            <circle cx="303" cy="668" r="4" fill="#6E5522" opacity="0.8" />
-            <path
-              d="M 439,666 C 442,698 450,748 452,788 C 453,806 437,814 417,814 C 397,814 381,806 382,788 C 384,748 392,698 395,666 C 403,657 431,657 439,666 Z"
-              fill="url(#zl-creamLr)"
-            />
-            <circle cx="451" cy="796" r="12" fill="url(#zl-gold)" />
-            <circle cx="451" cy="796" r="4" fill="#6E5522" opacity="0.8" />
-            <g transform="rotate(-8 417 832)">
-              <rect x="367" y="842" width="100" height="22" rx="10" fill="url(#zl-maroon)" />
-              <path
-                d="M 371,836 C 371,806 391,792 417,792 C 443,792 463,806 463,836 C 463,851 446,858 417,858 C 388,858 371,851 371,836 Z"
-                fill="url(#zl-creamR)"
-              />
-              <ellipse cx="430" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3" />
-            </g>
-            <circle cx="417" cy="668" r="11" fill="url(#zl-gold)" />
-            <circle cx="417" cy="668" r="4" fill="#6E5522" opacity="0.8" />
-            <g id="g-torso">
-              <path
-                d="M 212,470 C 212,446 246,432 292,428 C 330,424 390,424 428,428 C 474,433 508,446 508,470 C 514,508 516,554 506,592 C 496,638 434,662 360,662 C 286,662 224,638 214,592 C 204,554 206,508 212,470 Z"
-                fill="url(#zl-creamR)"
-              />
-              <g clipPath="url(#zl-torsoClip)">
-                <ellipse cx="360" cy="674" rx="175" ry="58" fill="#D5C9AE" opacity="0.55" filter="url(#zl-b8)" />
-                <ellipse cx="516" cy="534" rx="56" ry="115" fill="#D5C9AE" opacity="0.4" filter="url(#zl-b8)" />
-                <ellipse cx="204" cy="534" rx="46" ry="105" fill="#D5C9AE" opacity="0.3" filter="url(#zl-b8)" />
-                <path d="M 238,580 C 292,616 428,616 482,580" stroke="#CFC3A9" strokeWidth="3" fill="none" opacity="0.8" />
-              </g>
-              <path
-                d="M 292,478 C 292,466 302,459 316,459 L 404,459 C 418,459 428,466 428,478 L 424,530 C 422,549 408,558 392,558 L 328,558 C 312,558 298,549 296,530 Z"
-                fill="url(#zl-maroon)"
-              />
-              <path d="M 299,472 C 320,464 400,464 421,472" stroke="#A9706C" strokeWidth="3" opacity="0.55" fill="none" />
-              <circle cx="360" cy="492" r="9" fill="#F0A243" opacity="0.6" filter="url(#zl-b4)" />
-              <circle cx="360" cy="492" r="10" fill="url(#zl-gold)" />
-              <circle cx="360" cy="492" r="4.5" fill="#FFD98F" />
-            </g>
-            <rect x="292" y="632" width="24" height="30" rx="7" fill="url(#zl-goldV)" />
-            <circle cx="304" cy="650" r="15" fill="url(#zl-gold)" />
-            <circle cx="304" cy="650" r="5" fill="#6E5522" opacity="0.8" />
-            <rect x="404" y="632" width="24" height="30" rx="7" fill="url(#zl-goldV)" />
-            <circle cx="416" cy="650" r="15" fill="url(#zl-gold)" />
-            <circle cx="416" cy="650" r="5" fill="#6E5522" opacity="0.8" />
-            <g id="g-upper-l">
-              <line x1="198" y1="502" x2="186" y2="552" stroke="url(#zl-creamL)" strokeWidth="50" strokeLinecap="round" />
-              <g id="g-fore-l">
-                <line x1="184" y1="560" x2="172" y2="628" stroke="url(#zl-creamL)" strokeWidth="54" strokeLinecap="round" />
-                <line x1="154" y1="660" x2="151" y2="690" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                <line x1="170" y1="664" x2="169" y2="696" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                <line x1="186" y1="662" x2="187" y2="692" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                <line x1="192" y1="650" x2="201" y2="663" stroke="#DCCDB4" strokeWidth="19" strokeLinecap="round" />
-                <line x1="154" y1="660" x2="151" y2="690" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                <line x1="170" y1="664" x2="169" y2="696" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                <line x1="186" y1="662" x2="187" y2="692" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                <line x1="192" y1="650" x2="201" y2="663" stroke="#F5ECDC" strokeWidth="16" strokeLinecap="round" />
-                <line x1="153" y1="670" x2="152" y2="676" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                <line x1="170" y1="676" x2="169" y2="682" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                <line x1="186" y1="672" x2="187" y2="678" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                <line x1="196" y1="656" x2="199" y2="660" stroke="#7E4A48" strokeWidth="12" strokeLinecap="round" />
-                <circle cx="170" cy="644" r="25" fill="url(#zl-creamR)" />
-              </g>
-            </g>
-            <circle cx="204" cy="472" r="42" fill="url(#zl-creamR)" />
-            <ellipse cx="184" cy="462" rx="24" ry="28" fill="url(#zl-gold)" transform="rotate(-22 184 462)" />
-            <ellipse cx="184" cy="462" rx="19" ry="23" fill="url(#zl-maroon)" transform="rotate(-22 184 462)" />
-            <circle cx="184" cy="462" r="7" fill="url(#zl-gold)" />
-            <circle cx="184" cy="462" r="2.5" fill="#6E5522" opacity="0.8" />
-            <g id="g-elbow-l" transform="rotate(8 185 557)">
-              <rect x="157" y="542" width="56" height="30" rx="8" fill="url(#zl-goldV)" />
-              <path
-                d="M 160,550 H 210 M 160,557 H 210 M 160,564 H 210"
-                stroke="#8A6A2C"
-                strokeWidth="2"
-                opacity="0.4"
-                fill="none"
-              />
-            </g>
-            <g id="g-upper-r">
-              <line x1="522" y1="502" x2="534" y2="552" stroke="url(#zl-creamLr)" strokeWidth="50" strokeLinecap="round" />
-              <g id="g-fore-r">
-                <line x1="536" y1="560" x2="548" y2="628" stroke="url(#zl-creamLr)" strokeWidth="54" strokeLinecap="round" />
-                <line x1="566" y1="660" x2="569" y2="690" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                <line x1="550" y1="664" x2="551" y2="696" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                <line x1="534" y1="662" x2="533" y2="692" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                <line x1="528" y1="650" x2="519" y2="663" stroke="#DCCDB4" strokeWidth="19" strokeLinecap="round" />
-                <line x1="566" y1="660" x2="569" y2="690" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                <line x1="550" y1="664" x2="551" y2="696" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                <line x1="534" y1="662" x2="533" y2="692" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                <line x1="528" y1="650" x2="519" y2="663" stroke="#F5ECDC" strokeWidth="16" strokeLinecap="round" />
-                <line x1="567" y1="670" x2="568" y2="676" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                <line x1="550" y1="676" x2="551" y2="682" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                <line x1="534" y1="672" x2="533" y2="678" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                <line x1="524" y1="656" x2="521" y2="660" stroke="#7E4A48" strokeWidth="12" strokeLinecap="round" />
-                <circle cx="550" cy="644" r="25" fill="url(#zl-creamR)" />
-              </g>
-            </g>
-            <circle cx="516" cy="472" r="42" fill="url(#zl-creamR)" />
-            <ellipse cx="536" cy="462" rx="24" ry="28" fill="url(#zl-gold)" transform="rotate(22 536 462)" />
-            <ellipse cx="536" cy="462" rx="19" ry="23" fill="url(#zl-maroon)" transform="rotate(22 536 462)" />
-            <circle cx="536" cy="462" r="7" fill="url(#zl-gold)" />
-            <circle cx="536" cy="462" r="2.5" fill="#6E5522" opacity="0.8" />
-            <g id="g-elbow-r" transform="rotate(-8 535 557)">
-              <rect x="507" y="542" width="56" height="30" rx="8" fill="url(#zl-goldV)" />
-              <path
-                d="M 510,550 H 560 M 510,557 H 560 M 510,564 H 560"
-                stroke="#8A6A2C"
-                strokeWidth="2"
-                opacity="0.4"
-                fill="none"
-              />
-            </g>
-            <g id="g-head">
-              <ellipse cx="360" cy="262" rx="220" ry="134" fill="url(#zl-creamR)" />
-              <rect x="150" y="196" width="420" height="132" rx="66" fill="url(#zl-creamR)" />
-              <g clipPath="url(#zl-headClip)">
-                <ellipse cx="360" cy="386" rx="220" ry="54" fill="#D5C9AE" opacity="0.45" filter="url(#zl-b8)" />
-                <ellipse cx="290" cy="166" rx="160" ry="48" fill="#FFFFFF" opacity="0.3" filter="url(#zl-b8)" />
-                <ellipse cx="566" cy="262" rx="48" ry="92" fill="#D5C9AE" opacity="0.3" filter="url(#zl-b8)" />
-              </g>
-              <circle cx="138" cy="268" r="38" fill="url(#zl-gold)" />
-              <circle cx="138" cy="268" r="30" fill="url(#zl-maroon)" />
-              <circle cx="138" cy="268" r="14" fill="url(#zl-creamPod)" />
-              <circle cx="582" cy="268" r="38" fill="url(#zl-gold)" />
-              <circle cx="582" cy="268" r="30" fill="url(#zl-maroon)" />
-              <circle cx="582" cy="268" r="14" fill="url(#zl-creamPod)" />
-              <g id="g-antenna">
-                <path d="M 136,236 L 126,176" stroke="url(#zl-goldV)" strokeWidth="5" strokeLinecap="round" />
-                <circle cx="124" cy="168" r="10" fill="url(#zl-gold)" />
-                <circle cx="121" cy="164" r="3" fill="#FFFFFF" opacity="0.55" />
-                <circle cx="124" cy="168" r="15" fill="rgba(238,217,164,.4)" filter="url(#zl-b4)" />
-              </g>
-              <rect x="168" y="170" width="384" height="188" rx="80" fill="#D8CDB5" />
-              <rect x="174" y="176" width="372" height="176" rx="74" fill="url(#zl-screen)" />
-              <rect x="180" y="182" width="360" height="164" rx="70" fill="none" stroke="#3B3835" strokeWidth="2" opacity="0.35" />
-              <path
-                d="M 240,206 C 310,182 410,182 480,206 C 486,209 486,216 480,218 C 410,198 310,198 240,218 C 234,216 234,209 240,206 Z"
-                fill="#FFFFFF"
-                opacity="0.12"
-              />
-              <ellipse cx="462" cy="214" rx="40" ry="13" fill="#FFFFFF" opacity="0.18" transform="rotate(-20 462 214)" />
-              <ellipse cx="258" cy="332" rx="36" ry="10" fill="#FFFFFF" opacity="0.05" transform="rotate(-12 258 332)" />
-              <g id="g-eyes">
-                <g filter="url(#zl-b4)" opacity="0.85">
-                  <ellipse cx="292" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" strokeWidth="14" />
-                  <ellipse cx="428" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" strokeWidth="14" />
-                </g>
-                <ellipse
-                  cx="292"
-                  cy="254"
-                  rx="30"
-                  ry="34"
-                  fill="none"
-                  stroke="#FFC673"
-                  strokeWidth="7.5"
-                  strokeDasharray="0.1 10.5"
-                  strokeLinecap="round"
-                />
-                <ellipse
-                  cx="428"
-                  cy="254"
-                  rx="30"
-                  ry="34"
-                  fill="none"
-                  stroke="#FFC673"
-                  strokeWidth="7.5"
-                  strokeDasharray="0.1 10.5"
-                  strokeLinecap="round"
-                />
-              </g>
-              <g id="g-mouth">
-                <g id="m-smile">
-                  <path
-                    d="M 324,298 Q 360,320 396,298"
-                    fill="none"
-                    stroke="#F09F3C"
-                    strokeWidth="12"
-                    strokeLinecap="round"
-                    filter="url(#zl-b4)"
-                    opacity="0.85"
-                  />
-                  <path
-                    d="M 324,298 Q 360,320 396,298"
-                    fill="none"
-                    stroke="#FFC673"
-                    strokeWidth="7.5"
-                    strokeDasharray="0.1 9.65"
-                    strokeLinecap="round"
-                  />
-                </g>
-                <g id="m-talk" opacity="0">
-                  <ellipse
-                    id="m-talk-glow"
-                    cx="360"
-                    cy="308"
-                    rx="14"
-                    ry="8"
-                    fill="none"
-                    stroke="#F09F3C"
-                    strokeWidth="12"
-                    filter="url(#zl-b4)"
-                    opacity="0.85"
-                  />
-                  <ellipse
-                    id="m-talk-dots"
-                    cx="360"
-                    cy="308"
-                    rx="14"
-                    ry="8"
-                    fill="none"
-                    stroke="#FFC673"
-                    strokeWidth="7"
-                    strokeDasharray="0.1 8.2"
-                    strokeLinecap="round"
-                  />
-                </g>
-                <g id="m-grin" opacity="0">
-                  <path
-                    d="M 318,294 Q 360,332 402,294"
-                    fill="none"
-                    stroke="#F09F3C"
-                    strokeWidth="12"
-                    strokeLinecap="round"
-                    filter="url(#zl-b4)"
-                    opacity="0.85"
-                  />
-                  <path
-                    d="M 318,294 Q 360,332 402,294"
-                    fill="none"
-                    stroke="#FFC673"
-                    strokeWidth="7.5"
-                    strokeDasharray="0.1 9.4"
-                    strokeLinecap="round"
-                  />
-                </g>
-              </g>
-            </g>
-          </g>
-
-          {/* ستاره‌های شادی */}
-          <g fill="#D2AF6C">
-            <path
-              className="zl-spark"
-              d="M 548,150 l 3.2,7.4 7.4,3.2 -7.4,3.2 -3.2,7.4 -3.2,-7.4 -7.4,-3.2 7.4,-3.2 Z"
-            />
-            <path
-              className="zl-spark s2"
-              d="M 212,176 l 2.6,6 6,2.6 -6,2.6 -2.6,6 -2.6,-6 -6,-2.6 6,-2.6 Z"
-            />
-          </g>
-
-          {/* کانتر محصولات */}
-          <g>
-            <rect x="128" y="498" width="504" height="26" rx="13" fill="url(#zl-counterTop)" />
-            <rect x="128" y="498" width="504" height="26" rx="13" fill="none" stroke="#D9C6A6" strokeWidth="1.6" />
-            <path
-              d="M 150,506 C 240,502 300,512 380,507 C 460,502 540,512 610,507"
-              stroke="rgba(201,165,95,.4)"
-              strokeWidth="1.2"
-              fill="none"
-              opacity=".7"
-            />
-            <path
-              d="M 170,514 C 260,510 330,518 420,514"
-              stroke="rgba(201,165,95,.25)"
-              strokeWidth="1"
-              fill="none"
-              opacity=".6"
-            />
-            <rect x="142" y="524" width="476" height="62" rx="14" fill="url(#zl-counterFront)" stroke="#DCC9A8" strokeWidth="1.4" />
-            <rect x="142" y="524" width="476" height="10" fill="#C8A97B" opacity=".35" />
+            {/* طاق نیش پشت ربات */}
             <g>
-              <rect x="330" y="540" width="100" height="24" rx="8" fill="#FBF4E4" stroke="url(#zl-goldV)" strokeWidth="1.8" />
-              <text x="380" y="557" textAnchor="middle" fontFamily="Marcellus,serif" fontSize="12" letterSpacing="4" fill="#8A6A2C">
+              <path d="M 214,560 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,560 Z" fill="url(#zl-niche)" />
+              <path
+                d="M 214,560 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,560"
+                fill="none"
+                stroke="#D8BC93"
+                strokeWidth="3.4"
+                opacity=".85"
+              />
+              <path
+                d="M 227,560 L 227,302 Q 227,151 380,151 Q 533,151 533,302 L 533,560"
+                fill="none"
+                stroke="#C9A55F"
+                strokeWidth="1.4"
+                opacity=".5"
+                strokeDasharray="1 7"
+                strokeLinecap="round"
+              />
+              <ellipse cx="380" cy="320" rx="158" ry="196" fill="rgba(255,232,178,.42)" filter="url(#zl-b16)" />
+              <path
+                d="M 262,200 C 246,300 248,430 270,532"
+                stroke="rgba(255,255,255,.5)"
+                strokeWidth="6"
+                fill="none"
+                strokeLinecap="round"
+                opacity=".35"
+                filter="url(#zl-b4)"
+              />
+              <path
+                d="M 500,212 C 514,300 513,420 494,520"
+                stroke="rgba(255,255,255,.38)"
+                strokeWidth="4"
+                fill="none"
+                strokeLinecap="round"
+                opacity=".22"
+                filter="url(#zl-b4)"
+              />
+            </g>
+
+            {/* ریسهٔ نور روی طاق */}
+            <path d="M 214,268 Q 220,162 380,148 Q 540,162 546,268" fill="none" stroke="#C9A55F" strokeWidth="1.6" opacity=".55" />
+            <g fill="#F2C879">
+              <circle className="zl-bulb" cx="242" cy="216" r="4" />
+              <circle className="zl-bulb" cx="270" cy="176" r="4" />
+              <circle className="zl-bulb" cx="320" cy="156" r="4" />
+              <circle className="zl-bulb" cx="380" cy="150" r="4.6" />
+              <circle className="zl-bulb" cx="440" cy="156" r="4" />
+              <circle className="zl-bulb" cx="490" cy="176" r="4" />
+              <circle className="zl-bulb" cx="518" cy="216" r="4" />
+            </g>
+            <g fill="url(#zl-bulbG)" opacity=".85">
+              <circle className="zl-bulb" cx="242" cy="216" r="10" />
+              <circle className="zl-bulb" cx="270" cy="176" r="10" />
+              <circle className="zl-bulb" cx="320" cy="156" r="10" />
+              <circle className="zl-bulb" cx="380" cy="150" r="13" />
+              <circle className="zl-bulb" cx="440" cy="156" r="10" />
+              <circle className="zl-bulb" cx="490" cy="176" r="10" />
+              <circle className="zl-bulb" cx="518" cy="216" r="10" />
+            </g>
+
+            {/* لامپ آویز با مخروط نور روی ربات */}
+            <g className="zl-lamp">
+              <line x1="380" y1="0" x2="380" y2="44" stroke="#8A6A2C" strokeWidth="2.4" />
+              <path d="M 350,76 Q 350,46 380,46 Q 410,46 410,76 Z" fill="#71313B" />
+              <path d="M 350,76 Q 350,46 380,46 Q 410,46 410,76" fill="none" stroke="#5A1725" strokeWidth="2" />
+              <path d="M 354,70 Q 358,52 380,50" stroke="#A9706C" strokeWidth="2" fill="none" opacity=".6" />
+              <rect x="346" y="74" width="68" height="7" rx="3.5" fill="url(#zl-goldV)" />
+              <ellipse className="zl-lampGlow" cx="380" cy="86" rx="18" ry="10" fill="#FFE2A0" filter="url(#zl-b4)" />
+              <circle cx="380" cy="85" r="5.5" fill="#FFEDBE" />
+              <polygon className="zl-cone" points="380,88 262,560 498,560" fill="url(#zl-warmCone)" opacity=".5" />
+              <polygon className="zl-cone" points="380,88 330,560 430,560" fill="url(#zl-warmCone)" opacity=".38" />
+            </g>
+
+            {/* دو چراغ آویز کناری — عمق و تقارن استودیو */}
+            <g className="zl-lamp zl-lamp-side">
+              <line x1="64" y1="0" x2="64" y2="196" stroke="#8A6A2C" strokeWidth="1.8" opacity=".8" />
+              <path d="M 46,222 Q 46,198 64,198 Q 82,198 82,222 Z" fill="#71313B" />
+              <rect x="43" y="220" width="42" height="5" rx="2.5" fill="url(#zl-goldV)" />
+              <ellipse className="zl-sconceGlow" cx="64" cy="230" rx="15" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
+              <circle cx="64" cy="229" r="4.2" fill="#FFEDBE" />
+              <polygon className="zl-cone" points="64,232 30,470 98,470" fill="url(#zl-warmCone)" opacity=".35" />
+            </g>
+            <g className="zl-lamp zl-lamp-side">
+              <line x1="696" y1="0" x2="696" y2="248" stroke="#8A6A2C" strokeWidth="1.8" opacity=".8" />
+              <path d="M 678,274 Q 678,250 696,250 Q 714,250 714,274 Z" fill="#71313B" />
+              <rect x="675" y="272" width="42" height="5" rx="2.5" fill="url(#zl-goldV)" />
+              <ellipse className="zl-sconceGlow" cx="696" cy="282" rx="15" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
+              <circle cx="696" cy="281" r="4.2" fill="#FFEDBE" />
+              <polygon className="zl-cone" points="696,284 662,520 730,520" fill="url(#zl-warmCone)" opacity=".35" />
+            </g>
+
+            {/* قفسهٔ ژله — محصولات واقعی فروشگاه */}
+            <g>
+              <rect x="86" y="150" width="176" height="12" rx="6" fill="#E0C69E" />
+              <rect x="86" y="160" width="176" height="5" rx="2.5" fill="#C8A97B" opacity=".7" />
+              <rect x="100" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
+              <rect x="238" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
+              {shelf.jellies.map((p, i) =>
+                shelfJar(p.id, 100 + i * 52, shelf.shelfColors[i], p.shortName, i * 1.7),
+              )}
+            </g>
+
+            {/* گلدان سمت راست */}
+            <g transform="translate(-64 0)">
+              <g className="zl-leaf">
+                <path d="M 700,470 C 676,430 668,392 686,352 C 700,386 706,424 712,462 Z" fill="#8FAF6C" />
+                <path d="M 704,470 C 722,436 734,404 726,366 C 708,398 700,432 694,464 Z" fill="#7CA653" />
+                <path d="M 700,468 C 698,430 702,398 712,376" stroke="#6B8F49" strokeWidth="2" fill="none" opacity=".6" />
+              </g>
+              <path d="M 682,468 L 724,468 L 716,516 L 690,516 Z" fill="#B14A57" />
+              <rect x="678" y="462" width="50" height="12" rx="5" fill="#C45763" />
+              <ellipse cx="712" cy="516" rx="26" ry="6" fill="#C9A97B" opacity=".5" filter="url(#zl-b4)" />
+            </g>
+          </g>
+
+          {/* ═══ لایهٔ میانه: قالیچه، میز کوچک، محصولات ═══ */}
+          <g id="zl-mid">
+            {/* قالیچهٔ زرشکی */}
+            <g>
+              <ellipse cx="380" cy="638" rx="250" ry="32" fill="#71313B" />
+              <ellipse cx="380" cy="638" rx="250" ry="32" fill="none" stroke="#5A1725" strokeWidth="3" />
+              <ellipse
+                cx="380"
+                cy="638"
+                rx="214"
+                ry="25"
+                fill="none"
+                stroke="#C9A55F"
+                strokeWidth="1.6"
+                strokeDasharray="6 8"
+                opacity=".8"
+              />
+              <ellipse cx="380" cy="638" rx="168" ry="18" fill="none" stroke="#E8D5B5" strokeWidth="1.2" opacity=".55" />
+              <circle cx="292" cy="638" r="3.2" fill="#E8D5B5" opacity=".8" />
+              <circle cx="380" cy="638" r="3.2" fill="#E8D5B5" opacity=".8" />
+              <circle cx="468" cy="638" r="3.2" fill="#E8D5B5" opacity=".8" />
+            </g>
+
+            {/* سایهٔ ربات روی قالیچه */}
+            <ellipse cx="380" cy="630" rx="140" ry="17" fill="rgba(70,16,27,.2)" filter="url(#zl-b8)" />
+
+            {/* میز کوچک کنار ربات */}
+            <g>
+              <path d="M 106,514 C 102,548 100,580 102,606" stroke="#C9A55F" strokeWidth="5" fill="none" strokeLinecap="round" />
+              <path d="M 186,514 C 190,548 192,580 190,606" stroke="#C9A55F" strokeWidth="5" fill="none" strokeLinecap="round" />
+              <path d="M 102,606 L 190,606" stroke="#B08A48" strokeWidth="4" strokeLinecap="round" opacity=".8" />
+              <ellipse cx="146" cy="512" rx="72" ry="12" fill="#D9BE93" />
+              <ellipse cx="146" cy="507" rx="72" ry="12" fill="url(#zl-tableTop)" stroke="#D2B990" strokeWidth="1.4" />
+              <rect x="122" y="524" width="48" height="16" rx="5" fill="#FBF4E4" stroke="url(#zl-goldV)" strokeWidth="1.4" />
+              <text x="146" y="535.5" textAnchor="middle" fontFamily="Marcellus,serif" fontSize="8.5" letterSpacing="3" fill="#8A6A2C">
                 ZHINO
               </text>
-            </g>
-            <ellipse cx="380" cy="586" rx="240" ry="10" fill="rgba(90,23,37,.14)" filter="url(#zl-b8)" />
 
-            {/* سینی و محصولات روی کانتر */}
-            <g>
-              <ellipse cx="294" cy="494" rx="80" ry="12" fill="#E4CFA9" />
-              <ellipse cx="294" cy="490" rx="80" ry="12" fill="#F0E0C0" stroke="#D2B990" strokeWidth="1.6" />
-              {jar(
-                'بلوبری',
-                174,
-                436,
-                <>
-                  <rect x="0" y="26" width="40" height="34" rx="8" fill="rgba(255,255,255,.55)" stroke="#D9C6A6" strokeWidth="1.4" />
-                  <rect x="3.5" y="33" width="33" height="24" rx="6" fill="#6B7FB3" />
-                  <ellipse cx="13" cy="40" rx="6" ry="8" fill="#FFFFFF" opacity=".3" />
-                  <rect x="-2" y="19" width="44" height="11" rx="5.5" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.1" />
-                </>,
-                2.4,
-              )}
-              {jar(
-                'انار',
-                222,
-                440,
-                <>
-                  <path d="M 2,26 Q 2,50 24,50 Q 46,50 46,26 L 45,18 L 3,18 Z" fill="#C34A57" />
-                  <ellipse cx="24" cy="18" rx="21" ry="7" fill="#D6646F" />
-                  <ellipse cx="15" cy="30" rx="6" ry="11" fill="#FFFFFF" opacity=".33" />
-                  <circle cx="24" cy="18" r="3" fill="#A93C48" />
-                </>,
-              )}
-              <g transform="translate(272 436)">
-                <g className="zl-jar zl-custard zl-jelly-inner" data-flavor="کاستر" onClick={onJarClick}>
-                  <g className="zl-steam" fill="none" stroke="#C9A97B" strokeWidth="2.6" strokeLinecap="round" opacity=".8">
-                    <path d="M 12,4 Q 8,-4 12,-10" />
-                    <path d="M 24,2 Q 20,-6 24,-13" />
-                    <path d="M 36,4 Q 33,-3 36,-9" />
-                  </g>
-                  <path d="M 0,22 Q 0,42 24,42 Q 48,42 48,22 L 47,15 L 1,15 Z" fill="#F4E3BC" />
-                  <ellipse cx="24" cy="15" rx="23" ry="7.5" fill="#D9A05B" />
-                  <ellipse cx="24" cy="13.4" rx="18" ry="5" fill="#C98F4E" />
-                  <path d="M 13,13 Q 24,6 35,13 Q 29,16.5 24,15 Q 18,16.5 13,13 Z" fill="#B87B3E" opacity=".85" />
-                  <ellipse cx="15" cy="23" rx="4.6" ry="8" fill="#FFFFFF" opacity=".4" />
+              {/* ژلهٔ قالبی زیر گنبد شیشه‌ای */}
+              <g className="zl-jar zl-tap" data-label={shelf.heroJelly?.shortName ?? undefined} onClick={onJarClick}>
+                <g className="zl-jelly-inner">
+                  <path d="M 116,502 C 116,484 122,476 134,476 C 146,476 152,484 152,502 Z" fill={shelf.jellyColor} />
+                  <path d="M 122,502 C 122,489 126,482 134,482 C 142,482 146,489 146,502 Z" fill="#FFFFFF" opacity=".14" />
+                  <ellipse cx="127" cy="487" rx="4.4" ry="7.5" fill="#FFFFFF" opacity=".34" />
+                  <ellipse cx="134" cy="503" rx="24" ry="4.5" fill="#E8D5B5" />
                 </g>
               </g>
-              {jar(
-                'پرتقال',
-                326,
-                446,
-                <>
-                  <path d="M 0,24 Q 0,44 20,44 Q 40,44 40,24 L 39,17 L 1,17 Z" fill="#E28B36" />
-                  <ellipse cx="20" cy="17" rx="18" ry="6" fill="#EBA055" />
-                  <ellipse cx="12" cy="26" rx="5" ry="9" fill="#FFFFFF" opacity=".33" />
-                </>,
-                1.2,
-              )}
-              {/* گنبد شیشه‌ای روی ژلهٔ پرتقال */}
               <g pointerEvents="none">
-                <path
-                  d="M 322,490 C 322,458 331,448 346,448 C 361,448 370,458 370,490 Z"
-                  fill="rgba(255,255,255,.3)"
-                  stroke="rgba(180,150,100,.5)"
-                  strokeWidth="1.5"
-                />
-                <path
-                  d="M 328,486 C 328,464 334,454 344,451"
-                  stroke="rgba(255,255,255,.75)"
-                  strokeWidth="2.4"
-                  fill="none"
-                  strokeLinecap="round"
-                  opacity=".8"
-                />
-                <ellipse cx="346" cy="490" rx="24" ry="4.5" fill="none" stroke="rgba(180,150,100,.45)" strokeWidth="1.4" />
-                <circle cx="346" cy="445" r="4" fill="url(#zl-gold)" />
-                <ellipse cx="346" cy="492" rx="20" ry="3" fill="rgba(90,23,37,.1)" filter="url(#zl-b4)" />
+                <path d="M 108,503 C 108,466 118,455 134,455 C 150,455 160,466 160,503 Z" fill="url(#zl-glass)" stroke="rgba(180,150,100,.45)" strokeWidth="1.4" />
+                <path d="M 115,498 C 115,472 121,461 131,458" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity=".85" />
+                <circle cx="134" cy="452" r="3.6" fill="url(#zl-gold)" />
+              </g>
+
+              {/* کاستر روی میز */}
+              <g className="zl-jar zl-tap" data-label={shelf.custard?.shortName ?? undefined} onClick={onJarClick}>
+                <g className="zl-jelly-inner">
+                  <g className="zl-steam" fill="none" stroke="#C9A97B" strokeWidth="2.2" strokeLinecap="round" opacity=".8">
+                    <path d="M 168,462 Q 165,455 168,450" />
+                    <path d="M 178,460 Q 175,452 178,446" />
+                  </g>
+                  <path d="M 160,480 Q 160,498 178,498 Q 196,498 196,480 L 195,474 L 161,474 Z" fill="#F4E3BC" />
+                  <ellipse cx="178" cy="474" rx="17.5" ry="5.6" fill="#D9A05B" />
+                  <ellipse cx="178" cy="472.8" rx="13.5" ry="3.8" fill="#C98F4E" />
+                  <ellipse cx="171" cy="482" rx="3.6" ry="6" fill="#FFFFFF" opacity=".4" />
+                </g>
               </g>
             </g>
           </g>
 
-          {/* لنگرهای برچسب قیمت */}
-          <circle ref={jellyAnchorRef} id="zl-anchor-jelly" cx="245" cy="434" r="1" fill="none" opacity="0" />
-          <circle ref={custardAnchorRef} id="zl-anchor-custard" cx="302" cy="478" r="1" fill="none" opacity="0" />
+          {/* ═══ لایهٔ قهرمان: ربات ژینو ═══ */}
+          <g id="zl-hero">
+            {/* هالهٔ سینمایی پشت سر */}
+            <ellipse cx="380" cy="270" rx="185" ry="195" fill="url(#zl-wineHalo)" />
+            <ellipse className="zl-haloBreath" cx="380" cy="212" rx="140" ry="128" fill="url(#zl-headHalo)" />
+
+            <g transform="translate(120.8 3.6) scale(0.72)">
+              <rect x="324" y="374" width="72" height="48" rx="13" fill="url(#zl-goldV)" />
+              <path
+                d="M 330,392 H 390 M 330,402 H 390 M 330,412 H 390"
+                stroke="#8A6A2C"
+                strokeWidth="3"
+                opacity="0.45"
+                fill="none"
+              />
+              <ellipse cx="360" cy="380" rx="46" ry="9" fill="#6E5522" opacity="0.35" />
+              <path
+                d="M 281,666 C 278,698 270,748 268,788 C 267,806 283,814 303,814 C 323,814 339,806 338,788 C 336,748 328,698 325,666 C 317,657 289,657 281,666 Z"
+                fill="url(#zl-creamL)"
+              />
+              <circle cx="269" cy="796" r="12" fill="url(#zl-gold)" />
+              <circle cx="269" cy="796" r="4" fill="#6E5522" opacity="0.8" />
+              <g transform="rotate(8 303 832)">
+                <rect x="253" y="842" width="100" height="22" rx="10" fill="url(#zl-maroon)" />
+                <path
+                  d="M 257,836 C 257,806 277,792 303,792 C 329,792 349,806 349,836 C 349,851 332,858 303,858 C 274,858 257,851 257,836 Z"
+                  fill="url(#zl-creamR)"
+                />
+                <ellipse cx="290" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3" />
+              </g>
+              <circle cx="303" cy="668" r="11" fill="url(#zl-gold)" />
+              <circle cx="303" cy="668" r="4" fill="#6E5522" opacity="0.8" />
+              <path
+                d="M 439,666 C 442,698 450,748 452,788 C 453,806 437,814 417,814 C 397,814 381,806 382,788 C 384,748 392,698 395,666 C 403,657 431,657 439,666 Z"
+                fill="url(#zl-creamLr)"
+              />
+              <circle cx="451" cy="796" r="12" fill="url(#zl-gold)" />
+              <circle cx="451" cy="796" r="4" fill="#6E5522" opacity="0.8" />
+              <g transform="rotate(-8 417 832)">
+                <rect x="367" y="842" width="100" height="22" rx="10" fill="url(#zl-maroon)" />
+                <path
+                  d="M 371,836 C 371,806 391,792 417,792 C 443,792 463,806 463,836 C 463,851 446,858 417,858 C 388,858 371,851 371,836 Z"
+                  fill="url(#zl-creamR)"
+                />
+                <ellipse cx="430" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3" />
+              </g>
+              <circle cx="417" cy="668" r="11" fill="url(#zl-gold)" />
+              <circle cx="417" cy="668" r="4" fill="#6E5522" opacity="0.8" />
+              <g id="g-torso">
+                <path
+                  d="M 212,470 C 212,446 246,432 292,428 C 330,424 390,424 428,428 C 474,433 508,446 508,470 C 514,508 516,554 506,592 C 496,638 434,662 360,662 C 286,662 224,638 214,592 C 204,554 206,508 212,470 Z"
+                  fill="url(#zl-creamR)"
+                />
+                <g clipPath="url(#zl-torsoClip)">
+                  <ellipse cx="360" cy="674" rx="175" ry="58" fill="#D5C9AE" opacity="0.55" filter="url(#zl-b8)" />
+                  <ellipse cx="516" cy="534" rx="56" ry="115" fill="#D5C9AE" opacity="0.4" filter="url(#zl-b8)" />
+                  <ellipse cx="204" cy="534" rx="46" ry="105" fill="#D5C9AE" opacity="0.3" filter="url(#zl-b8)" />
+                  <path d="M 238,580 C 292,616 428,616 482,580" stroke="#CFC3A9" strokeWidth="3" fill="none" opacity="0.8" />
+                </g>
+                <path
+                  d="M 292,478 C 292,466 302,459 316,459 L 404,459 C 418,459 428,466 428,478 L 424,530 C 422,549 408,558 392,558 L 328,558 C 312,558 298,549 296,530 Z"
+                  fill="url(#zl-maroon)"
+                />
+                <path d="M 299,472 C 320,464 400,464 421,472" stroke="#A9706C" strokeWidth="3" opacity="0.55" fill="none" />
+                <circle cx="360" cy="492" r="9" fill="#F0A243" opacity="0.6" filter="url(#zl-b4)" />
+                <circle cx="360" cy="492" r="10" fill="url(#zl-gold)" />
+                <circle cx="360" cy="492" r="4.5" fill="#FFD98F" />
+              </g>
+              <rect x="292" y="632" width="24" height="30" rx="7" fill="url(#zl-goldV)" />
+              <circle cx="304" cy="650" r="15" fill="url(#zl-gold)" />
+              <circle cx="304" cy="650" r="5" fill="#6E5522" opacity="0.8" />
+              <rect x="404" y="632" width="24" height="30" rx="7" fill="url(#zl-goldV)" />
+              <circle cx="416" cy="650" r="15" fill="url(#zl-gold)" />
+              <circle cx="416" cy="650" r="5" fill="#6E5522" opacity="0.8" />
+              <g id="g-upper-l">
+                <line x1="198" y1="502" x2="186" y2="552" stroke="url(#zl-creamL)" strokeWidth="50" strokeLinecap="round" />
+                <g id="g-fore-l">
+                  <line x1="184" y1="560" x2="172" y2="628" stroke="url(#zl-creamL)" strokeWidth="54" strokeLinecap="round" />
+                  <line x1="154" y1="660" x2="151" y2="690" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
+                  <line x1="170" y1="664" x2="169" y2="696" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
+                  <line x1="186" y1="662" x2="187" y2="692" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
+                  <line x1="192" y1="650" x2="201" y2="663" stroke="#DCCDB4" strokeWidth="19" strokeLinecap="round" />
+                  <line x1="154" y1="660" x2="151" y2="690" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
+                  <line x1="170" y1="664" x2="169" y2="696" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
+                  <line x1="186" y1="662" x2="187" y2="692" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
+                  <line x1="192" y1="650" x2="201" y2="663" stroke="#F5ECDC" strokeWidth="16" strokeLinecap="round" />
+                  <line x1="153" y1="670" x2="152" y2="676" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
+                  <line x1="170" y1="676" x2="169" y2="682" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
+                  <line x1="186" y1="672" x2="187" y2="678" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
+                  <line x1="196" y1="656" x2="199" y2="660" stroke="#7E4A48" strokeWidth="12" strokeLinecap="round" />
+                  <circle cx="170" cy="644" r="25" fill="url(#zl-creamR)" />
+                </g>
+              </g>
+              <circle cx="204" cy="472" r="42" fill="url(#zl-creamR)" />
+              <ellipse cx="184" cy="462" rx="24" ry="28" fill="url(#zl-gold)" transform="rotate(-22 184 462)" />
+              <ellipse cx="184" cy="462" rx="19" ry="23" fill="url(#zl-maroon)" transform="rotate(-22 184 462)" />
+              <circle cx="184" cy="462" r="7" fill="url(#zl-gold)" />
+              <circle cx="184" cy="462" r="2.5" fill="#6E5522" opacity="0.8" />
+              <g id="g-elbow-l" transform="rotate(8 185 557)">
+                <rect x="157" y="542" width="56" height="30" rx="8" fill="url(#zl-goldV)" />
+                <path
+                  d="M 160,550 H 210 M 160,557 H 210 M 160,564 H 210"
+                  stroke="#8A6A2C"
+                  strokeWidth="2"
+                  opacity="0.4"
+                  fill="none"
+                />
+              </g>
+              <g id="g-upper-r">
+                <line x1="522" y1="502" x2="534" y2="552" stroke="url(#zl-creamLr)" strokeWidth="50" strokeLinecap="round" />
+                <g id="g-fore-r">
+                  <line x1="536" y1="560" x2="548" y2="628" stroke="url(#zl-creamLr)" strokeWidth="54" strokeLinecap="round" />
+                  <line x1="566" y1="660" x2="569" y2="690" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
+                  <line x1="550" y1="664" x2="551" y2="696" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
+                  <line x1="534" y1="662" x2="533" y2="692" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
+                  <line x1="528" y1="650" x2="519" y2="663" stroke="#DCCDB4" strokeWidth="19" strokeLinecap="round" />
+                  <line x1="566" y1="660" x2="569" y2="690" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
+                  <line x1="550" y1="664" x2="551" y2="696" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
+                  <line x1="534" y1="662" x2="533" y2="692" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
+                  <line x1="528" y1="650" x2="519" y2="663" stroke="#F5ECDC" strokeWidth="16" strokeLinecap="round" />
+                  <line x1="567" y1="670" x2="568" y2="676" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
+                  <line x1="550" y1="676" x2="551" y2="682" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
+                  <line x1="534" y1="672" x2="533" y2="678" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
+                  <line x1="524" y1="656" x2="521" y2="660" stroke="#7E4A48" strokeWidth="12" strokeLinecap="round" />
+                  <circle cx="550" cy="644" r="25" fill="url(#zl-creamR)" />
+                </g>
+              </g>
+              <circle cx="516" cy="472" r="42" fill="url(#zl-creamR)" />
+              <ellipse cx="536" cy="462" rx="24" ry="28" fill="url(#zl-gold)" transform="rotate(22 536 462)" />
+              <ellipse cx="536" cy="462" rx="19" ry="23" fill="url(#zl-maroon)" transform="rotate(22 536 462)" />
+              <circle cx="536" cy="462" r="7" fill="url(#zl-gold)" />
+              <circle cx="536" cy="462" r="2.5" fill="#6E5522" opacity="0.8" />
+              <g id="g-elbow-r" transform="rotate(-8 535 557)">
+                <rect x="507" y="542" width="56" height="30" rx="8" fill="url(#zl-goldV)" />
+                <path
+                  d="M 510,550 H 560 M 510,557 H 560 M 510,564 H 560"
+                  stroke="#8A6A2C"
+                  strokeWidth="2"
+                  opacity="0.4"
+                  fill="none"
+                />
+              </g>
+              <g id="g-head">
+                <ellipse cx="360" cy="262" rx="220" ry="134" fill="url(#zl-creamR)" />
+                <rect x="150" y="196" width="420" height="132" rx="66" fill="url(#zl-creamR)" />
+                <g clipPath="url(#zl-headClip)">
+                  <ellipse cx="360" cy="386" rx="220" ry="54" fill="#D5C9AE" opacity="0.45" filter="url(#zl-b8)" />
+                  <ellipse cx="290" cy="166" rx="160" ry="48" fill="#FFFFFF" opacity="0.3" filter="url(#zl-b8)" />
+                  <ellipse cx="566" cy="262" rx="48" ry="92" fill="#D5C9AE" opacity="0.3" filter="url(#zl-b8)" />
+                </g>
+                <circle cx="138" cy="268" r="38" fill="url(#zl-gold)" />
+                <circle cx="138" cy="268" r="30" fill="url(#zl-maroon)" />
+                <circle cx="138" cy="268" r="14" fill="url(#zl-creamPod)" />
+                <circle cx="582" cy="268" r="38" fill="url(#zl-gold)" />
+                <circle cx="582" cy="268" r="30" fill="url(#zl-maroon)" />
+                <circle cx="582" cy="268" r="14" fill="url(#zl-creamPod)" />
+                <g id="g-antenna">
+                  <path d="M 136,236 L 126,176" stroke="url(#zl-goldV)" strokeWidth="5" strokeLinecap="round" />
+                  <circle cx="124" cy="168" r="10" fill="url(#zl-gold)" />
+                  <circle cx="121" cy="164" r="3" fill="#FFFFFF" opacity="0.55" />
+                  <circle cx="124" cy="168" r="15" fill="rgba(238,217,164,.4)" filter="url(#zl-b4)" />
+                </g>
+                <rect x="168" y="170" width="384" height="188" rx="80" fill="#D8CDB5" />
+                <rect x="174" y="176" width="372" height="176" rx="74" fill="url(#zl-screen)" />
+                <rect x="180" y="182" width="360" height="164" rx="70" fill="none" stroke="#3B3835" strokeWidth="2" opacity="0.35" />
+                <path
+                  d="M 240,206 C 310,182 410,182 480,206 C 486,209 486,216 480,218 C 410,198 310,198 240,218 C 234,216 234,209 240,206 Z"
+                  fill="#FFFFFF"
+                  opacity="0.12"
+                />
+                <ellipse cx="462" cy="214" rx="40" ry="13" fill="#FFFFFF" opacity="0.18" transform="rotate(-20 462 214)" />
+                <ellipse cx="258" cy="332" rx="36" ry="10" fill="#FFFFFF" opacity="0.05" transform="rotate(-12 258 332)" />
+                <g id="g-eyes">
+                  <g filter="url(#zl-b4)" opacity="0.85">
+                    <ellipse cx="292" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" strokeWidth="14" />
+                    <ellipse cx="428" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" strokeWidth="14" />
+                  </g>
+                  <ellipse
+                    cx="292"
+                    cy="254"
+                    rx="30"
+                    ry="34"
+                    fill="none"
+                    stroke="#FFC673"
+                    strokeWidth="7.5"
+                    strokeDasharray="0.1 10.5"
+                    strokeLinecap="round"
+                  />
+                  <ellipse
+                    cx="428"
+                    cy="254"
+                    rx="30"
+                    ry="34"
+                    fill="none"
+                    stroke="#FFC673"
+                    strokeWidth="7.5"
+                    strokeDasharray="0.1 10.5"
+                    strokeLinecap="round"
+                  />
+                </g>
+                <g id="g-mouth">
+                  <g id="m-smile">
+                    <path
+                      d="M 324,298 Q 360,320 396,298"
+                      fill="none"
+                      stroke="#F09F3C"
+                      strokeWidth="12"
+                      strokeLinecap="round"
+                      filter="url(#zl-b4)"
+                      opacity="0.85"
+                    />
+                    <path
+                      d="M 324,298 Q 360,320 396,298"
+                      fill="none"
+                      stroke="#FFC673"
+                      strokeWidth="7.5"
+                      strokeDasharray="0.1 9.65"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                  <g id="m-talk" opacity="0">
+                    <ellipse
+                      id="m-talk-glow"
+                      cx="360"
+                      cy="308"
+                      rx="14"
+                      ry="8"
+                      fill="none"
+                      stroke="#F09F3C"
+                      strokeWidth="12"
+                      filter="url(#zl-b4)"
+                      opacity="0.85"
+                    />
+                    <ellipse
+                      id="m-talk-dots"
+                      cx="360"
+                      cy="308"
+                      rx="14"
+                      ry="8"
+                      fill="none"
+                      stroke="#FFC673"
+                      strokeWidth="7"
+                      strokeDasharray="0.1 8.2"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                  <g id="m-grin" opacity="0">
+                    <path
+                      d="M 318,294 Q 360,332 402,294"
+                      fill="none"
+                      stroke="#F09F3C"
+                      strokeWidth="12"
+                      strokeLinecap="round"
+                      filter="url(#zl-b4)"
+                      opacity="0.85"
+                    />
+                    <path
+                      d="M 318,294 Q 360,332 402,294"
+                      fill="none"
+                      stroke="#FFC673"
+                      strokeWidth="7.5"
+                      strokeDasharray="0.1 9.4"
+                      strokeLinecap="round"
+                    />
+                  </g>
+                </g>
+              </g>
+            </g>
+          </g>
+
+          {/* جرقه‌های شادی — فقط در حالت خوشحال می‌درخشند */}
+          <g fill="#D2AF6C" className="zl-sparks">
+            <path className="zl-spark" d="M 560,140 l 3.4,7.8 7.8,3.4 -7.8,3.4 -3.4,7.8 -3.4,-7.8 -7.8,-3.4 7.8,-3.4 Z" />
+            <path className="zl-spark s2" d="M 196,168 l 2.8,6.4 6.4,2.8 -6.4,2.8 -2.8,6.4 -2.8,-6.4 -6.4,-2.8 6.4,-2.8 Z" />
+            <path className="zl-spark s3" d="M 610,268 l 2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" />
+            <path className="zl-spark s4" d="M 152,300 l 2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" />
+          </g>
         </svg>
 
-        {/* پیل وضعیت — فقط وضعیت ربات، نه وضعیت فنی سرویس */}
-        <div className={`zl-status${mode === 'thinking' ? ' is-think' : mode === 'speaking' ? ' is-speak' : ''}`} role="status">
+        {/* پیل وضعیت — فقط حالت ربات */}
+        <div
+          className={`zl-status${mode === 'thinking' ? ' is-think' : mode === 'speaking' ? ' is-speak' : mode === 'happy' ? ' is-happy' : ''}`}
+          role="status"
+        >
           <i aria-hidden="true" />
           <span>{STATUS_LABEL[mode]}</span>
         </div>
-
-        {/* حباب گفتار ژینو */}
-        {bubble.text || bubble.dots ? (
-          <div className="zl-speech" aria-live="polite">
-            {bubble.dots ? (
-              <span className="zl-dots" aria-label="…">
-                <span />
-                <span />
-                <span />
-              </span>
-            ) : (
-              <>
-                <span>{bubble.text}</span>
-                <span className="zl-caret" aria-hidden="true" />
-              </>
-            )}
-          </div>
-        ) : null}
-
-        {/* برچسب قیمت محصولات */}
-        <button ref={tagJellyRef} className="zl-tag zl-tag-jelly" type="button" data-prod="jelly" onClick={onProductTag}>
-          <i style={{ background: 'var(--jelly-raspberry)' }} aria-hidden="true" />
-          ژلهٔ انار · ۲۵۰ گرم
-        </button>
-        <button ref={tagCustardRef} className="zl-tag zl-tag-custard" type="button" data-prod="custard" onClick={onProductTag}>
-          <i style={{ background: '#D9A05B' }} aria-hidden="true" />
-          کاستر محلبی · ۲۵۰ گرم
-        </button>
 
         {/* ذرات طلایی معلق */}
         <div className="zl-motes" aria-hidden="true">
@@ -1332,9 +1256,27 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
         </div>
       </div>
 
+      {/* حباب گفتار ژینو — بیرون از قاب بریده‌شدهٔ اتاق */}
+      {bubble.text || bubble.dots ? (
+        <div className="zl-speech" aria-live="polite">
+          {bubble.dots ? (
+            <span className="zl-dots" aria-label="…">
+              <span />
+              <span />
+              <span />
+            </span>
+          ) : (
+            <>
+              <span>{bubble.text}</span>
+              <span className="zl-caret" aria-hidden="true" />
+            </>
+          )}
+        </div>
+      ) : null}
+
       {/* پلاک نام */}
       <div className="zl-plaque">
-        <span className="zl-plaque-en">SMART&nbsp;ASSISTANT&nbsp;·&nbsp;LOUNGE</span>
+        <span className="zl-plaque-en">SMART&nbsp;ASSISTANT&nbsp;·&nbsp;STUDIO</span>
         <p className="zl-plaque-title">{ASSISTANT_TAGLINE}</p>
         <span className="zl-rule" aria-hidden="true" />
       </div>
