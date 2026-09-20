@@ -6,6 +6,7 @@
 |---|---|---|---|
 | **A — Premium Robot Pod** | `concept-a-premium-pod.html` | `/concepts/concept-a-premium-pod.html` | محفظهٔ شیشه‌ای لوکس با قاب طلایی، نور سینمایی، سکوی زرشکی — ربات در مرکزِ صحنه |
 | **B — Cute Interactive Robot Lounge** | `concept-b-robot-lounge.html` | `/concepts/concept-b-robot-lounge.html` | لَونج گرم و دوست‌داشتنی: قوس نیش، لامپ آویز، قفسهٔ ژله، کانتر محصولات |
+| **★ FINAL — لَونج لوکس (B + A)** | `concept-final.html` | `/concepts/concept-final.html` | ترکیب انتخابی: پایهٔ B + لوکسِ A (نور سینمایی، قاب طلایی، هاله‌ها، پلاک و پیل وضعیت) |
 
 ## ویژگی‌های مشترک
 
