@@ -1,29 +1,36 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۷ و ۸) — محیط چت تمام‌صفحه
+// ZHINO — «دستیار ژینو» (فاز ۷ و ۸ + بازطراحی لَونج) — محیط چت تمام‌صفحه
 //
 // صفحهٔ /assistant شبیه یک صفحهٔ معمولی سایت نیست:
 //
-//   • فوتر، منوها، پرچم‌ها، بخش معرفی قابلیت‌ها و ستون کنار حذف
-//     شده‌اند (Layout روی همین مسیر هدر/فوتر فروشگاه را رندر نمی‌کند).
+//   • فوتر، منوها، پرچم‌ها و ستون کنار حذف شده‌اند (Layout روی همین
+//     مسیر هدر/فوتر فروشگاه را رندر نمی‌کند).
 //   • صفحه دقیقاً هم‌قد دید کاربر است و فقط فهرست پیام‌ها اسکرول
 //     می‌شود؛ کادر نوشتن پیام همیشه پایین می‌ماند (الگوی ChatGPT).
+//   • بازطراحی جدید: صحنهٔ «لَونج لوکس ژینو» (ترکیب کانسپت B + A) بالای
+//     گفتگو می‌نشیند — ربات زندهٔ concept-A-v3 داخل اتاق گرم با نور
+//     سینمایی. هیچ قابلیتی حذف نشده؛ فقط پوسته عوض شده است.
+//   • وضعیت ربات در صحنه از گفتگوی واقعی می‌آید: thinking → «فکر
+//     کردن»، رسیدن پاسخ تازه → چند ثانیه «صحبت کردن».
 //   • سربرگ خیلی ساده و Premium: نشان کوچک ژینو، عنوان «دستیار ژینو»،
 //     «گفتگوی تازه» و دکمهٔ ظریف «بازگشت به فروشگاه».
 //
-// فاز ۸: پیل وضعیت هم از سربرگ برداشته شد. «دیتابیس وصل است / نیست»،
-// «مدل هوشمند فعال است / نیست» و «منبع داده» حرف‌های داخلی ماست؛ مشتری
-// فقط چت را می‌بیند. اتصال دیتابیس، مدل هوش مصنوعی و Fallback محلی
-// پشت صحنه دقیقاً مثل قبل کار می‌کنند (useAssistantChat +
-// services/assistant) — فقط هیچ‌جا در این صفحه نوشته نمی‌شوند.
+// فاز ۸: پیل وضعیت فنی (دیتابیس/مدل/منبع داده) همچنان نمایش داده
+// نمی‌شود. پیل کوچک روی صحنه فقط حالت ربات است (آنلاین/فکر/پاسخ) و
+// کلاس مستقل zhino-lounge دارد. اتصال دیتابیس، مدل هوش مصنوعی و
+// Fallback محلی پشت صحنه دقیقاً مثل قبل کار می‌کنند (useAssistantChat
+// + services/assistant) — فقط هیچ‌جا در این صفحه نوشته نمی‌شوند.
 // هیچ قابلیت فنی‌ای اینجا حذف نشده و قیمت/موجودی/دستور تهیه همچنان از
 // دادهٔ واقعی فروشگاه می‌آید. «بازگشت به فروشگاه» به صفحهٔ اصلی (/)
 // می‌رود؛ مسیر هم با push در تاریخچه ثبت می‌شود، پس دکمهٔ Back مرورگر
 // مثل قبل کار می‌کند.
 // ============================================================
 
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import AssistantAvatar from '../components/assistant/AssistantAvatar';
 import AssistantChat from '../components/assistant/AssistantChat';
+import ZhinoLoungeScene, { type ZhinoLoungeHandle } from '../components/assistant/ZhinoLoungeScene';
 import { useAssistantChat } from '../components/assistant/useAssistantChat';
 import { ASSISTANT_NAME } from '../components/assistant/assistantData';
 
@@ -60,11 +67,47 @@ function RefreshIcon() {
 export default function AssistantPage() {
   const navigate = useNavigate();
   const chat = useAssistantChat();
+  const sceneRef = useRef<ZhinoLoungeHandle>(null);
+
+  /** گفتگو هنوز تازه است؟ — همان تعریف AssistantChat */
+  const fresh = chat.messages.length === 1 && chat.messages[0]?.welcome === true && !chat.thinking;
+
+  /** آخرین پاسخ واقعی ربات — برای حالت «صحبت کردن» صحنه */
+  const lastBotReplyId = useMemo(() => {
+    for (let i = chat.messages.length - 1; i >= 0; i -= 1) {
+      const message = chat.messages[i];
+      if (message.from === 'bot' && !message.welcome) return message.id;
+    }
+    return null;
+  }, [chat.messages]);
+
+  const [speakingSim, setSpeakingSim] = useState(false);
+
+  useEffect(() => {
+    if (lastBotReplyId === null) {
+      setSpeakingSim(false);
+      return;
+    }
+    setSpeakingSim(true);
+    const timer = window.setTimeout(() => setSpeakingSim(false), 5200);
+    return () => window.clearTimeout(timer);
+  }, [lastBotReplyId]);
+
+  const robotMode = chat.thinking ? 'thinking' : speakingSim ? 'speaking' : 'idle';
+
+  /* شروع گفتگوی تازه → ربات دوباره سلام می‌کند */
+  useEffect(() => {
+    if (fresh) sceneRef.current?.wave();
+  }, [fresh]);
 
   const goHome = () => navigate('/');
 
   return (
-    <div className="zhino-assistant-page">
+    <div
+      className={`zhino-assistant-page zhino-lounge-mode${fresh ? '' : ' zhino-lounge-chatting'}${
+        speakingSim ? ' is-speaking-state' : ''
+      }`}
+    >
       {/* ── دکمه بازگشت به سایت — بالای سمت چپ، ثابت، Premium ── */}
       <button
         type="button"
@@ -83,7 +126,7 @@ export default function AssistantPage() {
       <header className="zhino-assistant-topbar">
         <span className="zhino-assistant-brand">
           <span className="zhino-assistant-brand-mark">
-            <AssistantAvatar compact={true} size={36} mode="idle" />
+            <AssistantAvatar compact={true} size={36} mode={robotMode} />
           </span>
           <span className="zhino-assistant-brand-text">
             <span className="zhino-assistant-brand-name">Zhino</span>
@@ -113,9 +156,16 @@ export default function AssistantPage() {
         </button>
       </header>
 
-      {/* ── محیط گفتگو — تمام‌قد، بدون هیچ بخش اضافی ──
+      {/* ── لَونج لوکس ژینو — ربات زنده، متصل به وضعیت واقعی گفتگو ──
           «گفتگوی تازه» به chat.clear وصل است: گفتگو با همان پیام
           خوشامد و پیشنهادهای پیش‌فرض از نو شروع می‌شود. */}
+      <ZhinoLoungeScene
+        ref={sceneRef}
+        mode={robotMode}
+        fresh={fresh}
+        welcomeLine="سلام! من دستیار ژینو هستم — ژله‌های قفسه را لمس کنید یا از من بپرسید"
+      />
+
       <AssistantChat chat={chat} />
     </div>
   );
