@@ -143,7 +143,11 @@ export default function AssistantChat({ chat, className }: Props) {
 
   useEffect(() => {
     const feed = feedRef.current;
-    if (feed) feed.scrollTop = feed.scrollHeight;
+    if (!feed) return;
+    /* گفتگوی تازه از بالا دیده می‌شود (خوش‌آمد کامل)، بعد از اولین
+       پیام همان رفتار همیشگیِ چسبیدن به پایین برمی‌گردد. */
+    const isFresh = messages.length === 1 && messages[0]?.welcome === true && !thinking;
+    feed.scrollTop = isFresh ? 0 : feed.scrollHeight;
   }, [messages, thinking]);
 
   useEffect(() => {
@@ -291,6 +295,7 @@ export default function AssistantChat({ chat, className }: Props) {
             <h2 className="zhino-assistant-welcome-title">{ASSISTANT_WELCOME_TITLE}</h2>
             <span className="rule-lux zhino-assistant-welcome-rule" aria-hidden="true" />
             {voiceSite.suggestions && <div className="zhino-assistant-welcome-chips">{chips}</div>}
+            <p className="zhino-assistant-welcome-hint">قفسهٔ استودیو را هم می‌توانید لمس کنید</p>
           </div>
         ) : (
           messages.map((message) => (
@@ -302,6 +307,12 @@ export default function AssistantChat({ chat, className }: Props) {
               )}
               <div className="zhino-assistant-stack">
                 <div className={cn('zhino-assistant-bubble', message.from === 'user' ? 'is-user' : 'is-bot', message.links && 'zhino-assistant-card')}>
+                  {message.from === 'bot' && message.products && message.products.length > 0 && (
+                    <span className="zhino-assistant-bubble-kicker">
+                      <IdeaIcon />
+                      از قفسهٔ ژینو
+                    </span>
+                  )}
                   {message.text}
                   {message.note && <span className="zhino-assistant-note">{message.note}</span>}
                   {message.links && (
