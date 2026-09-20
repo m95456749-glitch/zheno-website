@@ -2307,3 +2307,1379 @@
     transform: none;
   }
 }
+
+/* ============================================================
+   ZHINO — concept preview system
+   دو تجربهٔ مستقل برای انتخاب نهایی صاحب محصول.
+   این بخش عمداً بعد از استایل‌های نسخهٔ قبلی آمده تا صفحهٔ جدید
+   منطق AssistantChat را نگه دارد، اما قاب و ترکیب‌بندی را کاملاً
+   از «یک تصویر داخل صفحهٔ خالی» جدا کند.
+   ============================================================ */
+
+.zhino-concept-page {
+  --concept-ivory: #f7eee6;
+  --concept-cream: #fffaf5;
+  --concept-burgundy: #6d1f31;
+  --concept-wine: #3a0d1a;
+  --concept-deep: #18070e;
+  --concept-gold: #d5b477;
+  --concept-muted: #a88e83;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  direction: rtl;
+  font-family: 'Vazirmatn', system-ui, sans-serif;
+  isolation: isolate;
+}
+
+.zhino-concept-page.is-premium {
+  color: #fbf2ea;
+  background:
+    radial-gradient(70% 100% at 28% 14%, rgba(124, 37, 57, 0.38), transparent 64%),
+    radial-gradient(55% 70% at 92% 86%, rgba(182, 125, 92, 0.1), transparent 68%),
+    linear-gradient(135deg, #17070e 0%, #2a0b16 50%, #1b080f 100%);
+}
+
+.zhino-concept-page.is-premium::before,
+.zhino-concept-page.is-premium::after {
+  position: absolute;
+  pointer-events: none;
+  z-index: -1;
+  content: '';
+}
+
+.zhino-concept-page.is-premium::before {
+  width: 48rem;
+  height: 48rem;
+  top: -30rem;
+  right: 28%;
+  border: 1px solid rgba(218, 179, 125, 0.12);
+  border-radius: 50%;
+  box-shadow: 0 0 0 2rem rgba(218, 179, 125, 0.025), 0 0 0 5rem rgba(218, 179, 125, 0.018);
+}
+
+.zhino-concept-page.is-premium::after {
+  inset: 0;
+  opacity: 0.12;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='grain'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='160' height='160' filter='url(%23grain)' opacity='.35'/%3E%3C/svg%3E");
+  mix-blend-mode: overlay;
+}
+
+.zhino-concept-page.is-lounge {
+  --concept-ivory: #fffaf5;
+  --concept-cream: #f9efe9;
+  --concept-burgundy: #71313b;
+  --concept-wine: #4a1b26;
+  --concept-deep: #29131a;
+  --concept-gold: #b99967;
+  --concept-muted: #987c79;
+  color: #3b2326;
+  background:
+    radial-gradient(60% 65% at 8% 5%, rgba(249, 201, 173, 0.64), transparent 68%),
+    radial-gradient(60% 80% at 94% 100%, rgba(219, 165, 173, 0.38), transparent 70%),
+    #f8eee7;
+}
+
+/* ── concept top bar ──────────────────────────────────────── */
+.zhino-concept-topbar {
+  position: relative;
+  z-index: 10;
+  flex: none;
+  display: flex;
+  align-items: center;
+  min-height: 4.65rem;
+  gap: clamp(0.7rem, 2vw, 2rem);
+  padding: 0.65rem clamp(1rem, 3.2vw, 2.8rem);
+  padding-left: clamp(12rem, 22vw, 18rem);
+  border: 0;
+  border-bottom: 1px solid rgba(231, 195, 154, 0.14);
+  background: rgba(27, 8, 15, 0.46);
+  -webkit-backdrop-filter: blur(22px) saturate(1.25);
+  backdrop-filter: blur(22px) saturate(1.25);
+}
+
+.zhino-concept-topbar::after {
+  inset-inline: 4%;
+  bottom: -1px;
+  height: 1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(213, 180, 119, 0.44) 50%, transparent 100%);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-topbar {
+  border-bottom-color: rgba(113, 49, 59, 0.11);
+  background: rgba(255, 250, 246, 0.72);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-topbar::after {
+  background: linear-gradient(90deg, transparent, rgba(113, 49, 59, 0.25), transparent);
+}
+
+.zhino-concept-brand {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.7rem;
+  min-width: 12.5rem;
+  color: inherit;
+  text-decoration: none;
+}
+
+.zhino-concept-brand-seal {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  border: 1px solid rgba(225, 191, 128, 0.56);
+  border-radius: 50%;
+  color: #ecd09c;
+  font-family: 'Marcellus', serif;
+  font-size: 0.68rem;
+  letter-spacing: 0.05em;
+  background: radial-gradient(circle at 35% 25%, rgba(255, 255, 255, 0.18), rgba(112, 30, 49, 0.3) 52%, rgba(23, 7, 14, 0.65));
+  box-shadow: inset 0 0 0 4px rgba(222, 186, 125, 0.05), 0 8px 18px -12px rgba(0, 0, 0, 0.9);
+}
+
+.zhino-concept-brand-seal::before,
+.zhino-concept-brand-seal::after {
+  position: absolute;
+  width: 0.2rem;
+  height: 0.2rem;
+  border-radius: 50%;
+  background: var(--concept-gold);
+  content: '';
+}
+
+.zhino-concept-brand-seal::before { top: 0.25rem; left: 50%; transform: translateX(-50%); }
+.zhino-concept-brand-seal::after { bottom: 0.25rem; left: 50%; transform: translateX(-50%); opacity: 0.45; }
+
+.zhino-concept-brand-seal i {
+  position: absolute;
+  inset: 0.34rem;
+  border: 1px solid rgba(225, 191, 128, 0.24);
+  border-radius: inherit;
+}
+
+.zhino-concept-brand-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 0.12rem;
+  min-width: 0;
+}
+
+.zhino-concept-brand-kicker,
+.zhino-concept-chat-kicker {
+  display: block;
+  color: var(--concept-gold);
+  font-family: 'Marcellus', 'Vazirmatn', serif;
+  font-size: 0.52rem;
+  letter-spacing: 0.16em;
+  line-height: 1.5;
+  white-space: nowrap;
+}
+
+.zhino-concept-brand-copy strong {
+  color: inherit;
+  font-size: 0.92rem;
+  font-weight: 700;
+  line-height: 1.45;
+  white-space: nowrap;
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-brand-seal {
+  border-color: rgba(113, 49, 59, 0.3);
+  color: var(--concept-burgundy);
+  background: radial-gradient(circle at 35% 25%, #fffdf9, #f4d9d1 62%, #ead0c5);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-brand-kicker {
+  color: var(--concept-burgundy);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-brand-copy strong {
+  color: var(--concept-wine);
+}
+
+.zhino-concept-switcher {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  margin-inline: auto;
+  padding: 0.22rem;
+  border: 1px solid rgba(235, 205, 162, 0.18);
+  border-radius: 999px;
+  background: rgba(15, 4, 9, 0.32);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-switcher {
+  border-color: rgba(113, 49, 59, 0.12);
+  background: rgba(255, 255, 255, 0.44);
+}
+
+.zhino-concept-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  height: 2.1rem;
+  padding: 0 0.78rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  color: rgba(255, 244, 231, 0.56);
+  font-family: 'Marcellus', 'Vazirmatn', serif;
+  font-size: 0.6rem;
+  letter-spacing: 0.03em;
+  text-decoration: none;
+  transition: color 0.25s ease, background-color 0.25s ease, border-color 0.25s ease, transform 0.25s ease;
+}
+
+.zhino-concept-switch-number {
+  color: var(--concept-gold);
+  font-size: 0.53rem;
+  letter-spacing: 0.08em;
+}
+
+.zhino-concept-switch-label { white-space: nowrap; }
+
+.zhino-concept-switch.is-active {
+  border-color: rgba(230, 193, 135, 0.3);
+  color: #fff8ee;
+  background: linear-gradient(145deg, rgba(128, 40, 59, 0.76), rgba(74, 18, 34, 0.8));
+  box-shadow: 0 6px 16px -12px #000;
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-switch {
+  color: rgba(74, 27, 38, 0.52);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-switch.is-active {
+  border-color: rgba(113, 49, 59, 0.18);
+  color: var(--concept-wine);
+  background: #fffaf5;
+  box-shadow: 0 7px 18px -14px rgba(74, 27, 38, 0.5);
+}
+
+@media (hover: hover) {
+  .zhino-concept-switch:not(.is-active):hover {
+    color: inherit;
+    transform: translateY(-1px);
+  }
+}
+
+.zhino-concept-top-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.7rem;
+  color: rgba(255, 245, 232, 0.72);
+}
+
+.zhino-concept-ready {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.36rem;
+  font-size: 0.62rem;
+  white-space: nowrap;
+}
+
+.zhino-concept-ready i,
+.zhino-concept-chat-state i {
+  display: inline-block;
+  width: 0.38rem;
+  height: 0.38rem;
+  border-radius: 50%;
+  background: #a8d8ad;
+  box-shadow: 0 0 0 4px rgba(168, 216, 173, 0.1), 0 0 14px rgba(168, 216, 173, 0.5);
+}
+
+.zhino-concept-clear,
+.zhino-concept-back-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  border: 1px solid rgba(235, 205, 162, 0.24);
+  border-radius: 999px;
+  color: inherit;
+  font-family: inherit;
+  font-size: 0.64rem;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+  transition: background-color 0.25s ease, border-color 0.25s ease, color 0.25s ease, transform 0.25s ease;
+}
+
+.zhino-concept-clear {
+  height: 2.2rem;
+  padding: 0 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.zhino-concept-clear svg,
+.zhino-concept-back-button svg {
+  flex: none;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
+.zhino-concept-back-button {
+  position: absolute;
+  top: 1.22rem;
+  left: clamp(1rem, 3.2vw, 2.8rem);
+  z-index: 12;
+  height: 2.2rem;
+  padding: 0 0.82rem 0 0.72rem;
+  border-color: rgba(235, 205, 162, 0.26);
+  color: rgba(255, 245, 232, 0.85);
+  background: rgba(255, 255, 255, 0.06);
+  -webkit-backdrop-filter: blur(12px);
+  backdrop-filter: blur(12px);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-top-actions,
+.zhino-concept-page.is-lounge .zhino-concept-back-button {
+  color: var(--concept-wine);
+}
+
+.zhino-concept-page.is-lounge .zhino-concept-clear,
+.zhino-concept-page.is-lounge .zhino-concept-back-button {
+  border-color: rgba(113, 49, 59, 0.16);
+  background: rgba(255, 255, 255, 0.42);
+}
+
+@media (hover: hover) {
+  .zhino-concept-clear:hover,
+  .zhino-concept-back-button:hover {
+    border-color: rgba(235, 205, 162, 0.55);
+    background: rgba(255, 255, 255, 0.13);
+    transform: translateY(-1px);
+  }
+  .zhino-concept-page.is-lounge .zhino-concept-clear:hover,
+  .zhino-concept-page.is-lounge .zhino-concept-back-button:hover {
+    border-color: rgba(113, 49, 59, 0.32);
+    background: #fffaf5;
+  }
+}
+
+.zhino-concept-clear:active,
+.zhino-concept-back-button:active { transform: scale(0.97); }
+
+/* ── shared main geometry ─────────────────────────────────── */
+.zhino-concept-main {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  flex: 1 1 auto;
+  min-height: 0;
+  gap: clamp(0.75rem, 1.45vw, 1.35rem);
+  padding: clamp(0.8rem, 1.7vw, 1.5rem) clamp(1rem, 3.2vw, 2.8rem) clamp(1rem, 2vw, 1.6rem);
+  overflow: hidden;
+  direction: ltr;
+}
+
+.zhino-premium-main {
+  grid-template-columns: minmax(0, 1.38fr) minmax(19rem, 0.62fr);
+}
+
+.zhino-concept-stage,
+.zhino-concept-chat-panel {
+  direction: rtl;
+  min-width: 0;
+  min-height: 0;
+}
+
+.zhino-concept-stage {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: clamp(1.35rem, 2.5vw, 2.3rem);
+}
+
+.zhino-stage-heading {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex: none;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: clamp(1rem, 2.1vw, 1.8rem) clamp(1.1rem, 2.6vw, 2.6rem) 0;
+}
+
+.zhino-stage-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.42rem;
+  color: var(--concept-gold);
+  font-family: 'Marcellus', 'Vazirmatn', serif;
+  font-size: 0.57rem;
+  letter-spacing: 0.11em;
+  line-height: 1.5;
+}
+
+.zhino-stage-eyebrow span {
+  display: inline-grid;
+  place-items: center;
+  width: 1.28rem;
+  height: 1.28rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  font-size: 0.48rem;
+}
+
+.zhino-stage-heading h1 {
+  margin: 0.5rem 0 0;
+  color: #fff9f1;
+  font-size: clamp(1.35rem, 2.8vw, 2.5rem);
+  font-weight: 500;
+  line-height: 1.45;
+  letter-spacing: -0.04em;
+}
+
+.zhino-stage-heading h1 em,
+.zhino-lounge-copy h1 em {
+  color: var(--concept-gold);
+  font-style: normal;
+  font-weight: 700;
+}
+
+.zhino-stage-index {
+  padding-top: 0.2rem;
+  color: rgba(255, 242, 228, 0.38);
+  font-family: 'Marcellus', serif;
+  font-size: 0.58rem;
+  letter-spacing: 0.14em;
+  direction: ltr;
+}
+
+/* ── Concept A: premium pod ───────────────────────────────── */
+.zhino-pod-stage {
+  background:
+    radial-gradient(58% 72% at 50% 53%, rgba(133, 46, 66, 0.34), transparent 68%),
+    linear-gradient(145deg, rgba(111, 28, 48, 0.42), rgba(18, 6, 12, 0.94) 72%);
+  border: 1px solid rgba(227, 187, 124, 0.18);
+  box-shadow: inset 0 1px 0 rgba(255, 246, 221, 0.09), 0 28px 60px -42px rgba(0, 0, 0, 0.9);
+}
+
+.zhino-pod-stage::before {
+  position: absolute;
+  inset: 0;
+  border: 1px solid rgba(255, 255, 255, 0.045);
+  border-radius: inherit;
+  content: '';
+  pointer-events: none;
+}
+
+.zhino-pod-scene {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  min-height: 0;
+  margin-top: 0.2rem;
+  overflow: hidden;
+}
+
+.zhino-pod-scene::before {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: min(80%, 40rem);
+  height: min(92%, 40rem);
+  border: 1px solid rgba(218, 181, 123, 0.15);
+  border-radius: 46% 46% 28% 28%;
+  content: '';
+  transform: translate(-50%, -47%);
+  box-shadow: 0 0 0 0.8rem rgba(218, 181, 123, 0.018), inset 0 0 70px rgba(198, 91, 111, 0.08);
+  pointer-events: none;
+}
+
+.zhino-pod-scene::after {
+  position: absolute;
+  right: 8%;
+  bottom: 6%;
+  width: 34%;
+  height: 16%;
+  border-radius: 50%;
+  content: '';
+  background: radial-gradient(ellipse, rgba(219, 170, 107, 0.27), rgba(148, 60, 80, 0.08) 48%, transparent 73%);
+  filter: blur(12px);
+  pointer-events: none;
+}
+
+.zhino-pod-orbit {
+  position: absolute;
+  z-index: 0;
+  width: 72%;
+  height: 78%;
+  border: 1px solid rgba(224, 188, 130, 0.11);
+  border-radius: 50%;
+  transform: rotate(-21deg);
+  pointer-events: none;
+}
+
+.zhino-pod-orbit.is-one { left: 14%; top: 12%; }
+.zhino-pod-orbit.is-two { left: 15%; top: 12%; width: 70%; height: 74%; border-color: rgba(196, 83, 111, 0.13); transform: rotate(27deg); }
+
+.zhino-pod-grid {
+  position: absolute;
+  inset: auto 10% 2%;
+  z-index: 0;
+  height: 37%;
+  opacity: 0.23;
+  background-image: linear-gradient(rgba(225, 188, 128, 0.16) 1px, transparent 1px), linear-gradient(90deg, rgba(225, 188, 128, 0.12) 1px, transparent 1px);
+  background-size: 2.4rem 2.4rem;
+  mask-image: linear-gradient(to top, #000, transparent 92%);
+  transform: perspective(210px) rotateX(54deg);
+  transform-origin: bottom;
+  pointer-events: none;
+}
+
+.zhino-pod-chamber {
+  position: relative;
+  z-index: 2;
+  width: min(72%, 42rem);
+  height: 93%;
+  min-height: 20rem;
+  border: 1px solid rgba(227, 196, 148, 0.24);
+  border-radius: 48% 48% 1.7rem 1.7rem / 30% 30% 1.7rem 1.7rem;
+  background:
+    linear-gradient(90deg, rgba(255, 255, 255, 0.05), transparent 18%, transparent 80%, rgba(255, 255, 255, 0.07)),
+    linear-gradient(180deg, rgba(143, 66, 75, 0.12), rgba(9, 3, 7, 0.22));
+  box-shadow:
+    inset 0 0 0 0.32rem rgba(255, 255, 255, 0.025),
+    inset 0 0 50px rgba(218, 165, 100, 0.08),
+    0 32px 48px -36px rgba(0, 0, 0, 0.88);
+  isolation: isolate;
+}
+
+.zhino-pod-chamber::before,
+.zhino-pod-chamber::after {
+  position: absolute;
+  content: '';
+  pointer-events: none;
+}
+
+.zhino-pod-chamber::before {
+  inset: 0.65rem;
+  border: 1px solid rgba(237, 202, 150, 0.13);
+  border-radius: inherit;
+}
+
+.zhino-pod-chamber::after {
+  top: 2%;
+  left: 50%;
+  width: 40%;
+  height: 20%;
+  border-radius: 50%;
+  background: rgba(255, 230, 188, 0.11);
+  filter: blur(20px);
+  transform: translateX(-50%);
+}
+
+.zhino-pod-chamber-glow {
+  position: absolute;
+  top: 4%;
+  left: 50%;
+  width: 62%;
+  height: 58%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(236, 197, 128, 0.18), rgba(154, 47, 72, 0.1) 42%, transparent 72%);
+  filter: blur(14px);
+  transform: translateX(-50%);
+  animation: zhino-pod-breathe 5.5s ease-in-out infinite;
+}
+
+.zhino-pod-chamber-line {
+  position: absolute;
+  top: 15%;
+  bottom: 13%;
+  z-index: 3;
+  width: 1px;
+  background: linear-gradient(transparent, rgba(225, 184, 121, 0.38), transparent);
+}
+
+.zhino-pod-chamber-line.is-left { left: 9%; }
+.zhino-pod-chamber-line.is-right { right: 9%; opacity: 0.5; }
+
+.zhino-pod-photo-window {
+  position: absolute;
+  top: 5.8%;
+  bottom: 8.5%;
+  left: 50%;
+  z-index: 2;
+  width: min(46%, 22rem);
+  overflow: hidden;
+  border: 1px solid rgba(239, 211, 171, 0.54);
+  border-radius: 48% 48% 1.3rem 1.3rem / 23% 23% 1.3rem 1.3rem;
+  background: #e5d2be;
+  box-shadow: 0 0 0 0.38rem rgba(217, 174, 111, 0.08), 0 0 0 1px rgba(70, 16, 29, 0.38), 0 28px 30px -26px #000;
+  transform: translateX(-50%);
+}
+
+.zhino-pod-photo-window .zhino-reference-robot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: saturate(0.95) contrast(1.02);
+  transform: scale(1.035);
+  animation: zhino-pod-robot-breathe 7s ease-in-out infinite;
+}
+
+.zhino-pod-photo-light,
+.zhino-pod-photo-sheen {
+  position: absolute;
+  z-index: 2;
+  pointer-events: none;
+}
+
+.zhino-pod-photo-light {
+  inset: 0;
+  background: linear-gradient(115deg, rgba(255, 255, 255, 0.24), transparent 27%, transparent 71%, rgba(90, 22, 38, 0.14));
+  mix-blend-mode: screen;
+}
+
+.zhino-pod-photo-sheen {
+  top: -15%;
+  left: -25%;
+  width: 36%;
+  height: 145%;
+  background: linear-gradient(90deg, transparent, rgba(255, 245, 214, 0.2), transparent);
+  transform: rotate(16deg);
+  animation: zhino-glass-sheen 8s ease-in-out 1s infinite;
+}
+
+.zhino-pod-floor {
+  position: absolute;
+  right: 13%;
+  bottom: 5.6%;
+  left: 13%;
+  z-index: 4;
+  height: 9%;
+  border-top: 1px solid rgba(238, 204, 152, 0.32);
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 0%, rgba(235, 188, 112, 0.22), transparent 65%);
+  transform: perspective(100px) rotateX(48deg);
+}
+
+.zhino-pod-floor span {
+  position: absolute;
+  top: 0.35rem;
+  left: 50%;
+  width: 54%;
+  height: 44%;
+  border-radius: 50%;
+  background: rgba(5, 2, 5, 0.46);
+  filter: blur(5px);
+  transform: translateX(-50%);
+}
+
+.zhino-pod-status {
+  position: absolute;
+  right: 50%;
+  bottom: 2.5%;
+  z-index: 5;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: rgba(255, 235, 205, 0.6);
+  font-size: 0.54rem;
+  white-space: nowrap;
+  transform: translateX(50%);
+}
+
+.zhino-pod-status svg,
+.zhino-pod-invite svg,
+.zhino-lounge-cta svg { width: 0.9rem; height: 0.9rem; flex: none; }
+.zhino-pod-status svg { color: var(--concept-gold); }
+
+.zhino-pod-beacon {
+  position: absolute;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: rgba(239, 210, 167, 0.6);
+  font-family: 'Marcellus', serif;
+  font-size: 0.5rem;
+  letter-spacing: 0.16em;
+  direction: ltr;
+}
+
+.zhino-pod-beacon.is-top { top: 5%; left: 7%; }
+.zhino-pod-beacon i {
+  display: inline-block;
+  width: 0.38rem;
+  height: 0.38rem;
+  border: 1px solid var(--concept-gold);
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(235, 198, 127, 0.8);
+}
+
+.zhino-pod-callout {
+  position: absolute;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.18rem;
+  max-width: 9.2rem;
+  color: rgba(255, 237, 219, 0.5);
+  font-size: 0.56rem;
+  line-height: 1.8;
+}
+
+.zhino-pod-callout strong {
+  color: rgba(255, 246, 230, 0.86);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.zhino-pod-callout.is-left { left: 2.5%; bottom: 18%; text-align: left; align-items: flex-start; }
+.zhino-pod-callout.is-right { right: 2.5%; top: 21%; text-align: right; align-items: flex-end; }
+.zhino-callout-kicker {
+  color: var(--concept-gold);
+  font-family: 'Marcellus', serif;
+  font-size: 0.48rem;
+  letter-spacing: 0.1em;
+  direction: ltr;
+}
+.zhino-callout-line { width: 2.7rem; height: 1px; margin-bottom: 0.3rem; background: var(--concept-gold); opacity: 0.6; }
+
+.zhino-pod-stage-foot {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0 clamp(1.1rem, 2.6vw, 2.6rem) clamp(1rem, 1.8vw, 1.45rem);
+}
+
+.zhino-pod-metrics {
+  display: flex;
+  align-items: center;
+  gap: clamp(0.6rem, 2vw, 1.8rem);
+  color: rgba(255, 240, 225, 0.45);
+  font-size: 0.57rem;
+}
+
+.zhino-pod-metrics span { display: inline-flex; align-items: center; gap: 0.35rem; white-space: nowrap; }
+.zhino-pod-metrics b { color: var(--concept-gold); font-family: 'Marcellus', serif; font-size: 0.7rem; font-weight: 400; }
+
+.zhino-pod-invite,
+.zhino-lounge-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  height: 2.5rem;
+  border: 1px solid rgba(225, 186, 123, 0.35);
+  border-radius: 999px;
+  color: #fff5e7;
+  font-family: inherit;
+  font-size: 0.62rem;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+  background: linear-gradient(145deg, rgba(139, 46, 67, 0.85), rgba(75, 18, 34, 0.9));
+  box-shadow: 0 12px 22px -17px rgba(0, 0, 0, 0.9), inset 0 1px 0 rgba(255, 255, 255, 0.13);
+  transition: transform 0.25s ease, border-color 0.25s ease, filter 0.25s ease;
+}
+
+.zhino-pod-invite { padding: 0 0.72rem 0 0.86rem; }
+.zhino-pod-invite svg:last-child,
+.zhino-lounge-cta svg:last-child { margin-inline-start: 0.15rem; }
+
+@media (hover: hover) {
+  .zhino-pod-invite:hover,
+  .zhino-lounge-cta:hover { border-color: rgba(241, 207, 153, 0.72); transform: translateY(-2px); filter: brightness(1.08); }
+}
+
+/* ── Concept B: warm interactive lounge ───────────────────── */
+.zhino-lounge-main {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0;
+  padding-top: clamp(0.7rem, 1.5vw, 1.35rem);
+}
+
+.zhino-lounge-stage {
+  min-height: 0;
+  border: 1px solid rgba(113, 49, 59, 0.11);
+  border-radius: clamp(1.4rem, 2.7vw, 2.6rem);
+  background:
+    radial-gradient(42% 80% at 50% 20%, rgba(255, 244, 231, 0.9), transparent 75%),
+    linear-gradient(145deg, rgba(250, 224, 213, 0.72), rgba(236, 209, 203, 0.84));
+  box-shadow: 0 25px 60px -52px rgba(74, 27, 38, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.78);
+}
+
+.zhino-lounge-topline {
+  position: relative;
+  z-index: 4;
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  padding: clamp(0.95rem, 1.8vw, 1.55rem) clamp(1.1rem, 2.6vw, 2.6rem) 0;
+}
+
+.zhino-lounge-stage .zhino-stage-eyebrow { color: var(--concept-burgundy); }
+.zhino-lounge-room-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.34rem;
+  color: rgba(74, 27, 38, 0.48);
+  font-family: 'Marcellus', serif;
+  font-size: 0.5rem;
+  letter-spacing: 0.1em;
+  direction: ltr;
+}
+.zhino-lounge-room-label i { width: 0.34rem; height: 0.34rem; border-radius: 50%; background: #c98a8b; box-shadow: 0 0 0 4px rgba(201, 138, 139, 0.13); }
+
+.zhino-lounge-room {
+  position: relative;
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.zhino-lounge-room::before {
+  position: absolute;
+  right: 8%;
+  bottom: 8%;
+  left: 8%;
+  height: 1px;
+  content: '';
+  background: linear-gradient(90deg, transparent, rgba(113, 49, 59, 0.15), transparent);
+}
+
+.zhino-lounge-sun {
+  position: absolute;
+  top: -24%;
+  left: 34%;
+  width: 44%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 220, 184, 0.72), rgba(253, 198, 178, 0.18) 52%, transparent 70%);
+  filter: blur(4px);
+  pointer-events: none;
+}
+
+.zhino-lounge-line-art {
+  position: absolute;
+  border: 1px solid rgba(113, 49, 59, 0.12);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.zhino-lounge-line-art.is-one { right: -7%; top: 2%; width: 42%; height: 76%; transform: rotate(25deg); }
+.zhino-lounge-line-art.is-two { right: -2%; top: 11%; width: 32%; height: 61%; border-color: rgba(185, 132, 105, 0.16); transform: rotate(25deg); }
+
+.zhino-lounge-copy {
+  position: absolute;
+  top: 15%;
+  right: 5%;
+  z-index: 4;
+  width: min(30%, 19rem);
+}
+
+.zhino-lounge-sticker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.33rem 0.58rem;
+  border: 1px solid rgba(113, 49, 59, 0.13);
+  border-radius: 999px;
+  color: var(--concept-burgundy);
+  font-size: 0.58rem;
+  font-weight: 600;
+  background: rgba(255, 250, 245, 0.56);
+}
+.zhino-lounge-sticker svg { width: 0.78rem; height: 0.78rem; color: #d59686; }
+
+.zhino-lounge-copy h1 {
+  margin: 0.8rem 0 0;
+  color: var(--concept-wine);
+  font-size: clamp(1.45rem, 3vw, 2.7rem);
+  font-weight: 500;
+  line-height: 1.43;
+  letter-spacing: -0.055em;
+}
+.zhino-lounge-copy h1 em { color: var(--concept-burgundy); }
+.zhino-lounge-copy p {
+  max-width: 17rem;
+  margin: 0.72rem 0 0;
+  color: rgba(74, 27, 38, 0.64);
+  font-size: 0.67rem;
+  line-height: 2.05;
+}
+
+.zhino-lounge-cta {
+  height: 2.45rem;
+  margin-top: 1.05rem;
+  padding: 0 0.72rem 0 0.85rem;
+  border-color: rgba(113, 49, 59, 0.18);
+  color: #fffaf5;
+  background: linear-gradient(145deg, #82434e, #5b2431);
+  box-shadow: 0 14px 24px -18px rgba(81, 29, 41, 0.75);
+}
+.zhino-lounge-cta svg:first-child { color: #f5d8b0; }
+
+.zhino-lounge-robot-zone {
+  position: absolute;
+  top: 4%;
+  bottom: 0;
+  left: 33%;
+  z-index: 2;
+  width: 31%;
+  min-width: 12rem;
+}
+
+.zhino-lounge-arch-shadow {
+  position: absolute;
+  top: 7%;
+  right: 0;
+  bottom: 2%;
+  left: 0;
+  border-radius: 50% 50% 0 0 / 26% 26% 0 0;
+  background: rgba(151, 88, 92, 0.11);
+  transform: translate(0.7rem, 0.65rem);
+}
+
+.zhino-lounge-arch {
+  position: absolute;
+  top: 3%;
+  right: 0;
+  bottom: 4%;
+  left: 0;
+  overflow: hidden;
+  border: 1px solid rgba(113, 49, 59, 0.18);
+  border-radius: 50% 50% 1.6rem 1.6rem / 23% 23% 1.6rem 1.6rem;
+  background: #e9d4c4;
+  box-shadow: inset 0 0 0 0.35rem rgba(255, 255, 255, 0.2), 0 24px 42px -30px rgba(90, 35, 48, 0.52);
+}
+
+.zhino-lounge-arch .zhino-reference-robot {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center center;
+  filter: saturate(0.92) contrast(0.98);
+  transform: scale(1.025);
+  animation: zhino-lounge-robot-float 6.8s ease-in-out infinite;
+}
+
+.zhino-lounge-arch-shine {
+  position: absolute;
+  top: 0;
+  right: 15%;
+  z-index: 3;
+  width: 26%;
+  height: 74%;
+  border-radius: 50%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.36), transparent);
+  opacity: 0.5;
+  transform: rotate(15deg);
+  pointer-events: none;
+}
+
+.zhino-lounge-floor-shadow {
+  position: absolute;
+  right: 3%;
+  bottom: 1%;
+  left: 3%;
+  height: 10%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse, rgba(90, 35, 48, 0.23), transparent 70%);
+  filter: blur(7px);
+}
+
+.zhino-lounge-speech {
+  position: absolute;
+  top: 12%;
+  left: -24%;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  padding: 0.52rem 0.78rem;
+  border: 1px solid rgba(113, 49, 59, 0.15);
+  border-radius: 1rem 1rem 1rem 0.22rem;
+  color: var(--concept-burgundy);
+  font-size: 0.61rem;
+  font-weight: 700;
+  white-space: nowrap;
+  background: rgba(255, 250, 245, 0.84);
+  box-shadow: 0 14px 24px -18px rgba(90, 35, 48, 0.56);
+  animation: zhino-lounge-bubble 4.5s ease-in-out infinite;
+}
+.zhino-lounge-speech i {
+  position: absolute;
+  bottom: -0.28rem;
+  left: 0.8rem;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-right: 1px solid rgba(113, 49, 59, 0.15);
+  border-bottom: 1px solid rgba(113, 49, 59, 0.15);
+  background: #fffaf5;
+  transform: rotate(45deg);
+}
+
+.zhino-lounge-products {
+  position: absolute;
+  bottom: 9%;
+  left: 4.5%;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 0.48rem;
+  width: min(27%, 16rem);
+}
+
+.zhino-lounge-products-label {
+  margin-bottom: 0.15rem;
+  color: rgba(74, 27, 38, 0.44);
+  font-family: 'Marcellus', serif;
+  font-size: 0.47rem;
+  letter-spacing: 0.13em;
+  direction: ltr;
+}
+
+.zhino-lounge-product {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  min-width: 0;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid rgba(113, 49, 59, 0.1);
+  border-radius: 0.95rem;
+  background: rgba(255, 250, 245, 0.66);
+  box-shadow: 0 10px 22px -19px rgba(90, 35, 48, 0.54);
+  backdrop-filter: blur(10px);
+  transition: transform 0.25s ease, background-color 0.25s ease;
+}
+
+@media (hover: hover) {
+  .zhino-lounge-product:hover { transform: translateX(-3px); background: rgba(255, 250, 245, 0.9); }
+}
+
+.zhino-lounge-product-image {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.55rem;
+  height: 2.55rem;
+  overflow: hidden;
+  border-radius: 0.75rem;
+  background: #efd6d0;
+}
+.zhino-lounge-product-image img { width: 100%; height: 100%; object-fit: cover; }
+.zhino-lounge-product.is-vanilla .zhino-lounge-product-image { background: #efe0c8; }
+.zhino-lounge-product-copy { display: flex; flex-direction: column; gap: 0.08rem; min-width: 0; }
+.zhino-lounge-product-copy strong { overflow: hidden; color: var(--concept-wine); font-size: 0.65rem; font-weight: 700; text-overflow: ellipsis; white-space: nowrap; }
+.zhino-lounge-product-copy span { color: rgba(74, 27, 38, 0.54); font-size: 0.54rem; }
+
+.zhino-lounge-note {
+  position: absolute;
+  right: 5%;
+  bottom: 7%;
+  z-index: 4;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.32rem;
+  color: rgba(74, 27, 38, 0.46);
+  font-size: 0.54rem;
+}
+.zhino-lounge-note span { color: #b87f89; font-size: 0.64rem; }
+
+/* ── conversation surface shared by both concepts ─────────── */
+.zhino-concept-chat-panel {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: clamp(1.2rem, 2vw, 1.7rem);
+}
+
+.zhino-concept-chat-heading {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.8rem;
+  min-height: 4rem;
+  padding: 0.8rem 1rem;
+}
+
+.zhino-concept-chat-identity {
+  display: flex;
+  align-items: center;
+  gap: 0.58rem;
+  min-width: 0;
+}
+
+.zhino-concept-chat-mark {
+  position: relative;
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 50%;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.zhino-concept-chat-mark i { position: absolute; right: 0.08rem; bottom: 0.1rem; width: 0.34rem; height: 0.34rem; border: 2px solid currentColor; border-radius: 50%; }
+.zhino-concept-chat-identity h2 { margin: 0.08rem 0 0; font-size: 0.86rem; font-weight: 700; line-height: 1.5; }
+.zhino-concept-chat-state { display: inline-flex; align-items: center; gap: 0.38rem; font-size: 0.57rem; white-space: nowrap; }
+
+.zhino-concept-chat-panel .zhino-assistant-console {
+  min-height: 0;
+  animation: none;
+}
+
+.zhino-concept-chat-panel .zhino-assistant-feed {
+  width: 100%;
+  max-width: none;
+  gap: 0.76rem;
+  padding: 0.55rem 0.95rem 1.1rem;
+  scrollbar-width: thin;
+}
+
+.zhino-concept-chat-panel .zhino-assistant-welcome {
+  justify-content: center;
+  min-height: 100%;
+  padding: 0.8rem 0 1rem;
+}
+
+.zhino-concept-chat-panel .zhino-welcome-new,
+.zhino-concept-chat-panel .zhino-welcome-stage { display: none; }
+.zhino-concept-chat-panel .zhino-assistant-welcome-title { margin-top: 0; font-size: clamp(1rem, 2vw, 1.3rem); }
+.zhino-concept-chat-panel .zhino-assistant-welcome-rule { margin-top: 0.55rem; opacity: 0.45; }
+.zhino-concept-chat-panel .zhino-assistant-welcome-chips { width: 100%; margin-top: 0.9rem; }
+.zhino-concept-chat-panel .zhino-assistant-welcome-chips .zhino-assistant-ideas-list { justify-content: center; }
+.zhino-concept-chat-panel .zhino-assistant-row { gap: 0.45rem; }
+.zhino-concept-chat-panel .zhino-assistant-bubble { font-size: 0.78rem; line-height: 1.9; }
+.zhino-concept-chat-panel .zhino-assistant-composer {
+  width: 100%;
+  padding: 0 0.95rem calc(0.72rem + env(safe-area-inset-bottom, 0px));
+}
+.zhino-concept-chat-panel .zhino-assistant-composer::before { background: linear-gradient(180deg, transparent, var(--chat-panel-bg) 88%); }
+.zhino-concept-chat-panel .zhino-assistant-signature { margin-top: 0.35rem; }
+
+/* A dark cockpit */
+.zhino-concept-chat-panel.is-premium {
+  --chat-panel-bg: rgba(36, 12, 21, 0.9);
+  color: #fff4e7;
+  border: 1px solid rgba(223, 185, 125, 0.2);
+  background: var(--chat-panel-bg);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 26px 48px -38px rgba(0, 0, 0, 0.9);
+  -webkit-backdrop-filter: blur(20px) saturate(1.25);
+  backdrop-filter: blur(20px) saturate(1.25);
+}
+
+.zhino-concept-chat-panel.is-premium .zhino-concept-chat-heading { border-bottom: 1px solid rgba(223, 185, 125, 0.14); }
+.zhino-concept-chat-panel.is-premium .zhino-concept-chat-mark { color: #f3d09c; border: 1px solid rgba(224, 184, 119, 0.45); background: radial-gradient(circle at 30% 22%, #9a4f5b, #4a1223 68%); box-shadow: 0 0 0 4px rgba(205, 156, 90, 0.06); }
+.zhino-concept-chat-panel.is-premium .zhino-concept-chat-kicker { color: #d5b477; }
+.zhino-concept-chat-panel.is-premium .zhino-concept-chat-state { color: rgba(255, 238, 219, 0.62); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-feed { scrollbar-color: rgba(206, 164, 102, 0.45) transparent; }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-welcome-title { color: #fff1dd; }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-bubble.is-bot { border-color: rgba(223, 185, 125, 0.13); color: #fff4e7; background: rgba(255, 248, 236, 0.085); box-shadow: none; }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-bubble.is-user { color: #fff8ec; background: linear-gradient(145deg, #82404f, #5b172d); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-avatar { background: radial-gradient(circle at 30% 20%, #fff9eb, #e0c9b1); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-composer::before { --chat-panel-bg: rgba(36, 12, 21, 0.9); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-composer-form { border-color: rgba(227, 189, 127, 0.2); background: rgba(14, 4, 9, 0.6); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 18px 32px -26px #000; }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-composer-form:focus-within { border-color: rgba(227, 189, 127, 0.58); box-shadow: 0 0 0 4px rgba(207, 160, 93, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-input { color: #fff5e9; }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-input::placeholder { color: rgba(255, 231, 211, 0.46); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-voice { border-color: rgba(227, 189, 127, 0.18); color: #d7b987; background: rgba(255, 255, 255, 0.055); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-hint,
+.zhino-concept-chat-panel.is-premium .zhino-assistant-signature { color: rgba(255, 226, 201, 0.46); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-ideas-toggle,
+.zhino-concept-chat-panel.is-premium .zhino-assistant-chip { border-color: rgba(224, 184, 119, 0.2); color: #e5c58f; background: rgba(255, 255, 255, 0.05); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-ideas-body { border-color: rgba(224, 184, 119, 0.14); background: rgba(10, 2, 7, 0.3); }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-chip-spark { color: #d7a969; }
+.zhino-concept-chat-panel.is-premium .zhino-assistant-read { color: rgba(255, 221, 188, 0.52); }
+
+/* B light lounge tray */
+.zhino-concept-chat-panel.is-lounge {
+  --chat-panel-bg: rgba(255, 250, 246, 0.91);
+  color: var(--concept-wine);
+  border: 1px solid rgba(113, 49, 59, 0.15);
+  background: var(--chat-panel-bg);
+  box-shadow: 0 22px 44px -30px rgba(90, 35, 48, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  -webkit-backdrop-filter: blur(18px) saturate(1.18);
+  backdrop-filter: blur(18px) saturate(1.18);
+}
+
+.zhino-concept-chat-panel.is-lounge .zhino-concept-chat-heading { border-bottom: 1px solid rgba(113, 49, 59, 0.1); }
+.zhino-concept-chat-panel.is-lounge .zhino-concept-chat-mark { color: #fff8ef; border: 1px solid rgba(113, 49, 59, 0.2); background: linear-gradient(145deg, #b87379, #71313b); box-shadow: 0 0 0 4px rgba(184, 115, 121, 0.1); }
+.zhino-concept-chat-panel.is-lounge .zhino-concept-chat-kicker { color: var(--concept-burgundy); }
+.zhino-concept-chat-panel.is-lounge .zhino-concept-chat-state { color: rgba(74, 27, 38, 0.54); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-welcome-title { color: var(--concept-wine); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-composer-form { border-color: rgba(113, 49, 59, 0.14); background: rgba(255, 255, 255, 0.78); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-composer-form:focus-within { border-color: rgba(113, 49, 59, 0.38); box-shadow: 0 0 0 4px rgba(113, 49, 59, 0.07), 0 20px 36px -28px rgba(90, 35, 48, 0.5); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-bubble.is-bot { border-color: rgba(113, 49, 59, 0.1); background: rgba(255, 255, 255, 0.86); color: var(--concept-wine); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-bubble.is-user { background: linear-gradient(145deg, #864550, #67303b); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-ideas-toggle,
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-chip { border-color: rgba(113, 49, 59, 0.13); color: var(--concept-burgundy); background: rgba(255, 255, 255, 0.55); }
+.zhino-concept-chat-panel.is-lounge .zhino-assistant-chip-spark { color: #c98a87; }
+
+/* B is a bottom conversation tray, deliberately not a side chat */
+.zhino-lounge-main .zhino-concept-chat-panel {
+  z-index: 8;
+  width: min(100%, 49rem);
+  justify-self: center;
+  margin-top: -1rem;
+}
+
+.zhino-lounge-main .zhino-concept-chat-heading { min-height: 3.6rem; padding-block: 0.55rem; }
+.zhino-lounge-main .zhino-concept-chat-panel .zhino-assistant-feed { max-height: 25vh; min-height: 6.3rem; }
+.zhino-lounge-main .zhino-concept-chat-panel .zhino-assistant-composer { padding-bottom: calc(0.55rem + env(safe-area-inset-bottom, 0px)); }
+
+/* ── animation language / future animation zones ───────────── */
+@keyframes zhino-pod-breathe {
+  0%, 100% { opacity: 0.62; transform: translateX(-50%) scale(0.96); }
+  50% { opacity: 0.9; transform: translateX(-50%) scale(1.06); }
+}
+@keyframes zhino-pod-robot-breathe {
+  0%, 100% { transform: scale(1.035) translateY(0); }
+  50% { transform: scale(1.045) translateY(-0.35%); }
+}
+@keyframes zhino-glass-sheen {
+  0%, 40% { opacity: 0; transform: translateX(-2rem) rotate(16deg); }
+  58% { opacity: 0.7; }
+  78%, 100% { opacity: 0; transform: translateX(18rem) rotate(16deg); }
+}
+@keyframes zhino-lounge-robot-float {
+  0%, 100% { transform: scale(1.025) translateY(0); }
+  50% { transform: scale(1.03) translateY(-0.45%); }
+}
+@keyframes zhino-lounge-bubble {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-0.28rem) rotate(1deg); }
+}
+
+/* ── responsive concept previews ──────────────────────────── */
+@media (max-width: 980px) {
+  .zhino-concept-topbar { padding-left: 10.5rem; }
+  .zhino-premium-main { grid-template-columns: minmax(0, 1.15fr) minmax(17rem, 0.72fr); }
+  .zhino-pod-callout { display: none; }
+  .zhino-pod-chamber { width: min(80%, 36rem); }
+  .zhino-lounge-copy { width: min(34%, 17rem); }
+  .zhino-lounge-robot-zone { left: 34%; width: 34%; }
+  .zhino-lounge-products { width: min(28%, 14rem); }
+}
+
+@media (max-width: 760px) {
+  .zhino-concept-page { overflow-y: auto; }
+  .zhino-concept-topbar {
+    min-height: 4.1rem;
+    gap: 0.45rem;
+    padding: 0.5rem 0.8rem;
+    padding-left: 4.2rem;
+  }
+  .zhino-concept-brand { min-width: 0; gap: 0.45rem; }
+  .zhino-concept-brand-seal { width: 2.15rem; height: 2.15rem; font-size: 0.58rem; }
+  .zhino-concept-brand-kicker { display: none; }
+  .zhino-concept-brand-copy strong { font-size: 0.79rem; }
+  .zhino-concept-switcher { padding: 0.16rem; gap: 0.12rem; }
+  .zhino-concept-switch { height: 1.8rem; padding: 0 0.48rem; gap: 0.28rem; font-size: 0.51rem; }
+  .zhino-concept-switch-number { font-size: 0.45rem; }
+  .zhino-concept-top-actions { gap: 0.3rem; }
+  .zhino-concept-ready { display: none; }
+  .zhino-concept-clear { width: 2rem; height: 2rem; padding: 0; }
+  .zhino-concept-clear span { display: none; }
+  .zhino-concept-back-button { top: 1.05rem; left: 0.78rem; width: 2rem; height: 2rem; padding: 0; }
+  .zhino-concept-back-button span { display: none; }
+
+  .zhino-concept-main,
+  .zhino-premium-main,
+  .zhino-lounge-main {
+    display: flex;
+    flex-direction: column;
+    gap: 0.7rem;
+    height: auto;
+    min-height: calc(100dvh - 4.1rem);
+    padding: 0.7rem 0.7rem calc(0.8rem + env(safe-area-inset-bottom, 0px));
+    overflow: visible;
+  }
+  .zhino-concept-stage { flex: none; }
+  .zhino-premium-main .zhino-pod-stage { height: min(66dvh, 38rem); min-height: 28rem; }
+  .zhino-premium-main .zhino-concept-chat-panel { height: min(58dvh, 32rem); min-height: 22rem; }
+  .zhino-stage-heading { padding: 0.9rem 1rem 0; }
+  .zhino-stage-heading h1 { font-size: clamp(1.18rem, 5.4vw, 1.7rem); }
+  .zhino-stage-index { font-size: 0.5rem; }
+  .zhino-pod-scene { min-height: 18rem; }
+  .zhino-pod-chamber { width: min(78%, 27rem); height: 91%; min-height: 18rem; }
+  .zhino-pod-photo-window { width: min(50%, 15rem); }
+  .zhino-pod-stage-foot { padding-inline: 1rem; }
+  .zhino-pod-metrics { display: none; }
+  .zhino-pod-invite { margin-inline-start: auto; }
+
+  .zhino-lounge-main { grid-template-rows: none; }
+  .zhino-lounge-stage { height: min(68dvh, 39rem); min-height: 31rem; }
+  .zhino-lounge-topline { padding: 0.9rem 1rem 0; }
+  .zhino-lounge-room-label { font-size: 0.45rem; }
+  .zhino-lounge-copy { top: 12%; right: 1rem; width: 40%; }
+  .zhino-lounge-copy h1 { font-size: clamp(1.22rem, 5.6vw, 1.75rem); }
+  .zhino-lounge-copy p { font-size: 0.59rem; line-height: 1.85; }
+  .zhino-lounge-cta { width: 100%; padding-inline: 0.5rem; font-size: 0.55rem; }
+  .zhino-lounge-robot-zone { top: 22%; bottom: 5%; left: 29%; width: 39%; min-width: 9.6rem; }
+  .zhino-lounge-speech { left: -16%; font-size: 0.53rem; }
+  .zhino-lounge-products { bottom: 8%; left: 0.8rem; width: 31%; gap: 0.3rem; }
+  .zhino-lounge-products-label { font-size: 0.4rem; }
+  .zhino-lounge-product { gap: 0.35rem; padding: 0.32rem; }
+  .zhino-lounge-product-image { width: 2rem; height: 2rem; border-radius: 0.58rem; }
+  .zhino-lounge-product-copy strong { font-size: 0.52rem; }
+  .zhino-lounge-product-copy span { font-size: 0.45rem; }
+  .zhino-lounge-note { right: 1rem; bottom: 4%; font-size: 0.46rem; }
+  .zhino-lounge-main .zhino-concept-chat-panel { width: 100%; height: min(52dvh, 28rem); min-height: 21rem; margin-top: 0; }
+  .zhino-lounge-main .zhino-concept-chat-panel .zhino-assistant-feed { max-height: none; min-height: 0; }
+}
+
+@media (max-width: 460px) {
+  .zhino-concept-topbar { padding-left: 3.45rem; }
+  .zhino-concept-brand-copy strong { font-size: 0.72rem; }
+  .zhino-concept-switch-label { display: none; }
+  .zhino-concept-switch { width: 1.9rem; justify-content: center; padding: 0; }
+  .zhino-concept-switch-number { font-size: 0.5rem; }
+  .zhino-concept-main { padding-inline: 0.5rem; }
+  .zhino-premium-main .zhino-pod-stage { min-height: 26rem; height: 62dvh; }
+  .zhino-premium-main .zhino-concept-chat-panel { height: 60dvh; min-height: 22rem; }
+  .zhino-pod-chamber { width: 86%; }
+  .zhino-pod-photo-window { width: 54%; }
+  .zhino-pod-beacon { top: 4%; left: 7%; font-size: 0.43rem; }
+  .zhino-pod-status { font-size: 0.47rem; }
+  .zhino-pod-invite { width: 100%; justify-content: center; }
+
+  .zhino-lounge-stage { min-height: 29rem; height: 64dvh; }
+  .zhino-lounge-copy { top: 11%; right: 0.8rem; width: 42%; }
+  .zhino-lounge-copy h1 { font-size: 1.15rem; }
+  .zhino-lounge-copy p { display: none; }
+  .zhino-lounge-sticker { font-size: 0.48rem; }
+  .zhino-lounge-cta { margin-top: 0.7rem; font-size: 0.5rem; }
+  .zhino-lounge-robot-zone { left: 23%; width: 45%; }
+  .zhino-lounge-speech { top: 9%; left: -20%; padding: 0.4rem 0.5rem; font-size: 0.48rem; }
+  .zhino-lounge-products { left: 0.55rem; width: 35%; }
+  .zhino-lounge-product-copy span { display: none; }
+  .zhino-lounge-note { display: none; }
+  .zhino-lounge-main .zhino-concept-chat-panel { min-height: 22rem; height: 62dvh; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .zhino-pod-chamber-glow,
+  .zhino-pod-photo-window .zhino-reference-robot,
+  .zhino-pod-photo-sheen,
+  .zhino-lounge-arch .zhino-reference-robot,
+  .zhino-lounge-speech { animation: none !important; }
+}

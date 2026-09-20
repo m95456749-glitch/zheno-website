@@ -56,10 +56,12 @@ function Storefront() {
         <Route path="/recipes" element={<RecipesPage />} />
         <Route path="/about" element={<AboutPage />} />
         <Route path="/contact" element={<ContactPage />} />
-        {/* دستیار ژینو (فاز ۵) — صفحهٔ مستقل؛ دکمهٔ شناور به همین
-            مسیر می‌رود و در Layout روی همین مسیر نمایش داده نمی‌شود
-            تا دوباره تکرار نشود. بقیهٔ مسیرها دست‌نخورده‌اند. */}
-        <Route path="/assistant" element={<AssistantPage />} />
+        {/* دستیار ژینو — دو کانسپت مستقل برای بررسی و انتخاب.
+            /assistant همچنان به نسخهٔ A می‌رود تا لینک‌های قبلی سایت
+            بدون تغییر کار کنند؛ نسخهٔ B در مسیر lounge جداست. */}
+        <Route path="/assistant" element={<AssistantPage concept="premium" />} />
+        <Route path="/assistant/premium" element={<AssistantPage concept="premium" />} />
+        <Route path="/assistant/lounge" element={<AssistantPage concept="lounge" />} />
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </Layout>

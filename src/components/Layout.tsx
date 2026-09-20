@@ -25,20 +25,16 @@ import ZhinoAssistant from './assistant/ZhinoAssistant';
 import { cn } from '../utils/cn';
 
 /** صفحه‌هایی که دکمهٔ شناور دستیار روی آن‌ها نمایش داده نمی‌شود */
-const ASSISTANT_HIDDEN_ROUTES = ['/cart', '/checkout', '/assistant'];
+const ASSISTANT_HIDDEN_ROUTES = ['/cart', '/checkout'];
 
-/**
- * صفحهٔ دستیار (فاز ۷) یک محیط چت تمام‌صفحه و خلوت است: روی همین
- * مسیر، هدر و فوتر فروشگاه (و در نتیجه منو، پرچم‌ها و لینک‌های
- * اضافی) رندر نمی‌شوند. بقیهٔ مسیرها، همان قالب قبلی را دارند.
- */
-const IMMERSIVE_ROUTES = ['/assistant'];
+/** هر دو پیش‌نمایش دستیار، همراه با مسیر قدیمی /assistant، تمام‌صفحه‌اند. */
+const isAssistantRoute = (pathname: string) => pathname === '/assistant' || pathname.startsWith('/assistant/');
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { pathname } = useLocation();
   const isHome = pathname === '/';
-  const immersive = IMMERSIVE_ROUTES.includes(pathname);
-  const showAssistant = !ASSISTANT_HIDDEN_ROUTES.includes(pathname);
+  const immersive = isAssistantRoute(pathname);
+  const showAssistant = !ASSISTANT_HIDDEN_ROUTES.includes(pathname) && !immersive;
 
   if (immersive) {
     return (
