@@ -21,6 +21,14 @@
 //
 // منطق چت، API و اتصال‌ها دست‌نخورده‌اند (useAssistantChat +
 // services/assistant) — فقط پوسته و تجربه عوض شده است.
+//
+// نکتهٔ تجربهٔ تازه: محصولاتِ صحنه (قفسه و میز استودیو) در شروعِ
+// گفتگو پنهان‌اند — صفحه فقط ربات + خوش‌آمدگویی + پیشنهادهاست.
+// به‌محض این‌که کاربر سراغ محصولات برود («محصولات را نشان بده»،
+// «چه طعم‌هایی دارید؟» …) یا ربات در پاسخش محصولی معرفی کند، قفسه و
+// میز با یک لغزشِ نرم ظاهر می‌شوند. این فقط یک «نمایشِ شرطیِ رابط
+// کاربری» است: کاتالوگ، موتور پاسخ و API دست‌نخورده‌اند و محصولاتِ
+// صحنه همان دادهٔ واقعی فروشگاه‌اند.
 // ============================================================
 
 import { useEffect, useMemo, useRef, useState } from 'react';
@@ -30,6 +38,13 @@ import AssistantChat from '../components/assistant/AssistantChat';
 import ZhinoLoungeScene, { type ZhinoLoungeHandle, type ZhinoLoungeMode } from '../components/assistant/ZhinoLoungeScene';
 import { useAssistantChat } from '../components/assistant/useAssistantChat';
 import { ASSISTANT_NAME } from '../components/assistant/assistantData';
+
+/**
+ * پرسش‌هایی که یعنی «کاربر دارد سراغ محصولات می‌رود».
+ * فقط برای نمایشِ محصولاتِ صحنه به کار می‌رود — تصمیمِ پاسخ، کاتالوگ
+ * و API همچنان همان مسیر همیشگی خودشان را می‌روند.
+ */
+const PRODUCT_INTENT = /محصول|کالا|طعم|قیمت|قيمت|موجود|کاتالوگ|قفسه|ویترین/u;
 
 /** آیکن فروشگاه برای دکمهٔ «بازگشت به فروشگاه» */
 function StoreIcon() {
@@ -88,6 +103,22 @@ export default function AssistantPage() {
     }
     return null;
   }, [chat.messages]);
+
+  /**
+   * آیا کاربر تا این لحظه سراغ محصولات رفته است؟ (فقط برای نمایشِ
+   * محصولات در صحنهٔ استودیو؛ منطق پاسخ‌گویی تغییر نمی‌کند.)
+   * وقتی خودِ ربات هم محصولی معرفی کند، قفسه و میز همراهِ پاسخ باز
+   * می‌شوند تا صحنه با گفتگو هماهنگ بماند.
+   */
+  const productsRequested = useMemo(
+    () =>
+      chat.messages.some(
+        (message) =>
+          (message.from === 'user' && PRODUCT_INTENT.test(message.text)) ||
+          (message.from === 'bot' && (message.products?.length ?? 0) > 0),
+      ),
+    [chat.messages],
+  );
 
   const [speakingSim, setSpeakingSim] = useState(false);
   const [happySim, setHappySim] = useState(false);
@@ -174,7 +205,8 @@ export default function AssistantPage() {
         ref={sceneRef}
         mode={robotMode}
         fresh={fresh}
-        welcomeLine="سلام! من ژینو هستم — قفسهٔ کنارم را لمس کنید یا هر چه خواستید بپرسید"
+        productsVisible={productsRequested}
+        welcomeLine="سلام! من ژینو هستم — هر چه خواستید بپرسید"
         onAsk={(question) => chat.send(question)}
       />
 

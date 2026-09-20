@@ -1732,9 +1732,82 @@
   color: rgba(41, 35, 33, 0.28);
 }
 
+/* نگینِ طعم — رنگ از کاتالوگ واقعی، قابِ عاجی/طلاییِ ژینو */
+.zhino-assistant-product-swatch {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 9999px;
+  background: radial-gradient(120% 120% at 50% 0%, #ffffff 0%, #f4ece2 58%, #e4d6c7 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 154, 98, 0.45),
+    0 8px 16px -12px rgba(42, 11, 18, 0.6);
+}
+
+.zhino-assistant-product-swatch i {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 9999px;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    0 2px 5px -2px rgba(42, 11, 18, 0.5);
+}
+
+/* ردیفِ کنش‌های کارت: «جزئیات» + «افزودن به سبد» */
+.zhino-assistant-product-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.zhino-assistant-product-link {
+  display: inline-flex;
+  align-items: center;
+  height: 2.05rem;
+  padding: 0 0.7rem;
+  border: 1px solid rgba(42, 11, 18, 0.14);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--color-wine-900);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-product-link:hover {
+    border-color: rgba(184, 154, 98, 0.75);
+    background: rgba(255, 252, 245, 0.95);
+  }
+}
+
+.zhino-assistant-product-link:focus-visible {
+  outline: 2px solid rgba(184, 154, 98, 0.75);
+  outline-offset: 2px;
+}
+
 .zhino-assistant-product-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
   font-weight: 700;
   color: #047857;
+}
+
+.zhino-assistant-product-stock::before {
+  content: "";
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .zhino-assistant-product-stock.is-low {
@@ -1944,15 +2017,26 @@
     gap: 0.4rem;
   }
 
-  /* کارت محصول در موبایل: نام و قیمت بالا، دکمهٔ گرد پایین */
+  /* کارت محصول در موبایل: نگین + نام/قیمت/موجودی در یک ردیف،
+     و ردیفِ دکمه‌ها زیر آن با عرض کامل — هیچ چیزی از کادر بیرون نمی‌زند */
   .zhino-assistant-product {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    row-gap: 0.55rem;
+    padding: 0.6rem;
+  }
+
+  .zhino-assistant-product-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .zhino-assistant-product-swatch {
+    width: 1.9rem;
+    height: 1.9rem;
   }
 
   .zhino-assistant-add {
-    align-self: stretch;
+    flex: 1 1 auto;
     justify-content: center;
     height: 2.3rem;
     font-size: 0.72rem;

@@ -8,12 +8,15 @@
 //     گنبد شیشه‌ای) — رنگ و نام از کاتالوگ واقعی، نه تستی
 //   • عمق سه‌بعدی: سه لایهٔ پارالاکس (دور/میانه/ربات) که با اشاره‌گر
 //     کاربر آرام جابه‌جا می‌شوند + شناوری بسیار ظریف دوربین
-//   • ربات قهرمان صحنه است: بزرگ، تمام‌قد، وسط طاق — با پلک، نگاه،
+//   • ربات قهرمان صحنه است: وسط طاق، تمام‌قد و کمی کوچک‌تر از قبل تا
+//     سر، تنه و دست‌ها همیشه با هم در قاب باشند — با پلک، نگاه،
 //     تنفس، سلام، فکر کردن، صحبت و حالت خوشحال
 //
 // حالت‌ها (از گفتگوی واقعی): idle / thinking / speaking / happy
-// محصولات صحنه فقط «جزئیات محیط»اند؛ لمس هر محصول = پرسش واقعی از
-// دستیار (اطلاعات از سیستم واقعی فروشگاه).
+// محصولات صحنه فقط «جزئیات محیط»اند و در شروع گفتگو پنهان‌اند؛ بعد از
+// این‌که کاربر سراغ محصولات رفت (productsVisible) روی قفسه و میز ظاهر
+// می‌شوند و لمس هر کدام = پرسش واقعی از دستیار (اطلاعات از سیستم واقعی
+// فروشگاه). هیچ داده‌ای برای این صحنه ساخته نشده است.
 //
 // نکته‌های فنی:
 //   • انیمیشن‌ها فقط transform/opacity — بدون jank
@@ -51,7 +54,27 @@ interface Props {
   welcomeLine?: string;
   /** لمس محصولات صحنه → پرسش واقعی از دستیار */
   onAsk?: (question: string) => void;
+  /**
+   * محصولاتِ صحنه (قفسه و میز) فقط وقتی کاربر سراغ محصولات رفته
+   * نمایش داده می‌شوند؛ در شروع گفتگو صحنه فقط ربات و اتاق است.
+   */
+  productsVisible?: boolean;
 }
+
+/* ── قاب‌بندی صحنه (واحدها = واحدِ viewBox صحنه) ─────────────
+   ربات کمی کوچک‌تر شده است (۰/۷۲ → ۰/۶۳) تا سر، تنه و دست‌ها
+   همیشه با هم در قاب دیده شوند و صورت به لبهٔ بالای قاب نچسبد.
+   پنجرهٔ دید (viewBox) طوری انتخاب می‌شود که بالای سرِ ربات همیشه
+   فضا داشته باشد و در حالت گفتگو، دست‌ها پایینِ قاب بمانند. */
+const ROBOT_SCALE = 0.63;
+const ROBOT_TX = 153.2;
+const ROBOT_TY = 84.2;
+/** مرکز صحنه — ربات دقیقاً روی همین خط می‌ایستد */
+const SCENE_CENTER_X = 380;
+/** حالت تازه: کل استودیو (دیوار، طاق، قالیچه) */
+const FRAME_FRESH = { y: 0, h: 680 };
+/** حالت گفتگو: رباتِ کامل (سر، تنه، دست‌ها و پاها) با حاشیهٔ امن */
+const FRAME_CHAT = { y: 80, h: 585 };
 
 /* ── پالت — همان هویت برند ── */
 const GOLD_V_STOPS = (
@@ -250,8 +273,9 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
   let sacDur = 0.12;
   let nextSac = 0.5 + R();
   const stepGaze = (t: number, dt: number) => {
-    ptr.x = lerp(ptr.x, ptrT.x, Math.min(1, dt * 3.4));
-    ptr.y = lerp(ptr.y, ptrT.y, Math.min(1, dt * 3.4));
+    /* نگاه به اشاره‌گر: هموارتر از قبل تا حرکت چشم پرشی به‌نظر نرسد */
+    ptr.x = lerp(ptr.x, ptrT.x, Math.min(1, dt * 3.0));
+    ptr.y = lerp(ptr.y, ptrT.y, Math.min(1, dt * 3.0));
     if (t >= nextSac) {
       sx0 = gx;
       sy0 = gy;
@@ -312,10 +336,13 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
     const talkAmp = w.speaking * gate;
     const open = talkAmp * (0.22 + 0.78 * syl);
 
+    /* تنفس: دامنهٔ کمی بیشتر + جابه‌جایی وزنِ خیلی آرام روی پاها،
+       تا ایستادنِ ربات مصنوعی/خشک به‌نظر نرسد */
     const brPhase = t * 2 * Math.PI * 0.235 + 0.7 * noise(t, 3, 0.11);
-    const br = 1 + reduce * 0.011 * Math.sin(brPhase);
-    const torsoTy = reduce * (0.9 * Math.sin(brPhase) - 3.1 * bounceEnv);
-    const torsoRot = reduce * (0.35 * noise(t, 9, 0.17) + happy * 1.4 * Math.sin(t * Math.PI * 1.15));
+    const br = 1 + reduce * 0.015 * Math.sin(brPhase);
+    const torsoTy = reduce * (1.3 * Math.sin(brPhase) - 3.1 * bounceEnv);
+    const torsoTx = reduce * (0.85 * noise(t, 15, 0.08) + w.thinking * 0.9 * thinkSide);
+    const torsoRot = reduce * (0.5 * noise(t, 9, 0.17) + happy * 1.4 * Math.sin(t * Math.PI * 1.15));
 
     const hr =
       reduce *
@@ -374,7 +401,7 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
 
     els.torso?.setAttribute(
       'transform',
-      `translate(0 ${torsoTy.toFixed(2)}) rotate(${torsoRot.toFixed(2)} 360 662) translate(360 662) scale(1 ${br.toFixed(4)}) translate(-360 -662)`,
+      `translate(${torsoTx.toFixed(2)} ${torsoTy.toFixed(2)}) rotate(${torsoRot.toFixed(2)} 360 662) translate(360 662) scale(1 ${br.toFixed(4)}) translate(-360 -662)`,
     );
     els.head?.setAttribute(
       'transform',
@@ -457,7 +484,7 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
 }
 
 const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoungeScene(
-  { mode = 'idle', fresh = true, welcomeLine, onAsk },
+  { mode = 'idle', fresh = true, welcomeLine, onAsk, productsVisible = false },
   ref,
 ) {
   const svgRef = useRef<SVGSVGElement | null>(null);
@@ -506,6 +533,12 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     engineRef.current?.set(mode);
   }, [mode]);
 
+  /* وقتی کاربر سراغ محصولات می‌رود، ربات با لبخند واکنش نشان می‌دهد —
+     همان واکنشی که هنگام لمسِ یک محصول در صحنه می‌گیرد */
+  useEffect(() => {
+    if (productsVisible) engineRef.current?.grin(1800);
+  }, [productsVisible]);
+
   /* ── حباب گفتار ── */
   const say = (text: string, dots = false) => {
     if (typeTimerRef.current) window.clearInterval(typeTimerRef.current);
@@ -553,12 +586,14 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     const layout = () => {
       const rr = room.getBoundingClientRect();
       if (rr.width < 2 || rr.height < 2) return;
-      /* حالت تازه: کل استودیو دیده می‌شود؛ حالت گفتگو: قاب روی
-         سر و تنهٔ ربات کراپ می‌شود تا قهرمان صحنه بزرگ بماند. */
-      const vbh = fresh ? 680 : 360;
-      const y0 = fresh ? 0 : 80;
+      /* حالت تازه: کل استودیو؛ حالت گفتگو: قابِ نیم‌تنه با فضا و
+         حاشیهٔ کافی بالای سرِ ربات (صورت هرگز کراپ نمی‌شود).
+         همیشه viewBox روی مرکز صحنه قفل است، پس ربات وسط می‌ماند. */
+      const frame = fresh ? FRAME_FRESH : FRAME_CHAT;
+      const vbh = frame.h;
+      const y0 = frame.y;
       const vbw = Math.max(520, Math.min(1600, vbh * (rr.width / rr.height)));
-      const x0 = 380 - vbw / 2;
+      const x0 = SCENE_CENTER_X - vbw / 2;
       svg.setAttribute('viewBox', `${x0.toFixed(1)} ${y0} ${vbw.toFixed(1)} ${vbh}`);
     };
 
@@ -657,11 +692,13 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
           onClick={onRoomClick}
         >
           <defs>
-            <linearGradient id="zl-wall" x1="0" y1="0" x2="0" y2="1">
+            {/* userSpaceOnUse: با بزرگ‌تر شدن مستطیل‌ها (پوششِ لبه‌های
+                قابِ باریک موبایل) گرادیان ثابت می‌ماند */}
+            <linearGradient id="zl-wall" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="574">
               <stop offset="0" stopColor="#F7EEDF" />
               <stop offset="1" stopColor="#EEDFC6" />
             </linearGradient>
-            <linearGradient id="zl-band" x1="0" y1="0" x2="0" y2="1">
+            <linearGradient id="zl-band" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="86">
               <stop offset="0" stopColor="#F0DCD6" />
               <stop offset="1" stopColor="#EBD0C8" />
             </linearGradient>
@@ -670,7 +707,24 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
               <stop offset="0.6" stopColor="#F4E2C4" />
               <stop offset="1" stopColor="#E7CFA9" />
             </radialGradient>
-            <linearGradient id="zl-floor" x1="0" y1="0" x2="0" y2="1">
+            {/* سایهٔ لبه‌های داخلی طاق — حسِ فرورفتگیِ واقعی */}
+            <radialGradient id="zl-nicheShade" cx="50%" cy="26%" r="82%">
+              <stop offset="0" stopColor="rgba(255,240,210,0)" />
+              <stop offset="0.55" stopColor="rgba(160,120,70,0.04)" />
+              <stop offset="1" stopColor="rgba(118,82,50,0.24)" />
+            </radialGradient>
+            {/* سایهٔ زیر تاقچهٔ بالا — عمقِ قاب بالای ربات */}
+            <linearGradient id="zl-nicheTop" gradientUnits="userSpaceOnUse" x1="0" y1="138" x2="0" y2="352">
+              <stop offset="0" stopColor="rgba(112,76,46,.3)" />
+              <stop offset="1" stopColor="rgba(112,76,46,0)" />
+            </linearGradient>
+            {/* مولدینگ طلاییِ برجسته دور طاق */}
+            <linearGradient id="zl-mold" gradientUnits="userSpaceOnUse" x1="0" y1="122" x2="0" y2="572">
+              <stop offset="0" stopColor="#F3E1B0" />
+              <stop offset="0.42" stopColor="#C9A55F" />
+              <stop offset="1" stopColor="#8A6A2C" />
+            </linearGradient>
+            <linearGradient id="zl-floor" gradientUnits="userSpaceOnUse" x1="0" y1="560" x2="0" y2="680">
               <stop offset="0" stopColor="#EAD9BC" />
               <stop offset="1" stopColor="#DCC49F" />
             </linearGradient>
@@ -752,20 +806,28 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
 
           {/* ═══ لایهٔ دور: دیوار، طاق، نورها، قفسه، گلدان ═══ */}
           <g id="zl-far">
-            <rect x="-900" width="3400" height="574" fill="url(#zl-wall)" />
-            <rect x="-900" width="3400" height="86" fill="url(#zl-band)" />
-            <rect x="-900" y="86" width="3400" height="6" fill="url(#zl-goldV)" />
-            <rect x="-900" y="92" width="3400" height="2" fill="#8F6E2B" opacity=".35" />
-            <rect x="-900" y="560" width="3400" height="120" fill="url(#zl-floor)" />
+            {/* دیوار/کف تا دور دست کشیده شده‌اند تا در قاب‌های خیلی
+                باریک (موبایل) هیچ نوارِ خالی‌ای دیده نشود */}
+            <rect x="-1400" y="-600" width="4200" height="1174" fill="url(#zl-wall)" />
+            <rect x="-1400" width="4200" height="86" fill="url(#zl-band)" />
+            <rect x="-1400" y="86" width="4200" height="6" fill="url(#zl-goldV)" />
+            <rect x="-1400" y="92" width="4200" height="2" fill="#8F6E2B" opacity=".35" />
+            <rect x="-1400" y="560" width="4200" height="900" fill="url(#zl-floor)" />
             <rect x="-900" y="556" width="3400" height="7" fill="#DFC69F" opacity=".8" />
             <rect x="-900" y="563" width="3400" height="2" fill="#CDB287" opacity=".5" />
 
             {/* نور کلیدی گرم — آرام جابه‌جا می‌شود */}
             <ellipse id="zl-keylight" cx="380" cy="300" rx="290" ry="250" fill="url(#zl-keyGlow)" />
 
-            {/* طاق نیش پشت ربات */}
+            {/* طاق نیش پشت ربات — قابِ سه‌بعدی: فرورفتگی، مولدینگ
+                برجسته، سایهٔ زیر تاقچه و کلیدسنگ طلایی */}
             <g>
-              <path d="M 214,560 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,560 Z" fill="url(#zl-niche)" />
+              {/* بدنهٔ فرورفتهٔ طاق */}
+              <path d="M 214,566 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,566 Z" fill="url(#zl-niche)" />
+              {/* سایهٔ لبه‌های داخلی → عمقِ فرورفتگی */}
+              <path d="M 214,566 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,566 Z" fill="url(#zl-nicheShade)" />
+              {/* سایهٔ زیر تاقچهٔ بالا → قاب بالای سرِ ربات برجسته‌تر */}
+              <path d="M 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,344 Q 380,300 214,344 Z" fill="url(#zl-nicheTop)" />
               <path
                 d="M 214,560 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,560"
                 fill="none"
@@ -782,6 +844,29 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
                 strokeDasharray="1 7"
                 strokeLinecap="round"
               />
+              {/* مولدینگ برجستهٔ دور طاق + لبهٔ تیره برای جداشدن از دیوار */}
+              <path
+                d="M 205,572 L 205,300 Q 205,128 380,128 Q 555,128 555,300 L 555,572"
+                fill="none"
+                stroke="url(#zl-mold)"
+                strokeWidth="13"
+                strokeLinecap="round"
+              />
+              <path
+                d="M 205,572 L 205,300 Q 205,128 380,128 Q 555,128 555,300 L 555,572"
+                fill="none"
+                stroke="rgba(94,66,30,.32)"
+                strokeWidth="1.6"
+              />
+              {/* هایلایتِ سمت نور (چپ) و سایهٔ سمت راست → برجستگیِ قاب */}
+              <path d="M 214,552 L 214,302 Q 214,140 380,140" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="3" opacity=".5" />
+              <path d="M 546,552 L 546,302 Q 546,140 380,140" fill="none" stroke="rgba(118,82,50,.3)" strokeWidth="3.4" />
+              {/* کلیدسنگِ طلاییِ بالای طاق */}
+              <g>
+                <path d="M 380,116 L 397,138 L 380,160 L 363,138 Z" fill="url(#zl-gold)" />
+                <path d="M 380,123 L 391,138 L 380,153 L 369,138 Z" fill="url(#zl-maroon)" />
+                <circle cx="380" cy="138" r="3.2" fill="url(#zl-gold)" />
+              </g>
               <ellipse cx="380" cy="320" rx="158" ry="196" fill="rgba(255,232,178,.42)" filter="url(#zl-b16)" />
               <path
                 d="M 262,200 C 246,300 248,430 270,532"
@@ -833,8 +918,8 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
               <rect x="346" y="74" width="68" height="7" rx="3.5" fill="url(#zl-goldV)" />
               <ellipse className="zl-lampGlow" cx="380" cy="86" rx="18" ry="10" fill="#FFE2A0" filter="url(#zl-b4)" />
               <circle cx="380" cy="85" r="5.5" fill="#FFEDBE" />
-              <polygon className="zl-cone" points="380,88 262,560 498,560" fill="url(#zl-warmCone)" opacity=".5" />
-              <polygon className="zl-cone" points="380,88 330,560 430,560" fill="url(#zl-warmCone)" opacity=".38" />
+              <polygon className="zl-cone" points="380,88 262,560 498,560" fill="url(#zl-warmCone)" opacity=".44" />
+              <polygon className="zl-cone" points="380,88 330,560 430,560" fill="url(#zl-warmCone)" opacity=".32" />
             </g>
 
             {/* دو چراغ آویز کناری — عمق و تقارن استودیو */}
@@ -855,15 +940,21 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
               <polygon className="zl-cone" points="696,284 662,520 730,520" fill="url(#zl-warmCone)" opacity=".35" />
             </g>
 
-            {/* قفسهٔ ژله — محصولات واقعی فروشگاه */}
+            {/* قفسهٔ ژله — تختهٔ قفسه همیشه هست (دکور اتاق)، اما
+                شیشه‌های محصول فقط وقتی کاربر سراغ محصولات رفت ظاهر
+                می‌شوند تا شروع گفتگو فقط ربات و خوش‌آمدگویی باشد */}
             <g>
               <rect x="86" y="150" width="176" height="12" rx="6" fill="#E0C69E" />
               <rect x="86" y="160" width="176" height="5" rx="2.5" fill="#C8A97B" opacity=".7" />
               <rect x="100" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
               <rect x="238" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
-              {shelf.jellies.map((p, i) =>
-                shelfJar(p.id, 100 + i * 52, shelf.shelfColors[i], p.shortName, i * 1.7),
-              )}
+              <g className={`zl-products zl-shelf-jars${productsVisible ? ' is-on' : ''}`}>
+                {shelf.jellies.map((p, i) => (
+                  <g key={p.id} className="zl-product-item" style={{ transitionDelay: `${(i * 0.08).toFixed(2)}s` }}>
+                    {shelfJar(p.id, 100 + i * 52, shelf.shelfColors[i], p.shortName, i * 1.7)}
+                  </g>
+                ))}
+              </g>
             </g>
 
             {/* گلدان سمت راست */}
@@ -917,32 +1008,40 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
                 ZHINO
               </text>
 
-              {/* ژلهٔ قالبی زیر گنبد شیشه‌ای */}
-              <g className="zl-jar zl-tap" data-label={shelf.heroJelly?.shortName ?? undefined} onClick={onJarClick}>
-                <g className="zl-jelly-inner">
-                  <path d="M 116,502 C 116,484 122,476 134,476 C 146,476 152,484 152,502 Z" fill={shelf.jellyColor} />
-                  <path d="M 122,502 C 122,489 126,482 134,482 C 142,482 146,489 146,502 Z" fill="#FFFFFF" opacity=".14" />
-                  <ellipse cx="127" cy="487" rx="4.4" ry="7.5" fill="#FFFFFF" opacity=".34" />
-                  <ellipse cx="134" cy="503" rx="24" ry="4.5" fill="#E8D5B5" />
-                </g>
-              </g>
-              <g pointerEvents="none">
-                <path d="M 108,503 C 108,466 118,455 134,455 C 150,455 160,466 160,503 Z" fill="url(#zl-glass)" stroke="rgba(180,150,100,.45)" strokeWidth="1.4" />
-                <path d="M 115,498 C 115,472 121,461 131,458" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity=".85" />
-                <circle cx="134" cy="452" r="3.6" fill="url(#zl-gold)" />
-              </g>
-
-              {/* کاستر روی میز */}
-              <g className="zl-jar zl-tap" data-label={shelf.custard?.shortName ?? undefined} onClick={onJarClick}>
-                <g className="zl-jelly-inner">
-                  <g className="zl-steam" fill="none" stroke="#C9A97B" strokeWidth="2.2" strokeLinecap="round" opacity=".8">
-                    <path d="M 168,462 Q 165,455 168,450" />
-                    <path d="M 178,460 Q 175,452 178,446" />
+              {/* ژلهٔ قالبی زیر گنبد شیشه‌ای + کاستر — فقط بعد از
+                  درخواست محصول توسط کاربر */}
+              <g className={`zl-products zl-table-products${productsVisible ? ' is-on' : ''}`}>
+                <g className="zl-product-item" style={{ transitionDelay: '0.06s' }}>
+                  <g className="zl-jar zl-tap" data-label={shelf.heroJelly?.shortName ?? undefined} onClick={onJarClick}>
+                    <g className="zl-jelly-inner">
+                      <path d="M 116,502 C 116,484 122,476 134,476 C 146,476 152,484 152,502 Z" fill={shelf.jellyColor} />
+                      <path d="M 122,502 C 122,489 126,482 134,482 C 142,482 146,489 146,502 Z" fill="#FFFFFF" opacity=".14" />
+                      <ellipse cx="127" cy="487" rx="4.4" ry="7.5" fill="#FFFFFF" opacity=".34" />
+                      <ellipse cx="134" cy="503" rx="24" ry="4.5" fill="#E8D5B5" />
+                    </g>
                   </g>
-                  <path d="M 160,480 Q 160,498 178,498 Q 196,498 196,480 L 195,474 L 161,474 Z" fill="#F4E3BC" />
-                  <ellipse cx="178" cy="474" rx="17.5" ry="5.6" fill="#D9A05B" />
-                  <ellipse cx="178" cy="472.8" rx="13.5" ry="3.8" fill="#C98F4E" />
-                  <ellipse cx="171" cy="482" rx="3.6" ry="6" fill="#FFFFFF" opacity=".4" />
+                  {/* گنبد شیشه‌ای روی ژله */}
+                  <g pointerEvents="none">
+                    <path d="M 108,503 C 108,466 118,455 134,455 C 150,455 160,466 160,503 Z" fill="url(#zl-glass)" stroke="rgba(180,150,100,.45)" strokeWidth="1.4" />
+                    <path d="M 115,498 C 115,472 121,461 131,458" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity=".85" />
+                    <circle cx="134" cy="452" r="3.6" fill="url(#zl-gold)" />
+                  </g>
+                </g>
+
+                {/* کاستر روی میز */}
+                <g className="zl-product-item" style={{ transitionDelay: '0.16s' }}>
+                  <g className="zl-jar zl-tap" data-label={shelf.custard?.shortName ?? undefined} onClick={onJarClick}>
+                    <g className="zl-jelly-inner">
+                      <g className="zl-steam" fill="none" stroke="#C9A97B" strokeWidth="2.2" strokeLinecap="round" opacity=".8">
+                        <path d="M 168,462 Q 165,455 168,450" />
+                        <path d="M 178,460 Q 175,452 178,446" />
+                      </g>
+                      <path d="M 160,480 Q 160,498 178,498 Q 196,498 196,480 L 195,474 L 161,474 Z" fill="#F4E3BC" />
+                      <ellipse cx="178" cy="474" rx="17.5" ry="5.6" fill="#D9A05B" />
+                      <ellipse cx="178" cy="472.8" rx="13.5" ry="3.8" fill="#C98F4E" />
+                      <ellipse cx="171" cy="482" rx="3.6" ry="6" fill="#FFFFFF" opacity=".4" />
+                    </g>
+                  </g>
                 </g>
               </g>
             </g>
@@ -950,11 +1049,14 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
 
           {/* ═══ لایهٔ قهرمان: ربات ژینو ═══ */}
           <g id="zl-hero">
-            {/* هالهٔ سینمایی پشت سر */}
-            <ellipse cx="380" cy="270" rx="185" ry="195" fill="url(#zl-wineHalo)" />
-            <ellipse className="zl-haloBreath" cx="380" cy="212" rx="140" ry="128" fill="url(#zl-headHalo)" />
+            {/* هالهٔ سینمایی پشت سر — ربات از محیط جدا می‌ماند */}
+            <ellipse cx="380" cy="300" rx="196" ry="208" fill="url(#zl-wineHalo)" />
+            <ellipse className="zl-haloBreath" cx="380" cy="240" rx="132" ry="122" fill="url(#zl-headHalo)" />
 
-            <g transform="translate(120.8 3.6) scale(0.72)">
+            <g
+              id="zl-robot"
+              transform={`translate(${ROBOT_TX} ${ROBOT_TY}) scale(${ROBOT_SCALE})`}
+            >
               <rect x="324" y="374" width="72" height="48" rx="13" fill="url(#zl-goldV)" />
               <path
                 d="M 330,392 H 390 M 330,402 H 390 M 330,412 H 390"

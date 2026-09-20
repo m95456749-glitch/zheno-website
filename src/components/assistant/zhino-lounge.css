@@ -432,6 +432,27 @@
   }
 }
 
+/* ── محصولات صحنه (قفسه و میز) ──
+   در شروع گفتگو پنهان‌اند: صحنه فقط ربات و خوش‌آمدگویی است. بعد از
+   این‌که کاربر سراغ محصولات رفت («محصولات را نشان بده»، «چه طعم‌هایی
+   دارید؟» …) با یک لغزشِ نرم روی قفسه و میز ظاهر می‌شوند. */
+.zl-product-item {
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  opacity: 0;
+  transform: translateY(9px) scale(0.94);
+  pointer-events: none;
+  transition:
+    opacity 0.5s ease,
+    transform 0.62s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zl-products.is-on .zl-product-item {
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+}
+
 /* ── عناصر متحرک SVG ── */
 .zl-jar {
   transform-box: fill-box;
@@ -871,11 +892,49 @@ svg.zl-is-happy .zl-haloBreath {
 .zhino-lounge-mode .zhino-assistant-product-name {
   color: #5c2129;
   font-weight: 700;
+  line-height: 1.6;
+}
+
+.zhino-lounge-mode .zhino-assistant-product-meta {
+  gap: 0.34rem;
 }
 
 .zhino-lounge-mode .zhino-assistant-product-price {
   color: var(--zl-gold-deep);
   font-weight: 700;
+}
+
+/* نگینِ طعم — همان هویت عاجی/زرشکی/طلایی */
+.zhino-lounge-mode .zhino-assistant-product-swatch {
+  background: radial-gradient(120% 120% at 50% 0%, #ffffff 0%, #f7efdf 58%, #e8d9c2 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(201, 165, 95, 0.55),
+    0 10px 18px -14px rgba(90, 23, 37, 0.55);
+}
+
+.zhino-lounge-mode .zhino-assistant-product-link {
+  border: 1px solid rgba(201, 165, 95, 0.5);
+  background: rgba(255, 253, 247, 0.85);
+  color: #5c2129;
+}
+
+@media (hover: hover) {
+  .zhino-lounge-mode .zhino-assistant-product-link:hover {
+    border-color: rgba(201, 165, 95, 0.85);
+    background: #fffdf7;
+  }
+}
+
+.zhino-lounge-mode .zhino-assistant-product-stock {
+  color: #0f7a55;
+}
+
+.zhino-lounge-mode .zhino-assistant-product-stock.is-low {
+  color: #a8702a;
+}
+
+.zhino-lounge-mode .zhino-assistant-product-stock.is-out {
+  color: var(--zl-ink-3);
 }
 
 .zhino-lounge-mode .zhino-assistant-add {
@@ -1059,8 +1118,10 @@ svg.zl-is-happy .zl-haloBreath {
   .zl-cone,
   .zl-haloBreath,
   .zl-status i,
+  .zl-product-item,
   .zhino-lounge-mode .zhino-assistant-welcome-chips .zhino-assistant-chip {
     animation: none !important;
+    transition: none !important;
   }
 
   svg.zl-is-happy .zl-spark {
