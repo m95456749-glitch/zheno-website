@@ -142,6 +142,24 @@ export default function AssistantChat({ chat, className }: Props) {
   const voiceSite = useVoiceSettings();
   const [ideasOpen, setIdeasOpen] = useState(false);
   /**
+   * تعداد پیام‌ها در لحظه‌ای که کاربر ردیفِ پیشنهادها را باز کرده است.
+   *
+   * چرا لازم است: جمع‌شدنِ خودکارِ این ردیف در یک افکت (passive effect)
+   * انجام می‌شود. اگر افکت روی دستگاهِ کُند یا زیرِ بار دیر اجرا شود،
+   * می‌تواند ردیفی را ببندد که کاربر چند لحظه قبل — برای همین پیام —
+   * باز کرده بود (ردیف زیرِ دستِ کاربر جمع می‌شود). با نگه داشتنِ این
+   * شمارنده، افکتِ دیررسد می‌فهمد که بازبودنِ فعلی خواستهٔ کاربر است و
+   * کاری نمی‌کند؛ با آمدنِ پیامِ تازه (تغییرِ شمارنده) ردیف مثل قبل جمع
+   * می‌شود. رفتارِ قابل‌دیدن تغییر نمی‌کند، فقط قطعی می‌شود.
+   */
+  const ideasOpenedAt = useRef<number | null>(null);
+
+  const toggleIdeas = () => {
+    const next = !ideasOpen;
+    ideasOpenedAt.current = next ? messages.length : null;
+    setIdeasOpen(next);
+  };
+  /**
    * پیام کوتاه صوتی — یک دولت واحد برای «متن اصلی + راهنمای اختیاری».
    * قبلاً دو دولت جدا بودند و افکت پاک‌سازی در سوارشدن صفحه یک
    * setVoiceHint(null) زودتر از لمس کاربر در صف می‌گذاشت که می‌توانست
@@ -177,6 +195,7 @@ export default function AssistantChat({ chat, className }: Props) {
     stop();
     setReadingId(null);
     spokenId.current = 0;
+    ideasOpenedAt.current = null;
     setIdeasOpen(false);
   }, [fresh, stop]);
 
@@ -191,6 +210,10 @@ export default function AssistantChat({ chat, className }: Props) {
   }, [messages, thinking, voiceOn, voiceSite.autoVoice, voiceSite.voiceEnabled, speak]);
 
   useEffect(() => {
+    /* ردیفِ پیشنهادها با هر پیامِ تازه جمع می‌شود تا روی گفتگو انباشته
+       نشود — مگر این‌که کاربر خودش آن را برای همین پیام باز کرده باشد
+       (در آن صورت افکتِ دیررسد حقِ بستنش را ندارد). */
+    if (ideasOpenedAt.current === messages.length) return;
     setIdeasOpen(false);
   }, [messages.length]);
 
@@ -467,7 +490,7 @@ export default function AssistantChat({ chat, className }: Props) {
       <div className="zhino-assistant-composer">
         {!fresh && voiceSite.suggestions && suggestions.length > 0 && (
           <div className="zhino-assistant-ideas">
-            <button type="button" className="zhino-assistant-ideas-toggle" onClick={() => setIdeasOpen((open) => !open)} aria-expanded={ideasOpen} aria-controls="zhino-assistant-ideas-list">
+            <button type="button" className="zhino-assistant-ideas-toggle" onClick={toggleIdeas} aria-expanded={ideasOpen} aria-controls="zhino-assistant-ideas-list">
               <IdeaIcon />
               <span>پیشنهادها</span>
               <span className="zhino-assistant-ideas-caret" aria-hidden="true">

@@ -135,10 +135,14 @@ const SHELL =
  * Render a route and return its text.
  * `seed` runs after DOM creation but before the app script executes,
  * e.g. to seed localStorage.
+ * `live: true` keeps the window open and returns `{ waitFor, dom, close }`
+ * so a caller can POLL for a state instead of napping a fixed number of
+ * milliseconds (fixed naps are what made time-dependent checks flaky on
+ * slow/loaded machines). The caller must call `close()`.
  */
 async function render(
   path,
-  { seed, clickAddToCart = false, settleMs = 0, appSource, fetchStub, exposeNodeApis = false } = {},
+  { seed, clickAddToCart = false, settleMs = 0, appSource, fetchStub, exposeNodeApis = false, live = false } = {},
 ) {
   const errors = [];
   const virtualConsole = new VirtualConsole();
@@ -230,6 +234,28 @@ async function render(
   // link hrefs (e.g. to verify the hidden footer entry)
   const links = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
   const result = { text, errors, toastText, heroImgSrcs, heroFirstPriority, heroWebpSrcs, heroDots, links };
+
+  if (live) {
+    // Same window, still running: poll for a state instead of guessing
+    // how many milliseconds the app needs to get there.
+    const waitFor = async (predicate, timeoutMs = 12000) => {
+      const until = Date.now() + timeoutMs;
+      while (Date.now() < until) {
+        if (predicate()) return true;
+        await sleep(100);
+      }
+      return false;
+    };
+    return {
+      ...result,
+      dom,
+      document,
+      waitFor,
+      text: () => document.getElementById('root')?.textContent ?? '',
+      close: () => dom.window.close(),
+    };
+  }
+
   dom.window.close();
   return result;
 }
@@ -328,12 +354,26 @@ function expectNoErrors(label, errors) {
   expectContains('root home', text, 'در یک مجموعه');
   expectContains('root home', text, 'واردکننده و پخش‌کننده پودر ژله و کاستر');
   expectContains('root home', text, 'مشاهده محصولات');
-  // After one 3 s rotation the slideshow mounts one more slide ahead,
-  // so the upcoming photo always has a full interval to preload.
-  const rotated = await render('/', { settleMs: 4000 });
-  const rotatedSlides = rotated.heroImgSrcs.filter((s) => s.includes('images/IMG_20260903_002'));
-  if (rotatedSlides.length === 3) ok('hero rotation progressively mounts the next slide');
-  else fail(`hero rotation must mount 3 slides after ~4 s, found ${rotatedSlides.length}`);
+  // After one 3 s rotation the slideshow mounts one more slide ahead, so
+  // the upcoming photo always has a full interval to preload.
+  //
+  // The mount count is TIMED (2 → 3 at the first rotation, → 4 at the
+  // second), so it must be polled, not sampled after a fixed nap: on a
+  // loaded 2-core box the interval fires late and a 4 s snapshot used to
+  // land on 2 slides ("hero rotation must mount 3 slides after ~4 s,
+  // found 2"). We now wait for the state and read it the moment it holds.
+  {
+    const live = await render('/', { live: true });
+    const slideCount = () =>
+      Array.from(
+        live.document.querySelectorAll('section[aria-label="معرفی ژینو"] img'),
+      ).filter((img) => (img.getAttribute('src') ?? '').includes('images/IMG_20260903_002')).length;
+    const progressed = await live.waitFor(() => slideCount() >= 3, 15000);
+    const mounted = slideCount();
+    if (progressed && mounted === 3) ok('hero rotation progressively mounts the next slide');
+    else fail(`hero rotation must mount 3 slides after one rotation, found ${mounted}`);
+    live.close();
+  }
   const rooted = heroImgSrcs.filter((s) => s.startsWith('/images/'));
   if (rooted.length === heroImgSrcs.length && rooted.length > 0)
     ok('root hero images resolve from the domain root (/images/…)');
@@ -834,23 +874,28 @@ function expectNoErrors(label, errors) {
     });
   };
 
+  // The three catalog reads are asynchronous (fetch + commit), so poll for
+  // them rather than sampling the DOM after a fixed 400 ms nap — on a slow
+  // or loaded machine the reads had not all landed yet and the run failed
+  // with «expected 3 catalog reads, saw: products | product_variants».
   const products = await render('/zheno-website/products', {
     appSource: appCodeWithDb,
     exposeNodeApis: true,
-    settleMs: 400,
+    live: true,
     fetchStub: dbFetch,
   });
+  const CATALOG_TABLES = ['products', 'product_variants', 'inventory'];
+  const readTables = () => CATALOG_TABLES.filter((t) => seen.some((u) => u.includes(`/rest/v1/${t}`)));
+  const allRead = await products.waitFor(() => readTables().length === CATALOG_TABLES.length, 12000);
 
-  const readTables = ['products', 'product_variants', 'inventory'].filter((t) =>
-    seen.some((u) => u.includes(`/rest/v1/${t}`)),
-  );
-  if (readTables.length === 3) ok('connected mode — catalog read from the database (3 tables)');
+  if (allRead && readTables().length === 3) ok('connected mode — catalog read from the database (3 tables)');
   else fail(`connected mode — expected 3 catalog reads, saw: ${seen.join(' | ') || 'none'}`);
 
-  expectContains('connected mode products', products.text, 'ژله توت فرنگی دیتابیس');
+  expectContains('connected mode products', products.text(), 'ژله توت فرنگی دیتابیس');
   // Only the single database row is sold: the other 21 base products are
   // not shown, i.e. the database really is the source of truth.
-  expectNotContains('connected mode products', products.text, 'ژله انار');
+  expectNotContains('connected mode products', products.text(), 'ژله انار');
+  products.close();
 
   const home = await render('/zheno-website/', {
     appSource: appCodeWithDb,
@@ -2927,9 +2972,17 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (scoped) ok('assistant chat — unrelated questions get the honest scope answer');
     else fail('assistant chat — scope answer missing: ' + text().slice(-220));
 
-    // let React flush the passive collapse-effect of the answer commit
-    // before asserting the suggestions row state (avoids a click/effect race)
-    await sleep(400);
+    // Wait for the collapse itself instead of napping 400 ms: the collapse
+    // is a passive effect, and on a loaded machine it can land much later —
+    // a fixed nap then samples the row while it is still open and the run
+    // fails for no reason. Polling makes the check deterministic.
+    const collapsed = await waitFor(() => {
+      const toggle = dom.window.document.querySelector('.zhino-assistant-ideas-toggle');
+      if (!toggle) return false;
+      const open = toggle.getAttribute('aria-expanded') === 'true';
+      const chips = Boolean(dom.window.document.querySelector('.zhino-assistant-ideas-body .zhino-assistant-chip'));
+      return !open && !chips;
+    }, 12000);
 
     // Phase 8 — an answer never carries a technical footnote, and the
     // suggestions step aside instead of stacking boxes over the chat.
@@ -2938,10 +2991,11 @@ async function openAssistantFromStore(dom, waitFor, text) {
     const ideasToggle = dom.window.document.querySelector('.zhino-assistant-ideas-toggle');
     if (!ideasToggle) {
       fail('assistant chat — the collapsed suggestions row is missing');
-    } else if (ideasToggle.getAttribute('aria-expanded') !== 'false') {
-      fail('assistant chat — the suggestions row should start collapsed after a question');
-    } else if (dom.window.document.querySelector('.zhino-assistant-ideas-body .zhino-assistant-chip')) {
-      fail('assistant chat — the collapsed suggestions row still shows its chips');
+    } else if (!collapsed) {
+      fail(
+        'assistant chat — the suggestions row never collapsed after the answer (aria-expanded=' +
+          `${ideasToggle.getAttribute('aria-expanded')})`,
+      );
     } else {
       ok('assistant chat — suggestions collapse into a quiet row once the chat starts');
       ideasToggle.click();

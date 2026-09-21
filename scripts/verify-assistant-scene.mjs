@@ -115,27 +115,57 @@ if (!window.matchMedia) {
   window.matchMedia = () => ({ matches: false, addEventListener() {}, removeEventListener() {} });
 }
 
-window.eval(bundle);
-window.__mount();
-await sleep(400);
-
 const doc = window.document;
 const q = (sel) => doc.querySelector(sel);
 const qa = (sel) => Array.from(doc.querySelectorAll(sel));
 const text = () => doc.body.textContent || '';
 
-/** ارسال یک پیامِ واقعی از طریق کادرِ ورودیِ صفحه */
+/**
+ * انتظار برای یک وضعیت — نه یک خوابِ ثابت.
+ * هر چه این صفحه انجام می‌دهد ناهمزمان است (commitهای React، تأخیرِ
+ * طبیعیِ موتور پاسخ، افکت‌های غیرفعال). با خوابِ ثابت، روی ماشینِ کُند
+ * یا زیرِ بار، بررسی‌ها گاهی پیش از رسیدنِ وضعیت نمونه می‌گرفتند و تست
+ * بی‌دلیل fail می‌شد. درست مثل smoke: تا رسیدنِ وضعیت صبر می‌کنیم و فقط
+ * در صورتِ انقضای مهلت شکست می‌خوریم.
+ */
+async function waitFor(predicate, timeoutMs = 12000) {
+  const until = Date.now() + timeoutMs;
+  while (Date.now() < until) {
+    if (predicate()) return true;
+    await sleep(50);
+  }
+  return false;
+}
+
+window.eval(bundle);
+window.__mount();
+// صحنه باید کاملاً سوار شود (SVG + viewBoxِ محاسبه‌شده) پیش از هر بررسی
+if (!(await waitFor(() => Boolean(q('.zl-room svg')?.getAttribute('viewBox'))))) {
+  fail('صحنهٔ استودیو سوار نشد (viewBox تنظیم نشد)');
+}
+
+/** ارسال یک پیامِ واقعی از طریق کادرِ ورودیِ صفحه و انتظار برای پاسخ */
 async function ask(question) {
   const input = q('#zhino-assistant-input');
   if (!input) return false;
+  const rowsBefore = qa('.zhino-assistant-row').length;
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value').set;
   setter.call(input, question);
   input.dispatchEvent(new window.Event('input', { bubbles: true }));
-  await sleep(30);
+  // دکمهٔ ارسال فقط وقتی فعال می‌شود که متن واقعاً در state نشسته باشد —
+  // یعنی React ورودی را commit کرده و آمادهٔ ارسال است (نه خوابِ ثابت).
+  await waitFor(() => q('.zhino-assistant-send') && !q('.zhino-assistant-send').disabled);
   const form = q('.zhino-assistant-composer-form');
   form.dispatchEvent(new window.Event('submit', { bubbles: true, cancelable: true }));
-  // پاسخِ دستیار با تأخیرِ طبیعیِ موتور محلی می‌رسد
-  await sleep(1200);
+  // پیامِ کاربر + نشانگرِ «در حال پاسخ‌گویی» (هر دو ردیفِ گفتگو هستند)
+  await waitFor(() => qa('.zhino-assistant-row').length > rowsBefore + 1, 15000);
+  // موتور محلی با تأخیرِ طبیعی پاسخ می‌دهد: تا رسیدنِ پاسخ صبر می‌کنیم
+  await waitFor(
+    () => !q('.zhino-assistant-typing') && qa('.zhino-assistant-row').length >= rowsBefore + 2,
+    20000,
+  );
+  // یک فریم برای نشستنِ افکت‌های غیرفعال (اسکرول، جمع‌شدنِ پیشنهادها)
+  await sleep(120);
   return true;
 }
 
@@ -202,9 +232,14 @@ else fail('حالت تازه: پایینِ بدنهٔ ربات از قاب بی�
  */
 async function runMatrix(cases) {
   for (const testCase of cases) {
+    const before = q('.zl-room svg')?.getAttribute('viewBox');
     roomSize = testCase.room;
     window.dispatchEvent(new window.Event('resize'));
-    await sleep(120);
+    // viewBox در همان رویدادِ resize دوباره حساب می‌شود؛ منتظرِ تغییرش
+    // می‌مانیم (و در بدترین حالت بعد از ۳ ثانیه همان مقدارِ فعلی را
+    // می‌خوانیم که خودش درست است).
+    await waitFor(() => (q('.zl-room svg')?.getAttribute('viewBox') ?? '') !== before, 3000);
+    await sleep(60);
     const f = frameOf();
     const top = robotTop - f.y0;
     const bottom = f.y0 + f.h - Math.min(robotBottom, f.y0 + f.h);
@@ -286,9 +321,9 @@ if (addButtons.length === 0) {
 } else {
   // دکمهٔ کارت همان مسیر همیشگیِ سبد را صدا می‌زند (CartContext)
   addButtons[0].dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  await sleep(500);
-  if (text().includes('به سبد خرید اضافه شد')) ok('«افزودن به سبد» روی کارت، محصول را از مسیر همیشگیِ سبد افزود');
-  else fail('«افزودن به سبد» روی کارت، پاسخِ موفق نداد');
+  const added = await waitFor(() => text().includes('به سبد خرید اضافه شد'), 15000);
+  if (added) ok('«افزودن به سبد» روی کارت، محصول را از مسیر همیشگیِ سبد افزود');
+  else fail('«افزودن به سبد» روی کارت، پاسخِ موفق نداد: ' + text().slice(-160));
 }
 
 /* پیشنهادِ خودِ دستیار هم باید منتظرِ تأییدِ کاربر بماند */
@@ -299,9 +334,9 @@ else fail('پنلِ تأییدِ پیشنهادِ سبد ظاهر نشد');
 const yes = q('.zhino-assistant-cart-yes');
 if (yes) {
   yes.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  await sleep(500);
-  if (text().includes('به سبد خرید اضافه شد')) ok('تأیید کاربر، پیشنهادِ دستیار را به سبد افزود');
-  else fail('تأییدِ پیشنهادِ سبد، پاسخِ موفق نداد');
+  const accepted = await waitFor(() => text().includes('به سبد خرید اضافه شد'), 15000);
+  if (accepted) ok('تأیید کاربر، پیشنهادِ دستیار را به سبد افزود');
+  else fail('تأییدِ پیشنهادِ سبد، پاسخِ موفق نداد: ' + text().slice(-160));
 }
 
 /* ── ۶) ماتریس دسکتاپ/موبایل: قابِ ربات در هر اندازه‌ای امن است ── */
@@ -319,7 +354,7 @@ await runMatrix([
 const refresh = q('.zhino-assistant-ghost.is-icon');
 if (refresh) {
   refresh.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
-  await sleep(400);
+  await waitFor(() => Boolean(q('.zhino-assistant-welcome')), 15000);
   if (qa('.zl-products.is-on').length === 0 && qa('.zhino-assistant-product').length === 0)
     ok('«گفتگوی تازه» دوباره فقط ربات + خوش‌آمد + پیشنهادها را نشان می‌دهد');
   else fail('بعد از «گفتگوی تازه» محصولات همچنان نمایان‌اند');
