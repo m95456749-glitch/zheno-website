@@ -206,11 +206,11 @@ export default function ZhinoMedallion({ mode = 'idle', size = 44, className, gl
             <stop offset="0.55" stopColor="#6B2836" />
             <stop offset="1" stopColor="#420F1B" />
           </radialGradient>
+          {/* سرِ ربات — زرشکی تیره و مات (هویت نهایی) */}
           <radialGradient id={g('head')} cx="36%" cy="28%" r="80%">
-            <stop offset="0" stopColor="#FFFEFB" />
-            <stop offset="0.5" stopColor="#F5EFE6" />
-            <stop offset="0.85" stopColor="#E4D8C6" />
-            <stop offset="1" stopColor="#CDBBA2" />
+            <stop offset="0" stopColor="#8A4653" />
+            <stop offset="0.5" stopColor="#6B2B3A" />
+            <stop offset="1" stopColor="#43121E" />
           </radialGradient>
           <radialGradient id={g('visor')} cx="46%" cy="32%" r="80%">
             <stop offset="0" stopColor="#2A2023" />
@@ -258,12 +258,25 @@ export default function ZhinoMedallion({ mode = 'idle', size = 44, className, gl
           <circle cx="25.5" cy="51" r="3.1" fill="#5A1725" />
           <circle cx="74.5" cy="51" r="5.4" fill={`url(#${g('ring')})`} />
           <circle cx="74.5" cy="51" r="3.1" fill="#5A1725" />
-          {/* گنبد سر */}
-          <ellipse cx="50" cy="50" rx="24.5" ry="22.5" fill={`url(#${g('head')})`} />
-          <ellipse cx="43" cy="40" rx="9.5" ry="5" fill="#FFFFFF" opacity="0.55" />
+          {/* سرِ گرد زرشکی */}
+          <ellipse
+            cx="50"
+            cy="50"
+            rx="24.5"
+            ry="22.5"
+            fill={`url(#${g('head')})`}
+            stroke="#2E0913"
+            strokeOpacity="0.45"
+            strokeWidth="1"
+          />
+          <ellipse cx="43" cy="40" rx="9.5" ry="5" fill="#FFFFFF" opacity="0.18" />
+          {/* نور لبهٔ ظریف */}
+          <path d="M 30.5,37.5 A 22.5,22.5 0 0 1 43,29.5" fill="none" stroke="#F5D9A0" strokeWidth="1.6" strokeLinecap="round" opacity="0.4" />
+          {/* سایهٔ زیر سر */}
+          <ellipse cx="50" cy="67" rx="14" ry="3.4" fill="#2E0913" opacity="0.3" />
           {/* وایزر */}
           <rect x="29" y="40" width="42" height="23" rx="11.5" fill={`url(#${g('visor')})`} />
-          <rect x="29" y="40" width="42" height="23" rx="11.5" fill="none" stroke="#000000" strokeOpacity="0.5" strokeWidth="0.6" />
+          <rect x="29" y="40" width="42" height="23" rx="11.5" fill="none" stroke="#2E0913" strokeOpacity="0.6" strokeWidth="0.7" />
           <path d="M34 44.5 Q50 39.5 66 44.5" fill="none" stroke="#FFFFFF" strokeOpacity="0.14" strokeWidth="2.4" strokeLinecap="round" />
 
           {/* چشم‌ها */}

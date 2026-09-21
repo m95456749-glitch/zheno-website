@@ -1,22 +1,32 @@
 // ============================================================
-// ZHINO — «استودیوی ژینو» — صحنهٔ میزبان ربات در صفحهٔ /assistant
+// ZHINO — «فروشگاه ژینو» — صحنهٔ میزبان ربات در صفحهٔ /assistant
 //
-// بازطراحی کامل فضای بالای چت (ترکیب گرمای کانسپت B + سینمایی کانسپت A):
-//   • اتاقک/استودیوی اختصاصی ربات: طاق نیش با نور گرمِ نفس‌کش، لامپ
-//     آویز با مخروط نور، ریسهٔ نور، قفسهٔ ژله، گلدان، قالیچهٔ زرشکی
-//   • میز کوچک کنار ربات با محصولات واقعی فروشگاه (ژلهٔ قالبی، کاستر،
-//     گنبد شیشه‌ای) — رنگ و نام از کاتالوگ واقعی، نه تستی
-//   • عمق سه‌بعدی: سه لایهٔ پارالاکس (دور/میانه/ربات) که با اشاره‌گر
-//     کاربر آرام جابه‌جا می‌شوند + شناوری بسیار ظریف دوربین
-//   • ربات قهرمان صحنه است: وسط طاق، تمام‌قد و کمی کوچک‌تر از قبل تا
-//     سر، تنه و دست‌ها همیشه با هم در قاب باشند — با پلک، نگاه،
-//     تنفس، سلام، فکر کردن، صحبت و حالت خوشحال
+// طراحی نهایی (بازطراحی کامل ظاهر):
+//   • ربات کاملاً رباتیک با فرم گرد، کوچک و جمع‌وجور — نه خرس،
+//     نه حیوان، نه موجود ژله‌ای:
+//       – بدنهٔ زرشکی تیره و مات با سطح نرم و لطیف
+//       – ترکیب بدنهٔ نرم با جزئیات مکانیکی ظریف (مفصل‌های طلایی
+//         شامپاینی: شانه، آرنج، مچ، مچ‌پا؛ نوار کمر، پنل سینه)
+//       – چهرهٔ دیجیتالی روی نمایشگر تیره با عمق سه‌بعدی (باز،
+//         سایهٔ داخلی، درخشش شیشه) و حالت‌های زنده و دوست‌داشتنی
+//       – دست‌های کوتاه و گرد با گیرندهٔ توپ‌شکل و بندهای طلایی
+//       – نشان کوچک و ظریف برند (حلقهٔ طلایی با مونوگرام) روی سینه
+//       – حالت ایستادهٔ آمادهٔ کمک با ژست دوستانه و حرفه‌ای
+//   • محیط: یک فروشگاه کوچک و زیبا برای محصولات ژله و کاستر —
+//     پیش‌خوان کرمی با فرم‌های قوسی ظریف، دو ردیف قفسهٔ شناور با
+//     نور طلایی زیرسقفی، تابلوی «ژینو»، لامپ آویز با مخروط نور
+//     گرم، قورقرهای دیواری، گلدان و لوازم چیدمان بامزه.
+//   • رنگ‌بندی برند: زرشکی تیره، عاجی، کرم و طلایی مات.
+//   • نورپردازی سینمایی گرم: نور کلیدی نرم پشت ربات، هالهٔ
+//     زرشکی کنترل‌شده، نور لبهٔ طلایی روی بدنه — بدون شلوغی.
+//   • بدون قاب‌های بزرگ و ویترین‌مانند: ربات کوچک است و فضای
+//     اصلی صفحه به چت و محصولات اختصاص دارد.
 //
 // حالت‌ها (از گفتگوی واقعی): idle / thinking / speaking / happy
 // محصولات صحنه فقط «جزئیات محیط»اند و در شروع گفتگو پنهان‌اند؛ بعد از
-// این‌که کاربر سراغ محصولات رفت (productsVisible) روی قفسه و میز ظاهر
-// می‌شوند و لمس هر کدام = پرسش واقعی از دستیار (اطلاعات از سیستم واقعی
-// فروشگاه). هیچ داده‌ای برای این صحنه ساخته نشده است.
+// این‌که کاربر سراغ محصولات رفت (productsVisible) روی قفسه و پیش‌خوان
+// ظاهر می‌شوند و لمس هر کدام = پرسش واقعی از دستیار (داده از کاتالوگ
+// واقعی فروشگاه). هیچ داده‌ای برای این صحنه ساخته نشده است.
 //
 // نکته‌های فنی:
 //   • انیمیشن‌ها فقط transform/opacity — بدون jank
@@ -55,25 +65,25 @@ interface Props {
   /** لمس محصولات صحنه → پرسش واقعی از دستیار */
   onAsk?: (question: string) => void;
   /**
-   * محصولاتِ صحنه (قفسه و میز) فقط وقتی کاربر سراغ محصولات رفته
-   * نمایش داده می‌شوند؛ در شروع گفتگو صحنه فقط ربات و اتاق است.
+   * محصولاتِ صحنه (قفسه و پیش‌خوان) فقط وقتی کاربر سراغ محصولات رفته
+   * نمایش داده می‌شوند؛ در شروع گفتگو صحنه فقط ربات و فروشگاه است.
    */
   productsVisible?: boolean;
 }
 
 /* ── قاب‌بندی صحنه (واحدها = واحدِ viewBox صحنه) ─────────────
-   ربات کمی کوچک‌تر شده است (۰/۷۲ → ۰/۶۳) تا سر، تنه و دست‌ها
-   همیشه با هم در قاب دیده شوند و صورت به لبهٔ بالای قاب نچسبد.
-   پنجرهٔ دید (viewBox) طوری انتخاب می‌شود که بالای سرِ ربات همیشه
-   فضا داشته باشد و در حالت گفتگو، دست‌ها پایینِ قاب بمانند. */
-const ROBOT_SCALE = 0.63;
-const ROBOT_TX = 153.2;
-const ROBOT_TY = 84.2;
+   رباتِ نهایی کوچک و جمع‌وجور است (مقیاس ۰/۵۵) تا فضای اصلیِ
+   صفحه به چت و محصولات بماند. پنجرهٔ دید (viewBox) طوری انتخاب
+   می‌شود که بالای سرِ ربات همیشه فضا داشته باشد (دیوار و قفسه‌ها)
+   و در حالت گفتگو، دست‌ها پایینِ قاب بمانند. */
+const ROBOT_SCALE = 0.55;
+const ROBOT_TX = 182;
+const ROBOT_TY = 140;
 /** مرکز صحنه — ربات دقیقاً روی همین خط می‌ایستد */
 const SCENE_CENTER_X = 380;
-/** حالت تازه: کل استودیو (دیوار، طاق، قالیچه) */
+/** حالت تازه: کل فروشگاه (دیوار، قفسه‌ها، پیش‌خوان، قالیچه) */
 const FRAME_FRESH = { y: 0, h: 680 };
-/** حالت گفتگو: رباتِ کامل (سر، تنه، دست‌ها و پاها) با حاشیهٔ امن */
+/** حالت گفتگو: رباتِ کامل با فضای کافی بالای سر و پیش‌خوان پشت سر */
 const FRAME_CHAT = { y: 80, h: 585 };
 
 /* ── پالت — همان هویت برند ── */
@@ -91,36 +101,6 @@ const GOLD_STOPS = (
     <stop offset="1" stopColor="#96752E" />
   </>
 );
-const MAROON_STOPS = (
-  <>
-    <stop offset="0" stopColor="#9A605C" />
-    <stop offset="0.55" stopColor="#804D4C" />
-    <stop offset="1" stopColor="#5E3634" />
-  </>
-);
-const CREAM_R_STOPS = (
-  <>
-    <stop offset="0" stopColor="#F9F2E4" />
-    <stop offset="0.45" stopColor="#F3E9D8" />
-    <stop offset="0.8" stopColor="#E7DAC4" />
-    <stop offset="1" stopColor="#D6C6AC" />
-  </>
-);
-const CREAM_L_STOPS = (
-  <>
-    <stop offset="0" stopColor="#F7F0E1" />
-    <stop offset="0.55" stopColor="#EFE4D1" />
-    <stop offset="1" stopColor="#DACAB0" />
-  </>
-);
-const SCREEN_STOPS = (
-  <>
-    <stop offset="0" stopColor="#272524" />
-    <stop offset="0.55" stopColor="#141312" />
-    <stop offset="1" stopColor="#060605" />
-  </>
-);
-
 const STATUS_LABEL: Record<ZhinoLoungeMode, string> = {
   idle: 'آنلاین و آمادهٔ گفتگو',
   thinking: 'در حال فکر کردن…',
@@ -376,10 +356,11 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
     const talkOp = clamp(w.speaking * 1.25, 0, 1) * clamp(gate * 2.2, 0, 1);
     const grinOp = clamp(Math.max(raise * 1.1, grinOn, happy), 0, 1);
     const smileOp = clamp(1 - talkOp * 0.92 - grinOp * 0.85, 0, 1);
-    const mrx = 13 + 8 * open;
-    const mry = 3 + 12 * open;
+    /* دهان LED متناسب با نمایشگرِ تازه (چهرهٔ جمع‌وجور) */
+    const mrx = 9 + 6 * open;
+    const mry = 2.5 + 8.5 * open;
 
-    /* بازوی چپ: فکر کردن → دست به چانه؛ صحبت → ژست؛ خوشحال → بالا */
+    /* بازوی چپ: فکر کردن → دست به سینه؛ صحبت → ژست؛ خوشحال → بالا */
     const aL =
       reduce *
         (0.9 * noise(t, 8, 0.21) +
@@ -391,33 +372,36 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
       reduce *
         (1.3 * noise(t, 10, 0.29) +
           w.speaking * 5.5 * Math.sin(t * 2 * Math.PI * 0.85 + 0.4) * gate +
-          w.thinking * -34) -
+          w.thinking * -55) -
       happy * (26 + 7 * Math.sin(t * 6.2));
-    const aR = reduce * (0.9 * noise(t, 11, 0.23) + w.thinking * 3) - raise * 107 - happy * (10 + 5 * bounceEnv);
+    const aR = reduce * (0.9 * noise(t, 11, 0.23) + w.thinking * 3) - raise * 118 - happy * (10 + 5 * bounceEnv);
     const fR =
       reduce * (1.3 * noise(t, 12, 0.31)) +
-      raise * (-140 + 16 * Math.sin(t * 2 * Math.PI * 1.9 + 0.7)) -
+      raise * (-150 + 16 * Math.sin(t * 2 * Math.PI * 1.9 + 0.7)) -
       happy * (22 + 7 * Math.sin(t * 6.2 + 1.3));
 
+    /* لولاها با هندسهٔ رباتِ گرد و جمع‌وجورِ تازه تنظیم شده‌اند:
+       تنه (پایین: 360،780)، سر (گردن: 360،520)، آنتن (پایه: 268،244)،
+       چشم‌ها (خط چشم: 360،358)، شانه‌ها (243/477،590)، آرنج‌ها (222/498،668) */
     els.torso?.setAttribute(
       'transform',
-      `translate(${torsoTx.toFixed(2)} ${torsoTy.toFixed(2)}) rotate(${torsoRot.toFixed(2)} 360 662) translate(360 662) scale(1 ${br.toFixed(4)}) translate(-360 -662)`,
+      `translate(${torsoTx.toFixed(2)} ${torsoTy.toFixed(2)}) rotate(${torsoRot.toFixed(2)} 360 780) translate(360 780) scale(1 ${br.toFixed(4)}) translate(-360 -780)`,
     );
     els.head?.setAttribute(
       'transform',
-      `translate(${hx.toFixed(2)} ${hy.toFixed(2)}) rotate(${hr.toFixed(2)} 360 400)`,
+      `translate(${hx.toFixed(2)} ${hy.toFixed(2)}) rotate(${hr.toFixed(2)} 360 520)`,
     );
-    els.antenna?.setAttribute('transform', `rotate(${antA.toFixed(2)} 136 236)`);
+    els.antenna?.setAttribute('transform', `rotate(${antA.toFixed(2)} 268 244)`);
     els.eyes?.setAttribute(
       'transform',
-      `translate(${gx.toFixed(2)} ${(gy + eyeLift).toFixed(2)}) translate(360 254) scale(1 ${(bs * squint).toFixed(3)}) translate(-360 -254)`,
+      `translate(${gx.toFixed(2)} ${(gy + eyeLift).toFixed(2)}) translate(360 358) scale(1 ${(bs * squint).toFixed(3)}) translate(-360 -358)`,
     );
-    els.armL?.setAttribute('transform', `rotate(${aL.toFixed(2)} 204 472)`);
-    els.foreL?.setAttribute('transform', `rotate(${fL.toFixed(2)} 185 557)`);
-    els.elbowL?.setAttribute('transform', `rotate(${aL.toFixed(2)} 204 472) rotate(8 185 557)`);
-    els.armR?.setAttribute('transform', `rotate(${aR.toFixed(2)} 516 472)`);
-    els.foreR?.setAttribute('transform', `rotate(${fR.toFixed(2)} 535 557)`);
-    els.elbowR?.setAttribute('transform', `rotate(${aR.toFixed(2)} 516 472) rotate(-8 535 557)`);
+    els.armL?.setAttribute('transform', `rotate(${aL.toFixed(2)} 243 590)`);
+    els.foreL?.setAttribute('transform', `rotate(${fL.toFixed(2)} 222 668)`);
+    els.elbowL?.setAttribute('transform', `rotate(${aL.toFixed(2)} 243 590) rotate(8 222 668)`);
+    els.armR?.setAttribute('transform', `rotate(${aR.toFixed(2)} 477 590)`);
+    els.foreR?.setAttribute('transform', `rotate(${fR.toFixed(2)} 498 668)`);
+    els.elbowR?.setAttribute('transform', `rotate(${aR.toFixed(2)} 477 590) rotate(-8 498 668)`);
     els.smile?.setAttribute('opacity', smileOp.toFixed(3));
     els.talk?.setAttribute('opacity', talkOp.toFixed(3));
     els.grin?.setAttribute('opacity', grinOp.toFixed(3));
@@ -426,7 +410,7 @@ function buildLoungeEngine(root: SVGSVGElement | null, room: HTMLElement | null)
     els.talkDots?.setAttribute('rx', mrx.toFixed(2));
     els.talkDots?.setAttribute('ry', mry.toFixed(2));
 
-    /* پارالاکس سه‌لایه — عمق استودیو */
+    /* پارالاکس سه‌لایه — عمق فروشگاه */
     par.x += (ptrT.x - par.x) * Math.min(1, dt * 2.1);
     par.y += (ptrT.y - par.y) * Math.min(1, dt * 2.1);
     const dx = reduce * (par.x + 0.18 * noise(t, 13, 0.12));
@@ -494,7 +478,7 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
   const [bubble, setBubble] = useState<{ text: string; dots?: boolean }>({ text: '' });
   const typeTimerRef = useRef<number | null>(null);
 
-  /* محصولات واقعی فروشگاه برای قفسه و میز استودیو */
+  /* محصولات واقعی فروشگاه برای قفسه و پیش‌خوان */
   const catalog = useCatalog();
   const shelf = useMemo(() => {
     const jellies = catalog.filter((p) => p.category === 'jelly').slice(0, 3);
@@ -586,7 +570,7 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     const layout = () => {
       const rr = room.getBoundingClientRect();
       if (rr.width < 2 || rr.height < 2) return;
-      /* حالت تازه: کل استودیو؛ حالت گفتگو: قابِ نیم‌تنه با فضا و
+      /* حالت تازه: کل فروشگاه؛ حالت گفتگو: قابِ نیم‌تنه با فضا و
          حاشیهٔ کافی بالای سرِ ربات (صورت هرگز کراپ نمی‌شود).
          همیشه viewBox روی مرکز صحنه قفل است، پس ربات وسط می‌ماند. */
       const frame = fresh ? FRAME_FRESH : FRAME_CHAT;
@@ -666,93 +650,188 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
     [],
   );
 
-  /** شیشهٔ ژله قفسه (جزئیات محیط — رنگ از کاتالوگ واقعی) */
-  const shelfJar = (key: string, x: number, color: string, label: string, delay?: number) => (
-    <g key={key} transform={`translate(${x} 86)`}>
+  /** شیشهٔ ژلهٔ قفسه (جزئیات محیط — رنگ از کاتالوگ واقعی) */
+  const shelfJar = (key: string, x: number, shelfY: number, color: string, label: string, delay?: number) => (
+    <g key={key} transform={`translate(${x} ${shelfY - 63})`}>
       <g className="zl-jar zl-wobble zl-tap" data-label={label} style={delay ? { animationDelay: `${delay}s` } : undefined} onClick={onJarClick}>
         <g className="zl-jelly-inner">
-          <rect x="0" y="26" width="42" height="38" rx="9" fill="rgba(255,255,255,.5)" stroke="#D9C6A6" strokeWidth="1.4" />
-          <rect x="3.2" y="33" width="35.6" height="27.5" rx="6.5" fill={color} />
-          <ellipse cx="14" cy="41" rx="6" ry="9" fill="#FFFFFF" opacity=".3" />
-          <rect x="-2" y="18.5" width="46" height="11" rx="5.5" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.1" />
-          <circle cx="21" cy="24" r="2.4" fill="url(#zl-gold)" />
+          <ellipse cx="21" cy="62.5" rx="16.5" ry="2.6" fill="#421019" opacity=".14" />
+          <rect x="2.5" y="21" width="37" height="40" rx="10" fill="rgba(255,255,255,.55)" stroke="#D9C6A6" strokeWidth="1.3" />
+          <rect x="5.5" y="29" width="31" height="29.5" rx="7.5" fill={color} />
+          <rect x="5.5" y="29" width="31" height="8" rx="4" fill="#FFFFFF" opacity=".14" />
+          <ellipse cx="12.5" cy="39" rx="4.6" ry="8" fill="#FFFFFF" opacity=".3" />
+          <rect x="0" y="11.5" width="42" height="12.5" rx="6" fill="#F5EBD7" stroke="#D9C6A6" strokeWidth="1.1" />
+          <rect x="2.5" y="13.5" width="37" height="3" rx="1.5" fill="#E4D5B8" />
+          <circle cx="21" cy="19" r="2.1" fill="url(#zl-gold)" />
         </g>
       </g>
     </g>
   );
 
+  /** تختهٔ قفسهٔ شناور با پراکندگی طلایی زیر سقف (دکور فروشگاه) */
+  const shelfBoard = (x: number, y: number) => (
+    <g>
+      <rect x={x} y={y} width="205" height="11" rx="5.5" fill="#E0C69E" />
+      <rect x={x + 4} y={y + 10} width="197" height="3.5" rx="1.75" fill="#C8A97B" opacity=".65" />
+      <rect x={x + 14} y={y + 11} width="8" height="18" rx="4" fill="url(#zl-goldV)" opacity=".9" />
+      <rect x={x + 183} y={y + 11} width="8" height="18" rx="4" fill="url(#zl-goldV)" opacity=".9" />
+      <rect x={x + 6} y={y + 13} width="193" height="16" fill="url(#zl-shelfGlow)" opacity=".55" />
+    </g>
+  );
+
+  /** لیوان کاسترِ چیدمانی (کرمی — بدون دادهٔ محصول) */
+  const custardCup = (x: number, y: number, s = 1) => (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <path d="M -12,0 L -9.5,-13 L 9.5,-13 L 12,0 Z" fill="#F4E3BC" stroke="#D9B98A" strokeWidth="0.8" />
+      <ellipse cx="0" cy="-13" rx="9.5" ry="3" fill="#D9A05B" />
+      <ellipse cx="0" cy="-13.6" rx="6.5" ry="2" fill="#C98F4E" opacity=".8" />
+      <path d="M -8,-3 L 8,-3" stroke="#E4CFA4" strokeWidth="0.8" opacity=".7" />
+    </g>
+  );
+
+  /** گلدان کوچک (دکور بامزهٔ فروشگاه) */
+  const plant = (x: number, y: number, s = 1) => (
+    <g transform={`translate(${x} ${y}) scale(${s})`}>
+      <g className="zl-leaf">
+        <path d="M 0,-26 C -10,-38 -12,-52 -4,-64 C 2,-50 2,-36 2,-26 Z" fill="#8FAF6C" />
+        <path d="M 1,-26 C 10,-36 14,-48 8,-60 C 0,-48 -2,-36 -1,-26 Z" fill="#7CA653" />
+        <path d="M 0,-28 C 0,-40 1,-50 4,-58" stroke="#6B8F49" strokeWidth="1.2" fill="none" opacity=".6" />
+      </g>
+      <path d="M -11,-26 L 11,-26 L 8,0 L -8,0 Z" fill="#9A4A55" />
+      <rect x="-12" y="-29" width="24" height="5" rx="2.5" fill="#B14A57" />
+    </g>
+  );
+
+  /** خطِ پنل‌بندی ظریف دیوار (صحنه ۷۶۰px + حاشیه برای قاب‌های باریک) */
+  const wallPanels = useMemo(
+    () => Array.from({ length: 21 }, (_, i) => -380 + i * 95),
+    [],
+  );
+
   return (
-    <section className={`zl-hero${fresh ? '' : ' is-compact'}`} aria-label="استودیوی ربات ژینو">
+    <section className={`zl-hero${fresh ? '' : ' is-compact'}`} aria-label="فروشگاه دستیار ژینو">
       <div className="zl-room" ref={roomRef}>
         <svg
           ref={svgRef}
           viewBox="0 0 760 680"
           role="img"
-          aria-label="استودیوی گرم دستیار ژینو با ربات زنده، قفسهٔ ژله و میز محصولات"
+          aria-label="فروشگاه گرم ژینو: ربات دستیار زرشکیِ کوچک جلوی پیش‌خوان، قفسه‌های ژله و کاستر و نور طلایی"
           onClick={onRoomClick}
         >
           <defs>
-            {/* userSpaceOnUse: با بزرگ‌تر شدن مستطیل‌ها (پوششِ لبه‌های
-                قابِ باریک موبایل) گرادیان ثابت می‌ماند */}
-            <linearGradient id="zl-wall" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="574">
-              <stop offset="0" stopColor="#F7EEDF" />
-              <stop offset="1" stopColor="#EEDFC6" />
+            {/* ── فضای فروشگاه ── */}
+            <linearGradient id="zl-wall" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="520">
+              <stop offset="0" stopColor="#F9F1E2" />
+              <stop offset="1" stopColor="#EBD9BD" />
             </linearGradient>
-            <linearGradient id="zl-band" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="86">
-              <stop offset="0" stopColor="#F0DCD6" />
-              <stop offset="1" stopColor="#EBD0C8" />
+            <linearGradient id="zl-floor" gradientUnits="userSpaceOnUse" x1="0" y1="520" x2="0" y2="680">
+              <stop offset="0" stopColor="#E9D8B8" />
+              <stop offset="1" stopColor="#D9C29B" />
             </linearGradient>
-            <radialGradient id="zl-niche" cx="50%" cy="30%" r="76%">
-              <stop offset="0" stopColor="#FCEFD6" />
-              <stop offset="0.6" stopColor="#F4E2C4" />
-              <stop offset="1" stopColor="#E7CFA9" />
+            <linearGradient id="zl-counterFront" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#F5EBD6" />
+              <stop offset="1" stopColor="#E5D2B2" />
+            </linearGradient>
+            <linearGradient id="zl-tableTop" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#FCF5E7" />
+              <stop offset="1" stopColor="#E9D6B6" />
+            </linearGradient>
+            <linearGradient id="zl-shelfGlow" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="rgba(234,208,151,.5)" />
+              <stop offset="1" stopColor="rgba(234,208,151,0)" />
+            </linearGradient>
+            <linearGradient id="zl-plaqueG" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#FBF4E4" />
+              <stop offset="1" stopColor="#EFDFC4" />
+            </linearGradient>
+
+            {/* ── نورپردازی سینمایی گرم ── */}
+            <radialGradient id="zl-keyGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stopColor="rgba(255,232,176,.55)" />
+              <stop offset="0.55" stopColor="rgba(255,226,160,.2)" />
+              <stop offset="1" stopColor="rgba(255,226,160,0)" />
             </radialGradient>
-            {/* سایهٔ لبه‌های داخلی طاق — حسِ فرورفتگیِ واقعی */}
-            <radialGradient id="zl-nicheShade" cx="50%" cy="26%" r="82%">
-              <stop offset="0" stopColor="rgba(255,240,210,0)" />
-              <stop offset="0.55" stopColor="rgba(160,120,70,0.04)" />
-              <stop offset="1" stopColor="rgba(118,82,50,0.24)" />
+            <radialGradient id="zl-bulbG" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stopColor="#FFE9B8" />
+              <stop offset="0.55" stopColor="rgba(255,222,150,.55)" />
+              <stop offset="1" stopColor="rgba(255,222,150,0)" />
             </radialGradient>
-            {/* سایهٔ زیر تاقچهٔ بالا — عمقِ قاب بالای ربات */}
-            <linearGradient id="zl-nicheTop" gradientUnits="userSpaceOnUse" x1="0" y1="138" x2="0" y2="352">
-              <stop offset="0" stopColor="rgba(112,76,46,.3)" />
-              <stop offset="1" stopColor="rgba(112,76,46,0)" />
-            </linearGradient>
-            {/* مولدینگ طلاییِ برجسته دور طاق */}
-            <linearGradient id="zl-mold" gradientUnits="userSpaceOnUse" x1="0" y1="122" x2="0" y2="572">
-              <stop offset="0" stopColor="#F3E1B0" />
-              <stop offset="0.42" stopColor="#C9A55F" />
-              <stop offset="1" stopColor="#8A6A2C" />
-            </linearGradient>
-            <linearGradient id="zl-floor" gradientUnits="userSpaceOnUse" x1="0" y1="560" x2="0" y2="680">
-              <stop offset="0" stopColor="#EAD9BC" />
-              <stop offset="1" stopColor="#DCC49F" />
-            </linearGradient>
+            <radialGradient id="zl-warmCone" cx="50%" cy="0%" r="100%">
+              <stop offset="0" stopColor="rgba(255,224,150,.45)" />
+              <stop offset="0.6" stopColor="rgba(255,224,150,.12)" />
+              <stop offset="1" stopColor="rgba(255,224,150,0)" />
+            </radialGradient>
+            <radialGradient id="zl-headHalo" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stopColor="rgba(240,216,158,.5)" />
+              <stop offset="0.6" stopColor="rgba(240,216,158,.18)" />
+              <stop offset="1" stopColor="rgba(240,216,158,0)" />
+            </radialGradient>
+            <radialGradient id="zl-wineHalo" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stopColor="rgba(122,42,54,.16)" />
+              <stop offset="1" stopColor="rgba(122,42,54,0)" />
+            </radialGradient>
+
+            {/* ── فلز و جنس ── */}
             <linearGradient id="zl-goldV" x1="0" y1="0" x2="0" y2="1">
               {GOLD_V_STOPS}
             </linearGradient>
             <radialGradient id="zl-gold" cx="35%" cy="30%" r="85%">
               {GOLD_STOPS}
             </radialGradient>
-            <radialGradient id="zl-maroon" cx="35%" cy="30%" r="85%">
-              {MAROON_STOPS}
-            </radialGradient>
-            <radialGradient id="zl-creamR" cx="35%" cy="28%" r="80%">
-              {CREAM_R_STOPS}
-            </radialGradient>
-            <linearGradient id="zl-creamL" x1="0" y1="0" x2="1" y2="0">
-              {CREAM_L_STOPS}
+            <linearGradient id="zl-shade" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#7E3A48" />
+              <stop offset="1" stopColor="#4E1A28" />
             </linearGradient>
-            <linearGradient id="zl-creamLr" x1="1" y1="0" x2="0" y2="0">
-              {CREAM_L_STOPS}
+            <linearGradient id="zl-glass" x1="0" y1="0" x2="0.6" y2="1">
+              <stop offset="0" stopColor="rgba(255,255,255,.55)" />
+              <stop offset="0.5" stopColor="rgba(255,255,255,.16)" />
+              <stop offset="1" stopColor="rgba(255,255,255,.05)" />
             </linearGradient>
-            <radialGradient id="zl-creamPod" cx="35%" cy="30%" r="80%">
-              <stop offset="0" stopColor="#F9F2E4" />
-              <stop offset="1" stopColor="#DFD0B6" />
+
+            {/* ── ربات: زرشکی تیره و مات ── */}
+            <linearGradient id="zl-body" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#8A4653" />
+              <stop offset="0.45" stopColor="#71313B" />
+              <stop offset="1" stopColor="#4A1826" />
+            </linearGradient>
+            <radialGradient id="zl-bodyR" cx="38%" cy="30%" r="80%">
+              <stop offset="0" stopColor="#95505E" />
+              <stop offset="0.55" stopColor="#71313B" />
+              <stop offset="1" stopColor="#4A1826" />
             </radialGradient>
-            <radialGradient id="zl-screen" cx="42%" cy="34%" r="85%">
-              {SCREEN_STOPS}
+            <linearGradient id="zl-bodyL" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0" stopColor="#8F4C5B" />
+              <stop offset="0.6" stopColor="#66303F" />
+              <stop offset="1" stopColor="#4A1826" />
+            </linearGradient>
+            <linearGradient id="zl-leg" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#55202E" />
+              <stop offset="1" stopColor="#3A0F1B" />
+            </linearGradient>
+            <linearGradient id="zl-foot" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#4A1826" />
+              <stop offset="1" stopColor="#2E0913" />
+            </linearGradient>
+            <linearGradient id="zl-bezel" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0" stopColor="#4E1A28" />
+              <stop offset="1" stopColor="#350E19" />
+            </linearGradient>
+            <radialGradient id="zl-screen" cx="46%" cy="32%" r="85%">
+              <stop offset="0" stopColor="#26201F" />
+              <stop offset="0.55" stopColor="#120D0E" />
+              <stop offset="1" stopColor="#070505" />
             </radialGradient>
+            <radialGradient id="zl-eyeGlow" cx="50%" cy="50%" r="50%">
+              <stop offset="0" stopColor="rgba(255,214,138,.5)" />
+              <stop offset="0.7" stopColor="rgba(255,214,138,.18)" />
+              <stop offset="1" stopColor="rgba(255,214,138,0)" />
+            </radialGradient>
+            <radialGradient id="zl-eyeCore" cx="42%" cy="36%" r="75%">
+              <stop offset="0" stopColor="#FFF6DC" />
+              <stop offset="0.5" stopColor="#FFDF9E" />
+              <stop offset="1" stopColor="#F0B465" />
+            </radialGradient>
+
             <filter id="zl-b4" x="-60%" y="-60%" width="220%" height="220%">
               <feGaussianBlur stdDeviation="4" />
             </filter>
@@ -762,284 +841,199 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
             <filter id="zl-b16" x="-80%" y="-80%" width="260%" height="260%">
               <feGaussianBlur stdDeviation="16" />
             </filter>
-            <radialGradient id="zl-bulbG" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="#FFE9B8" />
-              <stop offset="0.55" stopColor="rgba(255,222,150,.55)" />
-              <stop offset="1" stopColor="rgba(255,222,150,0)" />
-            </radialGradient>
-            <radialGradient id="zl-warmCone" cx="50%" cy="0%" r="100%">
-              <stop offset="0" stopColor="rgba(255,224,150,.5)" />
-              <stop offset="0.6" stopColor="rgba(255,224,150,.14)" />
-              <stop offset="1" stopColor="rgba(255,224,150,0)" />
-            </radialGradient>
-            <radialGradient id="zl-keyGlow" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="rgba(255,232,176,.6)" />
-              <stop offset="0.55" stopColor="rgba(255,226,160,.22)" />
-              <stop offset="1" stopColor="rgba(255,226,160,0)" />
-            </radialGradient>
-            <radialGradient id="zl-headHalo" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="rgba(240,216,158,.55)" />
-              <stop offset="0.6" stopColor="rgba(240,216,158,.2)" />
-              <stop offset="1" stopColor="rgba(240,216,158,0)" />
-            </radialGradient>
-            <radialGradient id="zl-wineHalo" cx="50%" cy="50%" r="50%">
-              <stop offset="0" stopColor="rgba(122,42,54,.18)" />
-              <stop offset="1" stopColor="rgba(122,42,54,0)" />
-            </radialGradient>
-            <linearGradient id="zl-glass" x1="0" y1="0" x2="0.6" y2="1">
-              <stop offset="0" stopColor="rgba(255,255,255,.55)" />
-              <stop offset="0.5" stopColor="rgba(255,255,255,.16)" />
-              <stop offset="1" stopColor="rgba(255,255,255,.05)" />
-            </linearGradient>
-            <linearGradient id="zl-tableTop" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0" stopColor="#FCF5E7" />
-              <stop offset="1" stopColor="#E9D6B6" />
-            </linearGradient>
             <clipPath id="zl-headClip">
-              <ellipse cx="360" cy="262" rx="220" ry="134" />
-              <rect x="150" y="196" width="420" height="132" rx="66" />
+              <circle cx="360" cy="372" r="158" />
             </clipPath>
             <clipPath id="zl-torsoClip">
-              <path d="M 212,470 C 212,446 246,432 292,428 C 330,424 390,424 428,428 C 474,433 508,446 508,470 C 514,508 516,554 506,592 C 496,638 434,662 360,662 C 286,662 224,638 214,592 C 204,554 206,508 212,470 Z" />
+              <rect x="245" y="545" width="230" height="235" rx="98" />
             </clipPath>
           </defs>
 
-          {/* ═══ لایهٔ دور: دیوار، طاق، نورها، قفسه، گلدان ═══ */}
+          {/* ═══ لایهٔ دور: دیوار، نور، تابلو، قفسه‌ها ═══ */}
           <g id="zl-far">
-            {/* دیوار/کف تا دور دست کشیده شده‌اند تا در قاب‌های خیلی
+            {/* دیوار و کف تا دور دست کشیده شده‌اند تا در قاب‌های خیلی
                 باریک (موبایل) هیچ نوارِ خالی‌ای دیده نشود */}
-            <rect x="-1400" y="-600" width="4200" height="1174" fill="url(#zl-wall)" />
-            <rect x="-1400" width="4200" height="86" fill="url(#zl-band)" />
-            <rect x="-1400" y="86" width="4200" height="6" fill="url(#zl-goldV)" />
-            <rect x="-1400" y="92" width="4200" height="2" fill="#8F6E2B" opacity=".35" />
-            <rect x="-1400" y="560" width="4200" height="900" fill="url(#zl-floor)" />
-            <rect x="-900" y="556" width="3400" height="7" fill="#DFC69F" opacity=".8" />
-            <rect x="-900" y="563" width="3400" height="2" fill="#CDB287" opacity=".5" />
+            <rect x="-1400" y="-600" width="4200" height="1120" fill="url(#zl-wall)" />
+            <rect x="-1400" y="520" width="4200" height="1200" fill="url(#zl-floor)" />
+
+            {/* پنل‌بندی ظریف دیوار (خط‌های عمودی کم‌رنگ) */}
+            <g stroke="#C9A87C" strokeWidth="1.4" opacity=".12">
+              {wallPanels.map((x) => (
+                <line key={x} x1={x} y1="78" x2={x} y2="512" />
+              ))}
+            </g>
+            {/* خط طلایی ماتِ بالای دیوار */}
+            <rect x="-1400" y="56" width="4200" height="3" fill="url(#zl-goldV)" opacity=".5" />
+            <rect x="-1400" y="59" width="4200" height="2.5" fill="#A8814A" opacity=".3" />
+
+            {/* نوار تاج‌بندی و خط کف */}
+            <rect x="-1400" y="511" width="4200" height="2" fill="url(#zl-goldV)" opacity=".55" />
+            <rect x="-1400" y="512" width="4200" height="8" fill="#DCC49F" />
+            <rect x="-1400" y="519" width="4200" height="2" fill="#C9AC82" opacity=".6" />
 
             {/* نور کلیدی گرم — آرام جابه‌جا می‌شود */}
-            <ellipse id="zl-keylight" cx="380" cy="300" rx="290" ry="250" fill="url(#zl-keyGlow)" />
+            <ellipse id="zl-keylight" cx="380" cy="296" rx="300" ry="245" fill="url(#zl-keyGlow)" />
 
-            {/* طاق نیش پشت ربات — قابِ سه‌بعدی: فرورفتگی، مولدینگ
-                برجسته، سایهٔ زیر تاقچه و کلیدسنگ طلایی */}
-            <g>
-              {/* بدنهٔ فرورفتهٔ طاق */}
-              <path d="M 214,566 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,566 Z" fill="url(#zl-niche)" />
-              {/* سایهٔ لبه‌های داخلی → عمقِ فرورفتگی */}
-              <path d="M 214,566 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,566 Z" fill="url(#zl-nicheShade)" />
-              {/* سایهٔ زیر تاقچهٔ بالا → قاب بالای سرِ ربات برجسته‌تر */}
-              <path d="M 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,344 Q 380,300 214,344 Z" fill="url(#zl-nicheTop)" />
-              <path
-                d="M 214,560 L 214,300 Q 214,138 380,138 Q 546,138 546,300 L 546,560"
-                fill="none"
-                stroke="#D8BC93"
-                strokeWidth="3.4"
-                opacity=".85"
-              />
-              <path
-                d="M 227,560 L 227,302 Q 227,151 380,151 Q 533,151 533,302 L 533,560"
-                fill="none"
-                stroke="#C9A55F"
-                strokeWidth="1.4"
-                opacity=".5"
-                strokeDasharray="1 7"
-                strokeLinecap="round"
-              />
-              {/* مولدینگ برجستهٔ دور طاق + لبهٔ تیره برای جداشدن از دیوار */}
-              <path
-                d="M 205,572 L 205,300 Q 205,128 380,128 Q 555,128 555,300 L 555,572"
-                fill="none"
-                stroke="url(#zl-mold)"
-                strokeWidth="13"
-                strokeLinecap="round"
-              />
-              <path
-                d="M 205,572 L 205,300 Q 205,128 380,128 Q 555,128 555,300 L 555,572"
-                fill="none"
-                stroke="rgba(94,66,30,.32)"
-                strokeWidth="1.6"
-              />
-              {/* هایلایتِ سمت نور (چپ) و سایهٔ سمت راست → برجستگیِ قاب */}
-              <path d="M 214,552 L 214,302 Q 214,140 380,140" fill="none" stroke="rgba(255,255,255,.7)" strokeWidth="3" opacity=".5" />
-              <path d="M 546,552 L 546,302 Q 546,140 380,140" fill="none" stroke="rgba(118,82,50,.3)" strokeWidth="3.4" />
-              {/* کلیدسنگِ طلاییِ بالای طاق */}
-              <g>
-                <path d="M 380,116 L 397,138 L 380,160 L 363,138 Z" fill="url(#zl-gold)" />
-                <path d="M 380,123 L 391,138 L 380,153 L 369,138 Z" fill="url(#zl-maroon)" />
-                <circle cx="380" cy="138" r="3.2" fill="url(#zl-gold)" />
-              </g>
-              <ellipse cx="380" cy="320" rx="158" ry="196" fill="rgba(255,232,178,.42)" filter="url(#zl-b16)" />
-              <path
-                d="M 262,200 C 246,300 248,430 270,532"
-                stroke="rgba(255,255,255,.5)"
-                strokeWidth="6"
-                fill="none"
-                strokeLinecap="round"
-                opacity=".35"
-                filter="url(#zl-b4)"
-              />
-              <path
-                d="M 500,212 C 514,300 513,420 494,520"
-                stroke="rgba(255,255,255,.38)"
-                strokeWidth="4"
-                fill="none"
-                strokeLinecap="round"
-                opacity=".22"
-                filter="url(#zl-b4)"
-              />
+            {/* دو قورقر دیواری — عمق و تقارن فروشگاه */}
+            <g className="zl-lamp zl-lamp-side">
+              <rect x="66" y="176" width="16" height="34" rx="8" fill="url(#zl-goldV)" />
+              <circle cx="74" cy="214" r="5.5" fill="#FFEDBE" />
+              <ellipse className="zl-sconceGlow" cx="74" cy="216" rx="14" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
+              <polygon className="zl-cone" points="74,218 44,330 104,330" fill="url(#zl-warmCone)" opacity=".22" />
+            </g>
+            <g className="zl-lamp zl-lamp-side">
+              <rect x="678" y="176" width="16" height="34" rx="8" fill="url(#zl-goldV)" />
+              <circle cx="686" cy="214" r="5.5" fill="#FFEDBE" />
+              <ellipse className="zl-sconceGlow" cx="686" cy="216" rx="14" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
+              <polygon className="zl-cone" points="686,218 656,330 716,330" fill="url(#zl-warmCone)" opacity=".22" />
             </g>
 
-            {/* ریسهٔ نور روی طاق */}
-            <path d="M 214,268 Q 220,162 380,148 Q 540,162 546,268" fill="none" stroke="#C9A55F" strokeWidth="1.6" opacity=".55" />
-            <g fill="#F2C879">
-              <circle className="zl-bulb" cx="242" cy="216" r="4" />
-              <circle className="zl-bulb" cx="270" cy="176" r="4" />
-              <circle className="zl-bulb" cx="320" cy="156" r="4" />
-              <circle className="zl-bulb" cx="380" cy="150" r="4.6" />
-              <circle className="zl-bulb" cx="440" cy="156" r="4" />
-              <circle className="zl-bulb" cx="490" cy="176" r="4" />
-              <circle className="zl-bulb" cx="518" cy="216" r="4" />
-            </g>
-            <g fill="url(#zl-bulbG)" opacity=".85">
-              <circle className="zl-bulb" cx="242" cy="216" r="10" />
-              <circle className="zl-bulb" cx="270" cy="176" r="10" />
-              <circle className="zl-bulb" cx="320" cy="156" r="10" />
-              <circle className="zl-bulb" cx="380" cy="150" r="13" />
-              <circle className="zl-bulb" cx="440" cy="156" r="10" />
-              <circle className="zl-bulb" cx="490" cy="176" r="10" />
-              <circle className="zl-bulb" cx="518" cy="216" r="10" />
-            </g>
-
-            {/* لامپ آویز با مخروط نور روی ربات */}
+            {/* لامپ آویز با مخروط نور گرم روی ربات */}
             <g className="zl-lamp">
-              <line x1="380" y1="0" x2="380" y2="44" stroke="#8A6A2C" strokeWidth="2.4" />
-              <path d="M 350,76 Q 350,46 380,46 Q 410,46 410,76 Z" fill="#71313B" />
-              <path d="M 350,76 Q 350,46 380,46 Q 410,46 410,76" fill="none" stroke="#5A1725" strokeWidth="2" />
-              <path d="M 354,70 Q 358,52 380,50" stroke="#A9706C" strokeWidth="2" fill="none" opacity=".6" />
-              <rect x="346" y="74" width="68" height="7" rx="3.5" fill="url(#zl-goldV)" />
-              <ellipse className="zl-lampGlow" cx="380" cy="86" rx="18" ry="10" fill="#FFE2A0" filter="url(#zl-b4)" />
-              <circle cx="380" cy="85" r="5.5" fill="#FFEDBE" />
-              <polygon className="zl-cone" points="380,88 262,560 498,560" fill="url(#zl-warmCone)" opacity=".44" />
-              <polygon className="zl-cone" points="380,88 330,560 430,560" fill="url(#zl-warmCone)" opacity=".32" />
+              <line x1="380" y1="0" x2="380" y2="62" stroke="#8A6A2C" strokeWidth="2.4" />
+              <circle cx="380" cy="64" r="5" fill="url(#zl-goldV)" />
+              <path d="M 348,100 Q 348,64 380,64 Q 412,64 412,100 Z" fill="url(#zl-shade)" />
+              <path d="M 354,74 Q 358,66 372,65" stroke="#A9706C" strokeWidth="1.6" fill="none" opacity=".5" />
+              <rect x="344" y="98" width="72" height="7" rx="3.5" fill="url(#zl-goldV)" />
+              <ellipse className="zl-lampGlow" cx="380" cy="110" rx="20" ry="10" fill="#FFE2A0" filter="url(#zl-b4)" />
+              <circle cx="380" cy="108" r="5" fill="#FFEDBE" />
+              <polygon className="zl-cone" points="380,112 268,520 492,520" fill="url(#zl-warmCone)" opacity=".4" />
+              <polygon className="zl-cone" points="380,112 330,520 430,520" fill="url(#zl-warmCone)" opacity=".3" />
             </g>
 
-            {/* دو چراغ آویز کناری — عمق و تقارن استودیو */}
-            <g className="zl-lamp zl-lamp-side">
-              <line x1="64" y1="0" x2="64" y2="196" stroke="#8A6A2C" strokeWidth="1.8" opacity=".8" />
-              <path d="M 46,222 Q 46,198 64,198 Q 82,198 82,222 Z" fill="#71313B" />
-              <rect x="43" y="220" width="42" height="5" rx="2.5" fill="url(#zl-goldV)" />
-              <ellipse className="zl-sconceGlow" cx="64" cy="230" rx="15" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
-              <circle cx="64" cy="229" r="4.2" fill="#FFEDBE" />
-              <polygon className="zl-cone" points="64,232 30,470 98,470" fill="url(#zl-warmCone)" opacity=".35" />
-            </g>
-            <g className="zl-lamp zl-lamp-side">
-              <line x1="696" y1="0" x2="696" y2="248" stroke="#8A6A2C" strokeWidth="1.8" opacity=".8" />
-              <path d="M 678,274 Q 678,250 696,250 Q 714,250 714,274 Z" fill="#71313B" />
-              <rect x="675" y="272" width="42" height="5" rx="2.5" fill="url(#zl-goldV)" />
-              <ellipse className="zl-sconceGlow" cx="696" cy="282" rx="15" ry="9" fill="#FFE2A0" filter="url(#zl-b4)" />
-              <circle cx="696" cy="281" r="4.2" fill="#FFEDBE" />
-              <polygon className="zl-cone" points="696,284 662,520 730,520" fill="url(#zl-warmCone)" opacity=".35" />
-            </g>
-
-            {/* قفسهٔ ژله — تختهٔ قفسه همیشه هست (دکور اتاق)، اما
-                شیشه‌های محصول فقط وقتی کاربر سراغ محصولات رفت ظاهر
-                می‌شوند تا شروع گفتگو فقط ربات و خوش‌آمدگویی باشد */}
+            {/* تابلوی کوچک «ژینو» — بدون شلوغی، فقط هویت */}
             <g>
-              <rect x="86" y="150" width="176" height="12" rx="6" fill="#E0C69E" />
-              <rect x="86" y="160" width="176" height="5" rx="2.5" fill="#C8A97B" opacity=".7" />
-              <rect x="100" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
-              <rect x="238" y="162" width="10" height="22" rx="4" fill="url(#zl-goldV)" />
-              <g className={`zl-products zl-shelf-jars${productsVisible ? ' is-on' : ''}`}>
-                {shelf.jellies.map((p, i) => (
-                  <g key={p.id} className="zl-product-item" style={{ transitionDelay: `${(i * 0.08).toFixed(2)}s` }}>
-                    {shelfJar(p.id, 100 + i * 52, shelf.shelfColors[i], p.shortName, i * 1.7)}
-                  </g>
-                ))}
-              </g>
+              <line x1="380" y1="105" x2="380" y2="124" stroke="#8A6A2C" strokeWidth="1.6" />
+              <rect x="334" y="124" width="92" height="42" rx="14" fill="url(#zl-plaqueG)" stroke="url(#zl-goldV)" strokeWidth="1.8" />
+              <rect x="338.5" y="128.5" width="83" height="33" rx="10.5" fill="none" stroke="#C9A55F" strokeWidth="0.8" opacity=".5" />
+              <circle cx="344" cy="145" r="1.6" fill="#C9A55F" />
+              <circle cx="416" cy="145" r="1.6" fill="#C9A55F" />
+              <text x="380" y="153" textAnchor="middle" fontFamily="Vazirmatn, sans-serif" fontSize="21" fontWeight="700" fill="#6B2836">
+                ژینو
+              </text>
             </g>
 
-            {/* گلدان سمت راست */}
-            <g transform="translate(-64 0)">
-              <g className="zl-leaf">
-                <path d="M 700,470 C 676,430 668,392 686,352 C 700,386 706,424 712,462 Z" fill="#8FAF6C" />
-                <path d="M 704,470 C 722,436 734,404 726,366 C 708,398 700,432 694,464 Z" fill="#7CA653" />
-                <path d="M 700,468 C 698,430 702,398 712,376" stroke="#6B8F49" strokeWidth="2" fill="none" opacity=".6" />
-              </g>
-              <path d="M 682,468 L 724,468 L 716,516 L 690,516 Z" fill="#B14A57" />
-              <rect x="678" y="462" width="50" height="12" rx="5" fill="#C45763" />
-              <ellipse cx="712" cy="516" rx="26" ry="6" fill="#C9A97B" opacity=".5" filter="url(#zl-b4)" />
+            {/* چهار قفسهٔ شناور — تخته‌ها همیشه هست (دکور فروشگاه)؛
+                شیشه‌های محصول فقط وقتی کاربر سراغ محصولات رفت ظاهر
+                می‌شوند تا شروع گفتگو فقط ربات و فروشگاه باشد */}
+            {shelfBoard(100, 140)}
+            {shelfBoard(455, 140)}
+            {shelfBoard(100, 235)}
+            {shelfBoard(455, 235)}
+
+            {/* چیدمان‌های بامزهٔ ثابت: لیوان‌ها، گلدان، زنگ و بشقاب */}
+            <g>
+              {custardCup(512, 140)}
+              {custardCup(510, 126, 0.94)}
+              {custardCup(513, 113, 0.9)}
+              {custardCup(600, 140, 1.1)}
+              <path d="M 638,140 C 638,128 644,122 650,122 C 656,122 662,128 662,140 Z" fill="url(#zl-gold)" />
+              <ellipse cx="650" cy="140" rx="12" ry="3" fill="#8F6E2B" />
+              <circle cx="650" cy="121" r="2" fill="#8F6E2B" />
+              {plant(152, 235, 1.05)}
+              {custardCup(212, 235)}
+              {custardCup(243, 235, 0.92)}
+              <ellipse cx="540" cy="232" rx="21" ry="4.5" fill="#F4E8D2" stroke="#D9C6A6" strokeWidth="1" />
+              <ellipse cx="540" cy="227" rx="17.5" ry="3.8" fill="#F8EFDD" stroke="#D9C6A6" strokeWidth="0.8" />
+              <ellipse cx="540" cy="222" rx="14" ry="3.2" fill="#F4E8D2" stroke="#D9C6A6" strokeWidth="0.8" />
+              {plant(612, 235, 0.9)}
+            </g>
+
+            {/* شیشه‌های ژلهٔ واقعی — فقط بعد از درخواست کاربر */}
+            <g className={`zl-products zl-shelf-jars${productsVisible ? ' is-on' : ''}`}>
+              {shelf.jellies.map((p, i) => (
+                <g key={p.id} className="zl-product-item" style={{ transitionDelay: `${(i * 0.08).toFixed(2)}s` }}>
+                  {shelfJar(p.id, 116 + i * 50, 140, shelf.shelfColors[i], p.shortName, i * 1.7)}
+                </g>
+              ))}
             </g>
           </g>
 
-          {/* ═══ لایهٔ میانه: قالیچه، میز کوچک، محصولات ═══ */}
+          {/* ═══ لایهٔ میانه: پیش‌خوان، قالیچه، محصولات ═══ */}
           <g id="zl-mid">
-            {/* قالیچهٔ زرشکی */}
+            {/* سایهٔ پیش‌خوان روی کف */}
+            <ellipse cx="380" cy="517" rx="300" ry="9" fill="rgba(122,82,40,.18)" filter="url(#zl-b8)" />
+
+            {/* پیش‌خوان کرمی با فرم‌های قوسی ظریف */}
             <g>
-              <ellipse cx="380" cy="638" rx="250" ry="32" fill="#71313B" />
-              <ellipse cx="380" cy="638" rx="250" ry="32" fill="none" stroke="#5A1725" strokeWidth="3" />
+              <rect x="84" y="394" width="592" height="13" rx="6.5" fill="url(#zl-tableTop)" />
+              <rect x="84" y="405.5" width="592" height="2.5" fill="url(#zl-goldV)" opacity=".8" />
+              <rect x="92" y="408" width="576" height="104" fill="url(#zl-counterFront)" />
+              <g stroke="rgba(201,165,95,.35)" strokeWidth="1.2" fill="rgba(160,116,60,.1)">
+                <path d="M 114,505 L 114,452 Q 114,428 150,428 Q 186,428 186,452 L 186,505 Z" />
+                <path d="M 214,505 L 214,452 Q 214,428 250,428 Q 286,428 286,452 L 286,505 Z" />
+                <path d="M 474,505 L 474,452 Q 474,428 510,428 Q 546,428 546,452 L 546,505 Z" />
+                <path d="M 574,505 L 574,452 Q 574,428 610,428 Q 646,428 646,452 L 646,505 Z" />
+              </g>
+              <rect x="92" y="505" width="576" height="7" fill="#C9A97B" opacity=".3" />
+            </g>
+
+            {/* چیدمانِ ثابت روی پیش‌خوان: گلدان و بشقاب */}
+            {plant(140, 396, 1.1)}
+            <g transform="translate(640 396)">
+              <ellipse cx="0" cy="-3" rx="21" ry="4.5" fill="#F4E8D2" stroke="#D9C6A6" strokeWidth="1" />
+              <ellipse cx="0" cy="-8" rx="17.5" ry="3.8" fill="#F8EFDD" stroke="#D9C6A6" strokeWidth="0.8" />
+              <ellipse cx="0" cy="-13" rx="14" ry="3.2" fill="#F4E8D2" stroke="#D9C6A6" strokeWidth="0.8" />
+            </g>
+
+            {/* قالیچهٔ زرشکی کوچک زیر ربات */}
+            <g>
+              <ellipse cx="380" cy="616" rx="205" ry="30" fill="#71313B" />
+              <ellipse cx="380" cy="616" rx="205" ry="30" fill="none" stroke="#5A1725" strokeWidth="3" />
               <ellipse
                 cx="380"
-                cy="638"
-                rx="214"
-                ry="25"
+                cy="616"
+                rx="172"
+                ry="24"
                 fill="none"
                 stroke="#C9A55F"
-                strokeWidth="1.6"
+                strokeWidth="1.5"
                 strokeDasharray="6 8"
-                opacity=".8"
+                opacity=".75"
               />
-              <ellipse cx="380" cy="638" rx="168" ry="18" fill="none" stroke="#E8D5B5" strokeWidth="1.2" opacity=".55" />
-              <circle cx="292" cy="638" r="3.2" fill="#E8D5B5" opacity=".8" />
-              <circle cx="380" cy="638" r="3.2" fill="#E8D5B5" opacity=".8" />
-              <circle cx="468" cy="638" r="3.2" fill="#E8D5B5" opacity=".8" />
+              <ellipse cx="380" cy="616" rx="134" ry="18" fill="none" stroke="#E8D5B5" strokeWidth="1.2" opacity=".5" />
+              <circle cx="308" cy="616" r="3" fill="#E8D5B5" opacity=".8" />
+              <circle cx="380" cy="616" r="3" fill="#E8D5B5" opacity=".8" />
+              <circle cx="452" cy="616" r="3" fill="#E8D5B5" opacity=".8" />
             </g>
 
             {/* سایهٔ ربات روی قالیچه */}
-            <ellipse cx="380" cy="630" rx="140" ry="17" fill="rgba(70,16,27,.2)" filter="url(#zl-b8)" />
+            <ellipse cx="380" cy="612" rx="118" ry="13" fill="rgba(70,16,27,.2)" filter="url(#zl-b8)" />
 
-            {/* میز کوچک کنار ربات */}
-            <g>
-              <path d="M 106,514 C 102,548 100,580 102,606" stroke="#C9A55F" strokeWidth="5" fill="none" strokeLinecap="round" />
-              <path d="M 186,514 C 190,548 192,580 190,606" stroke="#C9A55F" strokeWidth="5" fill="none" strokeLinecap="round" />
-              <path d="M 102,606 L 190,606" stroke="#B08A48" strokeWidth="4" strokeLinecap="round" opacity=".8" />
-              <ellipse cx="146" cy="512" rx="72" ry="12" fill="#D9BE93" />
-              <ellipse cx="146" cy="507" rx="72" ry="12" fill="url(#zl-tableTop)" stroke="#D2B990" strokeWidth="1.4" />
-              <rect x="122" y="524" width="48" height="16" rx="5" fill="#FBF4E4" stroke="url(#zl-goldV)" strokeWidth="1.4" />
-              <text x="146" y="535.5" textAnchor="middle" fontFamily="Marcellus,serif" fontSize="8.5" letterSpacing="3" fill="#8A6A2C">
-                ZHINO
-              </text>
-
-              {/* ژلهٔ قالبی زیر گنبد شیشه‌ای + کاستر — فقط بعد از
-                  درخواست محصول توسط کاربر */}
-              <g className={`zl-products zl-table-products${productsVisible ? ' is-on' : ''}`}>
-                <g className="zl-product-item" style={{ transitionDelay: '0.06s' }}>
+            {/* محصولات واقعی پیش‌خوان — فقط بعد از درخواست کاربر */}
+            <g className={`zl-products zl-table-products${productsVisible ? ' is-on' : ''}`}>
+              {/* ژلهٔ قالبی زیر گنبد شیشه‌ای */}
+              <g className="zl-product-item" style={{ transitionDelay: '0.06s' }}>
+                <g transform="translate(235 396)">
                   <g className="zl-jar zl-tap" data-label={shelf.heroJelly?.shortName ?? undefined} onClick={onJarClick}>
                     <g className="zl-jelly-inner">
-                      <path d="M 116,502 C 116,484 122,476 134,476 C 146,476 152,484 152,502 Z" fill={shelf.jellyColor} />
-                      <path d="M 122,502 C 122,489 126,482 134,482 C 142,482 146,489 146,502 Z" fill="#FFFFFF" opacity=".14" />
-                      <ellipse cx="127" cy="487" rx="4.4" ry="7.5" fill="#FFFFFF" opacity=".34" />
-                      <ellipse cx="134" cy="503" rx="24" ry="4.5" fill="#E8D5B5" />
+                      <ellipse cx="0" cy="0" rx="27" ry="4.5" fill="#E8D5B5" />
+                      <path d="M -23,-2 C -23,-18 -16,-27 0,-27 C 16,-27 23,-18 23,-2 Z" fill={shelf.jellyColor} />
+                      <path d="M -17,-2 C -17,-14 -12,-20 -4,-22" stroke="#FFFFFF" strokeWidth="3" fill="none" opacity=".3" strokeLinecap="round" />
                     </g>
                   </g>
                   {/* گنبد شیشه‌ای روی ژله */}
                   <g pointerEvents="none">
-                    <path d="M 108,503 C 108,466 118,455 134,455 C 150,455 160,466 160,503 Z" fill="url(#zl-glass)" stroke="rgba(180,150,100,.45)" strokeWidth="1.4" />
-                    <path d="M 115,498 C 115,472 121,461 131,458" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity=".85" />
-                    <circle cx="134" cy="452" r="3.6" fill="url(#zl-gold)" />
+                    <path d="M -30,-1 C -30,-38 -18,-53 0,-53 C 18,-53 30,-38 30,-1 Z" fill="url(#zl-glass)" stroke="rgba(180,150,100,.45)" strokeWidth="1.4" />
+                    <path d="M -22,-8 C -22,-35 -14,-46 -4,-49" stroke="rgba(255,255,255,.8)" strokeWidth="2.2" fill="none" strokeLinecap="round" opacity=".85" />
+                    <circle cx="0" cy="-56" r="3.6" fill="url(#zl-gold)" />
                   </g>
                 </g>
+              </g>
 
-                {/* کاستر روی میز */}
-                <g className="zl-product-item" style={{ transitionDelay: '0.16s' }}>
+              {/* کاستر روی پیش‌خوان */}
+              <g className="zl-product-item" style={{ transitionDelay: '0.16s' }}>
+                <g transform="translate(535 396)">
                   <g className="zl-jar zl-tap" data-label={shelf.custard?.shortName ?? undefined} onClick={onJarClick}>
                     <g className="zl-jelly-inner">
                       <g className="zl-steam" fill="none" stroke="#C9A97B" strokeWidth="2.2" strokeLinecap="round" opacity=".8">
-                        <path d="M 168,462 Q 165,455 168,450" />
-                        <path d="M 178,460 Q 175,452 178,446" />
+                        <path d="M -8,-30 Q -11,-38 -8,-44" />
+                        <path d="M 3,-32 Q 0,-40 3,-47" />
                       </g>
-                      <path d="M 160,480 Q 160,498 178,498 Q 196,498 196,480 L 195,474 L 161,474 Z" fill="#F4E3BC" />
-                      <ellipse cx="178" cy="474" rx="17.5" ry="5.6" fill="#D9A05B" />
-                      <ellipse cx="178" cy="472.8" rx="13.5" ry="3.8" fill="#C98F4E" />
-                      <ellipse cx="171" cy="482" rx="3.6" ry="6" fill="#FFFFFF" opacity=".4" />
+                      <path d="M -17,0 L -14.5,-22 L 14.5,-22 L 17,0 Z" fill="#F4E3BC" />
+                      <ellipse cx="0" cy="-22" rx="14.5" ry="4.6" fill="#D9A05B" />
+                      <ellipse cx="0" cy="-23" rx="11" ry="3" fill="#C98F4E" />
+                      <ellipse cx="-7" cy="-11" rx="3.4" ry="6" fill="#FFFFFF" opacity=".4" />
                     </g>
                   </g>
                 </g>
@@ -1047,285 +1041,205 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
             </g>
           </g>
 
-          {/* ═══ لایهٔ قهرمان: ربات ژینو ═══ */}
+          {/* ═══ لایهٔ قهرمان: ربات ژینو — زرشکی، گرد، جمع‌وجور ═══ */}
           <g id="zl-hero">
-            {/* هالهٔ سینمایی پشت سر — ربات از محیط جدا می‌ماند */}
-            <ellipse cx="380" cy="300" rx="196" ry="208" fill="url(#zl-wineHalo)" />
-            <ellipse className="zl-haloBreath" cx="380" cy="240" rx="132" ry="122" fill="url(#zl-headHalo)" />
+            {/* هاله‌های سینمایی پشت ربات — جدا می‌ماند ولی در فروشگاه می‌درخشد */}
+            <ellipse cx="380" cy="340" rx="200" ry="205" fill="url(#zl-wineHalo)" />
+            <ellipse className="zl-haloBreath" cx="380" cy="344" rx="128" ry="118" fill="url(#zl-headHalo)" />
 
-            <g
-              id="zl-robot"
-              transform={`translate(${ROBOT_TX} ${ROBOT_TY}) scale(${ROBOT_SCALE})`}
-            >
-              <rect x="324" y="374" width="72" height="48" rx="13" fill="url(#zl-goldV)" />
-              <path
-                d="M 330,392 H 390 M 330,402 H 390 M 330,412 H 390"
-                stroke="#8A6A2C"
-                strokeWidth="3"
-                opacity="0.45"
-                fill="none"
-              />
-              <ellipse cx="360" cy="380" rx="46" ry="9" fill="#6E5522" opacity="0.35" />
-              <path
-                d="M 281,666 C 278,698 270,748 268,788 C 267,806 283,814 303,814 C 323,814 339,806 338,788 C 336,748 328,698 325,666 C 317,657 289,657 281,666 Z"
-                fill="url(#zl-creamL)"
-              />
-              <circle cx="269" cy="796" r="12" fill="url(#zl-gold)" />
-              <circle cx="269" cy="796" r="4" fill="#6E5522" opacity="0.8" />
-              <g transform="rotate(8 303 832)">
-                <rect x="253" y="842" width="100" height="22" rx="10" fill="url(#zl-maroon)" />
-                <path
-                  d="M 257,836 C 257,806 277,792 303,792 C 329,792 349,806 349,836 C 349,851 332,858 303,858 C 274,858 257,851 257,836 Z"
-                  fill="url(#zl-creamR)"
-                />
-                <ellipse cx="290" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3" />
+            <g id="zl-robot" transform={`translate(${ROBOT_TX} ${ROBOT_TY}) scale(${ROBOT_SCALE})`}>
+              {/* ── پاها: کوتاه و گرد با کفش زرشکی ── */}
+              <g className="zl-legs">
+                <line x1="318" y1="770" x2="311" y2="828" stroke="url(#zl-leg)" strokeWidth="40" strokeLinecap="round" />
+                <circle cx="311" cy="832" r="13.5" fill="url(#zl-goldV)" />
+                <circle cx="311" cy="832" r="7" fill="#3E111B" />
+                <ellipse cx="307" cy="851" rx="30" ry="16.5" fill="url(#zl-foot)" />
+                <path d="M 281,856 Q 307,866 333,856" stroke="url(#zl-goldV)" strokeWidth="2" fill="none" opacity=".5" />
+                <ellipse cx="297" cy="845" rx="11" ry="5.5" fill="#FFFFFF" opacity=".07" />
+                <line x1="402" y1="770" x2="409" y2="828" stroke="url(#zl-leg)" strokeWidth="40" strokeLinecap="round" />
+                <circle cx="409" cy="832" r="13.5" fill="url(#zl-goldV)" />
+                <circle cx="409" cy="832" r="7" fill="#3E111B" />
+                <ellipse cx="413" cy="851" rx="30" ry="16.5" fill="url(#zl-foot)" />
+                <path d="M 387,856 Q 413,866 439,856" stroke="url(#zl-goldV)" strokeWidth="2" fill="none" opacity=".5" />
+                <ellipse cx="403" cy="845" rx="11" ry="5.5" fill="#FFFFFF" opacity=".07" />
               </g>
-              <circle cx="303" cy="668" r="11" fill="url(#zl-gold)" />
-              <circle cx="303" cy="668" r="4" fill="#6E5522" opacity="0.8" />
-              <path
-                d="M 439,666 C 442,698 450,748 452,788 C 453,806 437,814 417,814 C 397,814 381,806 382,788 C 384,748 392,698 395,666 C 403,657 431,657 439,666 Z"
-                fill="url(#zl-creamLr)"
-              />
-              <circle cx="451" cy="796" r="12" fill="url(#zl-gold)" />
-              <circle cx="451" cy="796" r="4" fill="#6E5522" opacity="0.8" />
-              <g transform="rotate(-8 417 832)">
-                <rect x="367" y="842" width="100" height="22" rx="10" fill="url(#zl-maroon)" />
-                <path
-                  d="M 371,836 C 371,806 391,792 417,792 C 443,792 463,806 463,836 C 463,851 446,858 417,858 C 388,858 371,851 371,836 Z"
-                  fill="url(#zl-creamR)"
-                />
-                <ellipse cx="430" cy="814" rx="26" ry="12" fill="#FFFFFF" opacity="0.3" />
-              </g>
-              <circle cx="417" cy="668" r="11" fill="url(#zl-gold)" />
-              <circle cx="417" cy="668" r="4" fill="#6E5522" opacity="0.8" />
+
+              {/* ── گردن طلایی (اتصال سر و تنه) ── */}
+              <rect x="326" y="506" width="68" height="48" rx="16" fill="url(#zl-goldV)" />
+              <rect x="332" y="508" width="56" height="10" rx="5" fill="#8A6A2C" opacity=".4" />
+
+              {/* ── تنهٔ گرد: زرشکی تیره و مات ── */}
               <g id="g-torso">
-                <path
-                  d="M 212,470 C 212,446 246,432 292,428 C 330,424 390,424 428,428 C 474,433 508,446 508,470 C 514,508 516,554 506,592 C 496,638 434,662 360,662 C 286,662 224,638 214,592 C 204,554 206,508 212,470 Z"
-                  fill="url(#zl-creamR)"
-                />
+                <rect x="245" y="545" width="230" height="235" rx="98" fill="url(#zl-body)" />
                 <g clipPath="url(#zl-torsoClip)">
-                  <ellipse cx="360" cy="674" rx="175" ry="58" fill="#D5C9AE" opacity="0.55" filter="url(#zl-b8)" />
-                  <ellipse cx="516" cy="534" rx="56" ry="115" fill="#D5C9AE" opacity="0.4" filter="url(#zl-b8)" />
-                  <ellipse cx="204" cy="534" rx="46" ry="105" fill="#D5C9AE" opacity="0.3" filter="url(#zl-b8)" />
-                  <path d="M 238,580 C 292,616 428,616 482,580" stroke="#CFC3A9" strokeWidth="3" fill="none" opacity="0.8" />
+                  <ellipse cx="322" cy="588" rx="96" ry="42" fill="#FFFFFF" opacity=".12" filter="url(#zl-b16)" />
+                  <ellipse cx="480" cy="665" rx="42" ry="112" fill="#2E0913" opacity=".28" filter="url(#zl-b16)" />
+                  <ellipse cx="360" cy="778" rx="112" ry="28" fill="#2E0913" opacity=".3" filter="url(#zl-b8)" />
+                  {/* نوار کمر طلایی مات */}
+                  <rect x="245" y="737" width="230" height="10" fill="url(#zl-goldV)" opacity=".85" />
+                  <rect x="245" y="747" width="230" height="2.5" fill="#2E0913" opacity=".3" />
                 </g>
+                {/* نور لبهٔ طلایی (سینمایی) */}
+                <path d="M 254,616 Q 254,562 316,550" fill="none" stroke="#F5D9A0" strokeWidth="4.5" strokeLinecap="round" opacity=".26" filter="url(#zl-b4)" />
+                {/* درزهای جانبی ظریف */}
+                <line x1="260" y1="572" x2="260" y2="732" stroke="#2E0913" strokeWidth="1.4" opacity=".22" />
+                <line x1="460" y1="572" x2="460" y2="732" stroke="#2E0913" strokeWidth="1.4" opacity=".22" />
+                {/* پنل سینهٔ فرورفته */}
+                <rect x="304" y="590" width="112" height="76" rx="24" fill="#3E111B" stroke="rgba(201,165,95,.4)" strokeWidth="1.2" />
+                <path d="M 316,598 Q 360,591 404,598" stroke="#000000" strokeWidth="3" opacity=".25" fill="none" strokeLinecap="round" />
+                {/* نشان کوچک برند: حلقهٔ طلایی با مونوگرام */}
+                <circle cx="360" cy="618" r="12.5" fill="none" stroke="url(#zl-gold)" strokeWidth="2.4" />
                 <path
-                  d="M 292,478 C 292,466 302,459 316,459 L 404,459 C 418,459 428,466 428,478 L 424,530 C 422,549 408,558 392,558 L 328,558 C 312,558 298,549 296,530 Z"
-                  fill="url(#zl-maroon)"
+                  d="M 354.5,612.5 L 365.5,612.5 L 354.5,623.5 L 365.5,623.5"
+                  fill="none"
+                  stroke="#EAD097"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  opacity=".95"
                 />
-                <path d="M 299,472 C 320,464 400,464 421,472" stroke="#A9706C" strokeWidth="3" opacity="0.55" fill="none" />
-                <circle cx="360" cy="492" r="9" fill="#F0A243" opacity="0.6" filter="url(#zl-b4)" />
-                <circle cx="360" cy="492" r="10" fill="url(#zl-gold)" />
-                <circle cx="360" cy="492" r="4.5" fill="#FFD98F" />
+                {/* چراغ‌های وضعیت */}
+                <circle cx="346" cy="648" r="2.4" fill="#C9A55F" opacity=".85" />
+                <circle cx="360" cy="648" r="2.4" fill="#EAD097" />
+                <circle cx="374" cy="648" r="2.4" fill="#C9A55F" opacity=".4" />
               </g>
-              <rect x="292" y="632" width="24" height="30" rx="7" fill="url(#zl-goldV)" />
-              <circle cx="304" cy="650" r="15" fill="url(#zl-gold)" />
-              <circle cx="304" cy="650" r="5" fill="#6E5522" opacity="0.8" />
-              <rect x="404" y="632" width="24" height="30" rx="7" fill="url(#zl-goldV)" />
-              <circle cx="416" cy="650" r="15" fill="url(#zl-gold)" />
-              <circle cx="416" cy="650" r="5" fill="#6E5522" opacity="0.8" />
+
+              {/* ── بازوی چپ: کوتاه و گرد ── */}
               <g id="g-upper-l">
-                <line x1="198" y1="502" x2="186" y2="552" stroke="url(#zl-creamL)" strokeWidth="50" strokeLinecap="round" />
+                <line x1="243" y1="590" x2="222" y2="668" stroke="url(#zl-bodyL)" strokeWidth="38" strokeLinecap="round" />
                 <g id="g-fore-l">
-                  <line x1="184" y1="560" x2="172" y2="628" stroke="url(#zl-creamL)" strokeWidth="54" strokeLinecap="round" />
-                  <line x1="154" y1="660" x2="151" y2="690" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                  <line x1="170" y1="664" x2="169" y2="696" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                  <line x1="186" y1="662" x2="187" y2="692" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                  <line x1="192" y1="650" x2="201" y2="663" stroke="#DCCDB4" strokeWidth="19" strokeLinecap="round" />
-                  <line x1="154" y1="660" x2="151" y2="690" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                  <line x1="170" y1="664" x2="169" y2="696" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                  <line x1="186" y1="662" x2="187" y2="692" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                  <line x1="192" y1="650" x2="201" y2="663" stroke="#F5ECDC" strokeWidth="16" strokeLinecap="round" />
-                  <line x1="153" y1="670" x2="152" y2="676" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                  <line x1="170" y1="676" x2="169" y2="682" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                  <line x1="186" y1="672" x2="187" y2="678" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                  <line x1="196" y1="656" x2="199" y2="660" stroke="#7E4A48" strokeWidth="12" strokeLinecap="round" />
-                  <circle cx="170" cy="644" r="25" fill="url(#zl-creamR)" />
+                  <line x1="222" y1="668" x2="209" y2="726" stroke="url(#zl-bodyL)" strokeWidth="33" strokeLinecap="round" />
+                  <circle cx="208" cy="730" r="11.5" fill="url(#zl-goldV)" />
+                  <circle cx="208" cy="730" r="6" fill="#3E111B" />
+                  {/* دست گرد توپ‌شکل با جزئیات ظریف */}
+                  <circle cx="206" cy="750" r="20.5" fill="url(#zl-bodyR)" />
+                  <path d="M 193,742 Q 206,735 219,742" stroke="#2E0913" strokeWidth="1.5" opacity=".3" fill="none" />
+                  <ellipse cx="199" cy="742" rx="7" ry="8" fill="#FFFFFF" opacity=".07" />
                 </g>
               </g>
-              <circle cx="204" cy="472" r="42" fill="url(#zl-creamR)" />
-              <ellipse cx="184" cy="462" rx="24" ry="28" fill="url(#zl-gold)" transform="rotate(-22 184 462)" />
-              <ellipse cx="184" cy="462" rx="19" ry="23" fill="url(#zl-maroon)" transform="rotate(-22 184 462)" />
-              <circle cx="184" cy="462" r="7" fill="url(#zl-gold)" />
-              <circle cx="184" cy="462" r="2.5" fill="#6E5522" opacity="0.8" />
-              <g id="g-elbow-l" transform="rotate(8 185 557)">
-                <rect x="157" y="542" width="56" height="30" rx="8" fill="url(#zl-goldV)" />
-                <path
-                  d="M 160,550 H 210 M 160,557 H 210 M 160,564 H 210"
-                  stroke="#8A6A2C"
-                  strokeWidth="2"
-                  opacity="0.4"
-                  fill="none"
-                />
+              {/* درپوش شانهٔ طلایی */}
+              <circle cx="243" cy="590" r="25" fill="url(#zl-gold)" />
+              <circle cx="243" cy="590" r="16.5" fill="url(#zl-bodyR)" />
+              <circle cx="243" cy="590" r="4.5" fill="#8A6A2C" opacity=".7" />
+              {/* مفصل آرنج طلایی */}
+              <g id="g-elbow-l" transform="rotate(8 222 668)">
+                <circle cx="222" cy="668" r="15" fill="url(#zl-goldV)" />
+                <circle cx="222" cy="668" r="8" fill="#3E111B" />
+                <circle cx="222" cy="668" r="2.5" fill="#8A6A2C" opacity=".8" />
               </g>
+
+              {/* ── بازوی راست ── */}
               <g id="g-upper-r">
-                <line x1="522" y1="502" x2="534" y2="552" stroke="url(#zl-creamLr)" strokeWidth="50" strokeLinecap="round" />
+                <line x1="477" y1="590" x2="498" y2="668" stroke="url(#zl-bodyL)" strokeWidth="38" strokeLinecap="round" />
                 <g id="g-fore-r">
-                  <line x1="536" y1="560" x2="548" y2="628" stroke="url(#zl-creamLr)" strokeWidth="54" strokeLinecap="round" />
-                  <line x1="566" y1="660" x2="569" y2="690" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                  <line x1="550" y1="664" x2="551" y2="696" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                  <line x1="534" y1="662" x2="533" y2="692" stroke="#DCCDB4" strokeWidth="21" strokeLinecap="round" />
-                  <line x1="528" y1="650" x2="519" y2="663" stroke="#DCCDB4" strokeWidth="19" strokeLinecap="round" />
-                  <line x1="566" y1="660" x2="569" y2="690" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                  <line x1="550" y1="664" x2="551" y2="696" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                  <line x1="534" y1="662" x2="533" y2="692" stroke="#F5ECDC" strokeWidth="18" strokeLinecap="round" />
-                  <line x1="528" y1="650" x2="519" y2="663" stroke="#F5ECDC" strokeWidth="16" strokeLinecap="round" />
-                  <line x1="567" y1="670" x2="568" y2="676" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                  <line x1="550" y1="676" x2="551" y2="682" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                  <line x1="534" y1="672" x2="533" y2="678" stroke="#7E4A48" strokeWidth="13" strokeLinecap="round" />
-                  <line x1="524" y1="656" x2="521" y2="660" stroke="#7E4A48" strokeWidth="12" strokeLinecap="round" />
-                  <circle cx="550" cy="644" r="25" fill="url(#zl-creamR)" />
+                  <line x1="498" y1="668" x2="511" y2="726" stroke="url(#zl-bodyL)" strokeWidth="33" strokeLinecap="round" />
+                  <circle cx="512" cy="730" r="11.5" fill="url(#zl-goldV)" />
+                  <circle cx="512" cy="730" r="6" fill="#3E111B" />
+                  <circle cx="514" cy="750" r="20.5" fill="url(#zl-bodyR)" />
+                  <path d="M 501,742 Q 514,735 527,742" stroke="#2E0913" strokeWidth="1.5" opacity=".3" fill="none" />
+                  <ellipse cx="521" cy="742" rx="7" ry="8" fill="#FFFFFF" opacity=".07" />
                 </g>
               </g>
-              <circle cx="516" cy="472" r="42" fill="url(#zl-creamR)" />
-              <ellipse cx="536" cy="462" rx="24" ry="28" fill="url(#zl-gold)" transform="rotate(22 536 462)" />
-              <ellipse cx="536" cy="462" rx="19" ry="23" fill="url(#zl-maroon)" transform="rotate(22 536 462)" />
-              <circle cx="536" cy="462" r="7" fill="url(#zl-gold)" />
-              <circle cx="536" cy="462" r="2.5" fill="#6E5522" opacity="0.8" />
-              <g id="g-elbow-r" transform="rotate(-8 535 557)">
-                <rect x="507" y="542" width="56" height="30" rx="8" fill="url(#zl-goldV)" />
-                <path
-                  d="M 510,550 H 560 M 510,557 H 560 M 510,564 H 560"
-                  stroke="#8A6A2C"
-                  strokeWidth="2"
-                  opacity="0.4"
-                  fill="none"
-                />
+              <circle cx="477" cy="590" r="25" fill="url(#zl-gold)" />
+              <circle cx="477" cy="590" r="16.5" fill="url(#zl-bodyR)" />
+              <circle cx="477" cy="590" r="4.5" fill="#8A6A2C" opacity=".7" />
+              <g id="g-elbow-r" transform="rotate(-8 498 668)">
+                <circle cx="498" cy="668" r="15" fill="url(#zl-goldV)" />
+                <circle cx="498" cy="668" r="8" fill="#3E111B" />
+                <circle cx="498" cy="668" r="2.5" fill="#8A6A2C" opacity=".8" />
               </g>
+
+              {/* ── سر گرد با نمایشگر چهره ── */}
               <g id="g-head">
-                <ellipse cx="360" cy="262" rx="220" ry="134" fill="url(#zl-creamR)" />
-                <rect x="150" y="196" width="420" height="132" rx="66" fill="url(#zl-creamR)" />
+                {/* بدنهٔ سر: زرشکی تیره و مات */}
+                <circle cx="360" cy="372" r="158" fill="url(#zl-bodyR)" />
                 <g clipPath="url(#zl-headClip)">
-                  <ellipse cx="360" cy="386" rx="220" ry="54" fill="#D5C9AE" opacity="0.45" filter="url(#zl-b8)" />
-                  <ellipse cx="290" cy="166" rx="160" ry="48" fill="#FFFFFF" opacity="0.3" filter="url(#zl-b8)" />
-                  <ellipse cx="566" cy="262" rx="48" ry="92" fill="#D5C9AE" opacity="0.3" filter="url(#zl-b8)" />
+                  <ellipse cx="312" cy="272" rx="92" ry="44" fill="#FFFFFF" opacity=".12" filter="url(#zl-b16)" />
+                  <ellipse cx="520" cy="390" rx="42" ry="100" fill="#2E0913" opacity=".25" filter="url(#zl-b16)" />
+                  <ellipse cx="360" cy="516" rx="130" ry="34" fill="#2E0913" opacity=".3" filter="url(#zl-b8)" />
                 </g>
-                <circle cx="138" cy="268" r="38" fill="url(#zl-gold)" />
-                <circle cx="138" cy="268" r="30" fill="url(#zl-maroon)" />
-                <circle cx="138" cy="268" r="14" fill="url(#zl-creamPod)" />
-                <circle cx="582" cy="268" r="38" fill="url(#zl-gold)" />
-                <circle cx="582" cy="268" r="30" fill="url(#zl-maroon)" />
-                <circle cx="582" cy="268" r="14" fill="url(#zl-creamPod)" />
+                {/* نور لبهٔ طلایی روی شانهٔ سر */}
+                <path d="M 220,300 A 158,158 0 0 1 306,224" fill="none" stroke="#F5D9A0" strokeWidth="5" strokeLinecap="round" opacity=".3" filter="url(#zl-b4)" />
+                <path d="M 232,292 A 158,158 0 0 1 288,236" fill="none" stroke="#FFE8BC" strokeWidth="2.5" strokeLinecap="round" opacity=".45" />
+
+                {/* گوش‌های رباتیک (حلقهٔ طلایی + میدان زرشکی) */}
+                <g className="zl-ears">
+                  <circle cx="198" cy="372" r="27" fill="url(#zl-gold)" />
+                  <circle cx="198" cy="372" r="19.5" fill="#3E111B" />
+                  <circle cx="198" cy="372" r="8" fill="#E8D5B5" />
+                  <circle cx="198" cy="372" r="3" fill="url(#zl-gold)" />
+                  <circle cx="522" cy="372" r="27" fill="url(#zl-gold)" />
+                  <circle cx="522" cy="372" r="19.5" fill="#3E111B" />
+                  <circle cx="522" cy="372" r="8" fill="#E8D5B5" />
+                  <circle cx="522" cy="372" r="3" fill="url(#zl-gold)" />
+                </g>
+
+                {/* آنتن ظریف با گوی طلایی */}
                 <g id="g-antenna">
-                  <path d="M 136,236 L 126,176" stroke="url(#zl-goldV)" strokeWidth="5" strokeLinecap="round" />
-                  <circle cx="124" cy="168" r="10" fill="url(#zl-gold)" />
-                  <circle cx="121" cy="164" r="3" fill="#FFFFFF" opacity="0.55" />
-                  <circle cx="124" cy="168" r="15" fill="rgba(238,217,164,.4)" filter="url(#zl-b4)" />
+                  <path d="M 268,244 L 256,198" stroke="url(#zl-goldV)" strokeWidth="5" strokeLinecap="round" />
+                  <circle cx="254" cy="190" r="15" fill="rgba(238,217,164,.4)" filter="url(#zl-b4)" />
+                  <circle cx="254" cy="190" r="10.5" fill="url(#zl-gold)" />
+                  <circle cx="250.5" cy="186" r="3" fill="#FFFFFF" opacity=".6" />
                 </g>
-                <rect x="168" y="170" width="384" height="188" rx="80" fill="#D8CDB5" />
-                <rect x="174" y="176" width="372" height="176" rx="74" fill="url(#zl-screen)" />
-                <rect x="180" y="182" width="360" height="164" rx="70" fill="none" stroke="#3B3835" strokeWidth="2" opacity="0.35" />
-                <path
-                  d="M 240,206 C 310,182 410,182 480,206 C 486,209 486,216 480,218 C 410,198 310,198 240,218 C 234,216 234,209 240,206 Z"
-                  fill="#FFFFFF"
-                  opacity="0.12"
-                />
-                <ellipse cx="462" cy="214" rx="40" ry="13" fill="#FFFFFF" opacity="0.18" transform="rotate(-20 462 214)" />
-                <ellipse cx="258" cy="332" rx="36" ry="10" fill="#FFFFFF" opacity="0.05" transform="rotate(-12 258 332)" />
+
+                {/* نمایشگر: بازِ فرورفته + شیشهٔ تیره با عمق سه‌بعدی */}
+                <rect x="236" y="276" width="248" height="192" rx="76" fill="url(#zl-bezel)" />
+                <rect x="236" y="276" width="248" height="192" rx="76" fill="none" stroke="#8A4653" strokeWidth="1.5" opacity=".35" />
+                <rect x="244" y="284" width="232" height="176" rx="68" fill="url(#zl-screen)" />
+                {/* سایهٔ داخلی بالای شیشه + بازتاب گرم پایین */}
+                <ellipse cx="360" cy="292" rx="108" ry="16" fill="#000000" opacity=".3" filter="url(#zl-b8)" />
+                <ellipse cx="360" cy="452" rx="100" ry="10" fill="#FFD98A" opacity=".06" filter="url(#zl-b8)" />
+                {/* درخشش شیشه */}
+                <path d="M 262,318 Q 330,286 420,296 L 424,306 Q 336,298 268,330 Z" fill="#FFFFFF" opacity=".07" />
+                <ellipse cx="430" cy="312" rx="26" ry="8" fill="#FFFFFF" opacity=".06" transform="rotate(-14 430 312)" />
+
+                {/* ── چشم‌های LED: درخشان، زنده، بدون انسانی‌شدن ── */}
                 <g id="g-eyes">
-                  <g filter="url(#zl-b4)" opacity="0.85">
-                    <ellipse cx="292" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" strokeWidth="14" />
-                    <ellipse cx="428" cy="254" rx="30" ry="34" fill="none" stroke="#F09F3C" strokeWidth="14" />
-                  </g>
-                  <ellipse
-                    cx="292"
-                    cy="254"
-                    rx="30"
-                    ry="34"
-                    fill="none"
-                    stroke="#FFC673"
-                    strokeWidth="7.5"
-                    strokeDasharray="0.1 10.5"
-                    strokeLinecap="round"
-                  />
-                  <ellipse
-                    cx="428"
-                    cy="254"
-                    rx="30"
-                    ry="34"
-                    fill="none"
-                    stroke="#FFC673"
-                    strokeWidth="7.5"
-                    strokeDasharray="0.1 10.5"
-                    strokeLinecap="round"
-                  />
+                  <ellipse cx="306" cy="358" rx="36" ry="38" fill="url(#zl-eyeGlow)" />
+                  <ellipse cx="414" cy="358" rx="36" ry="38" fill="url(#zl-eyeGlow)" />
+                  <ellipse cx="306" cy="358" rx="20" ry="23" fill="url(#zl-eyeCore)" />
+                  <ellipse cx="414" cy="358" rx="20" ry="23" fill="url(#zl-eyeCore)" />
+                  <ellipse cx="306" cy="355" rx="9.5" ry="11.5" fill="#FFFBEF" opacity=".95" />
+                  <ellipse cx="414" cy="355" rx="9.5" ry="11.5" fill="#FFFBEF" opacity=".95" />
+                  <circle cx="298" cy="349" r="4.2" fill="#FFFFFF" opacity=".95" />
+                  <circle cx="406" cy="349" r="4.2" fill="#FFFFFF" opacity=".95" />
+                  <circle cx="314" cy="366" r="2" fill="#FFFFFF" opacity=".5" />
+                  <circle cx="422" cy="366" r="2" fill="#FFFFFF" opacity=".5" />
                 </g>
+
+                {/* گونه‌های گرم و ظریف */}
+                <ellipse cx="266" cy="402" rx="12" ry="7.5" fill="#FFC673" opacity=".15" />
+                <ellipse cx="454" cy="402" rx="12" ry="7.5" fill="#FFC673" opacity=".15" />
+
+                {/* ── دهان LED (لبخند / صحبت / خندهٔ پهن) ── */}
                 <g id="g-mouth">
                   <g id="m-smile">
-                    <path
-                      d="M 324,298 Q 360,320 396,298"
-                      fill="none"
-                      stroke="#F09F3C"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                      filter="url(#zl-b4)"
-                      opacity="0.85"
-                    />
-                    <path
-                      d="M 324,298 Q 360,320 396,298"
-                      fill="none"
-                      stroke="#FFC673"
-                      strokeWidth="7.5"
-                      strokeDasharray="0.1 9.65"
-                      strokeLinecap="round"
-                    />
+                    <path d="M 324,426 Q 360,450 396,426" fill="none" stroke="#F09F3C" strokeWidth="10" strokeLinecap="round" filter="url(#zl-b4)" opacity="0.85" />
+                    <path d="M 324,426 Q 360,450 396,426" fill="none" stroke="#FFC673" strokeWidth="6.5" strokeDasharray="0.1 9.65" strokeLinecap="round" />
                   </g>
                   <g id="m-talk" opacity="0">
-                    <ellipse
-                      id="m-talk-glow"
-                      cx="360"
-                      cy="308"
-                      rx="14"
-                      ry="8"
-                      fill="none"
-                      stroke="#F09F3C"
-                      strokeWidth="12"
-                      filter="url(#zl-b4)"
-                      opacity="0.85"
-                    />
-                    <ellipse
-                      id="m-talk-dots"
-                      cx="360"
-                      cy="308"
-                      rx="14"
-                      ry="8"
-                      fill="none"
-                      stroke="#FFC673"
-                      strokeWidth="7"
-                      strokeDasharray="0.1 8.2"
-                      strokeLinecap="round"
-                    />
+                    <ellipse id="m-talk-glow" cx="360" cy="434" rx="9" ry="2.5" fill="none" stroke="#F09F3C" strokeWidth="10" filter="url(#zl-b4)" opacity="0.85" />
+                    <ellipse id="m-talk-dots" cx="360" cy="434" rx="9" ry="2.5" fill="none" stroke="#FFC673" strokeWidth="6" strokeDasharray="0.1 8.2" strokeLinecap="round" />
                   </g>
                   <g id="m-grin" opacity="0">
-                    <path
-                      d="M 318,294 Q 360,332 402,294"
-                      fill="none"
-                      stroke="#F09F3C"
-                      strokeWidth="12"
-                      strokeLinecap="round"
-                      filter="url(#zl-b4)"
-                      opacity="0.85"
-                    />
-                    <path
-                      d="M 318,294 Q 360,332 402,294"
-                      fill="none"
-                      stroke="#FFC673"
-                      strokeWidth="7.5"
-                      strokeDasharray="0.1 9.4"
-                      strokeLinecap="round"
-                    />
+                    <path d="M 312,420 Q 360,462 408,420" fill="none" stroke="#F09F3C" strokeWidth="10" strokeLinecap="round" filter="url(#zl-b4)" opacity="0.85" />
+                    <path d="M 312,420 Q 360,462 408,420" fill="none" stroke="#FFC673" strokeWidth="6.5" strokeDasharray="0.1 9.4" strokeLinecap="round" />
                   </g>
                 </g>
+
+                {/* چراغ‌های کوچک گوشهٔ نمایشگر */}
+                <circle cx="264" cy="440" r="2.4" fill="#FFD98A" opacity=".45" />
+                <circle cx="456" cy="440" r="2.4" fill="#FFD98A" opacity=".45" />
               </g>
             </g>
           </g>
 
           {/* جرقه‌های شادی — فقط در حالت خوشحال می‌درخشند */}
           <g fill="#D2AF6C" className="zl-sparks">
-            <path className="zl-spark" d="M 560,140 l 3.4,7.8 7.8,3.4 -7.8,3.4 -3.4,7.8 -3.4,-7.8 -7.8,-3.4 7.8,-3.4 Z" />
-            <path className="zl-spark s2" d="M 196,168 l 2.8,6.4 6.4,2.8 -6.4,2.8 -2.8,6.4 -2.8,-6.4 -6.4,-2.8 6.4,-2.8 Z" />
-            <path className="zl-spark s3" d="M 610,268 l 2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" />
-            <path className="zl-spark s4" d="M 152,300 l 2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" />
+            <path className="zl-spark" d="M 556,214 l 3.4,7.8 7.8,3.4 -7.8,3.4 -3.4,7.8 -3.4,-7.8 -7.8,-3.4 7.8,-3.4 Z" />
+            <path className="zl-spark s2" d="M 200,246 l 2.8,6.4 6.4,2.8 -6.4,2.8 -2.8,6.4 -2.8,-6.4 -6.4,-2.8 6.4,-2.8 Z" />
+            <path className="zl-spark s3" d="M 590,330 l 2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" />
+            <path className="zl-spark s4" d="M 158,332 l 2.4,5.6 5.6,2.4 -5.6,2.4 -2.4,5.6 -2.4,-5.6 -5.6,-2.4 5.6,-2.4 Z" />
           </g>
         </svg>
 
@@ -1378,7 +1292,7 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
 
       {/* پلاک نام */}
       <div className="zl-plaque">
-        <span className="zl-plaque-en">SMART&nbsp;ASSISTANT&nbsp;·&nbsp;STUDIO</span>
+        <span className="zl-plaque-en">SMART&nbsp;ASSISTANT&nbsp;·&nbsp;JELLY&nbsp;&amp;&nbsp;CUSTARD&nbsp;SHOP</span>
         <p className="zl-plaque-title">{ASSISTANT_TAGLINE}</p>
         <span className="zl-rule" aria-hidden="true" />
       </div>

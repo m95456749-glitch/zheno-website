@@ -200,16 +200,16 @@ else fail('کارت محصول از ابتدا در گفتگو نمایش داد
 /* ── ۲) قاب‌بندی ربات: صورت همیشه در قاب با حاشیهٔ امن ─────── */
 
 /** مختصاتِ واقعیِ بدنهٔ ربات در واحدِ صحنه (از هنرِ SVG اندازه‌گیری شده) */
-const ROBOT = { x1: 99, y1: 128, x2: 621, y2: 870 };
-const ROBOT_SCALE = 0.63;
-const ROBOT_TX = 153.2;
-const ROBOT_TY = 84.2;
+const ROBOT = { x1: 171, y1: 174, x2: 549, y2: 868 };
+const ROBOT_SCALE = 0.55;
+const ROBOT_TX = 182;
+const ROBOT_TY = 140;
 const robotTop = ROBOT_TY + ROBOT_SCALE * ROBOT.y1;
 const robotBottom = ROBOT_TY + ROBOT_SCALE * ROBOT.y2;
 const robotLeft = ROBOT_TX + ROBOT_SCALE * ROBOT.x1;
 const robotRight = ROBOT_TX + ROBOT_SCALE * ROBOT.x2;
 /** اندازهٔ دست‌ها (پایینِ ساعد) — باید در حالت گفتگو دیده شوند */
-const handsBottom = ROBOT_TY + ROBOT_SCALE * 706;
+const handsBottom = ROBOT_TY + ROBOT_SCALE * 770;
 
 function frameOf() {
   const vb = (q('.zl-room svg')?.getAttribute('viewBox') || '').split(' ').map(Number);
