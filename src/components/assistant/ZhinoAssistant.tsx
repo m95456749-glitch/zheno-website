@@ -43,7 +43,9 @@ export default function ZhinoAssistant() {
     >
       <span className="zhino-assistant-float">
         <span className="zhino-assistant-medallion">
-          <AssistantAvatar compact={true} size={44} mode="idle" />
+          {/* بدون size: آواتار کل قاب مدالی را می‌پوشاند (crop سر و بالاتنه
+              در assistant.css، بخش «فاز ۱۰») */}
+          <AssistantAvatar compact={true} mode="idle" />
           {!visited && <span className="zhino-assistant-dot" aria-hidden="true" />}
         </span>
         <span className="zhino-assistant-tip" aria-hidden="true">

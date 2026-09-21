@@ -9,8 +9,8 @@
 //      `.zl-room` / `.zl-hero` در DOM نیست.
 //   ۲) ربات واقعی کوچک و تمام‌قد در مرکز خوش‌آمدگویی است
 //      (img با کلاس zhino-welcome-photo و src همان فایل اصلی)؛
-//      نسبت تصویر با CSS (object-fit: contain + aspect-ratio)
-//      حفظ می‌شود — بدون width/height سخت‌کدشده روی عنصر.
+//      اندازه، نسبت و crop با CSS (wrapper + aspect-ratio) تعیین می‌شود
+//      — بدون width/height سخت‌کدشده روی عنصر.
 //   ۳) «بازگشت به سایت» در سربرگ بالای صفحه هست.
 //   ۴) شروع گفتگو: فقط ربات کوچک + خوش‌آمدگویی + پیشنهادها.
 //   ۵) کارت‌های محصول از دادهٔ واقعی‌اند (نام کاتالوگ + قیمت
@@ -160,7 +160,7 @@ if (robotImg) {
     fail('src تصویر خوش‌آمدگویی به فایل اصلی ربات اشاره نمی‌کند: ' + src);
   }
   if (!robotImg.getAttribute('width') && !robotImg.getAttribute('height')) {
-    ok('ابعاد تصویر به CSS سپرده شده (aspect-ratio + object-fit) — نه کشیده می‌شود نه بریده');
+    ok('ابعاد و crop تصویر به CSS سپرده شده (wrapper + aspect-ratio) — نسبت اصلی دست‌نخورده است');
   } else {
     fail('روی تصویر ربات width/height سخت‌کد شده و نسبت تصویر در خطر است');
   }
