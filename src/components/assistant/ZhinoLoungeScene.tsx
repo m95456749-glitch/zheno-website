@@ -43,7 +43,7 @@ import {
   useState,
   type MouseEvent as ReactMouseEvent,
 } from 'react';
-import { ASSISTANT_TAGLINE } from './assistantData';
+import { ASSISTANT_BOT_IMAGE, ASSISTANT_TAGLINE } from './assistantData';
 import { FLAVORS } from '../../data/products';
 import { useCatalog } from '../../services/catalog';
 import './zhino-lounge.css';
@@ -79,6 +79,11 @@ interface Props {
 const ROBOT_SCALE = 0.55;
 const ROBOT_TX = 182;
 const ROBOT_TY = 140;
+/** جعبهٔ تصویر واقعی ربات در واحد صحنه — نسبت ۲:۳ فایل حفظ می‌شود */
+const BOT_PHOTO_H = 694;
+const BOT_PHOTO_W = BOT_PHOTO_H * (1024 / 1536);
+const BOT_PHOTO_X = 360 - BOT_PHOTO_W / 2;
+const BOT_PHOTO_Y = 174;
 /** مرکز صحنه — ربات دقیقاً روی همین خط می‌ایستد */
 const SCENE_CENTER_X = 380;
 /** حالت تازه: کل فروشگاه (دیوار، قفسه‌ها، پیش‌خوان، قالیچه) */
@@ -1042,195 +1047,20 @@ const ZhinoLoungeScene = forwardRef<ZhinoLoungeHandle, Props>(function ZhinoLoun
           </g>
 
           {/* ═══ لایهٔ قهرمان: ربات ژینو — زرشکی، گرد، جمع‌وجور ═══ */}
+          {/* ═══ لایهٔ قهرمان: تصویر واقعی ربات ژینو — ثابت، بدون افکت ═══ */}
           <g id="zl-hero">
-            {/* هاله‌های سینمایی پشت ربات — جدا می‌ماند ولی در فروشگاه می‌درخشد */}
-            <ellipse cx="380" cy="340" rx="200" ry="205" fill="url(#zl-wineHalo)" />
-            <ellipse className="zl-haloBreath" cx="380" cy="344" rx="128" ry="118" fill="url(#zl-headHalo)" />
-
             <g id="zl-robot" transform={`translate(${ROBOT_TX} ${ROBOT_TY}) scale(${ROBOT_SCALE})`}>
-              {/* ── پاها: کوتاه و گرد با کفش زرشکی ── */}
-              <g className="zl-legs">
-                <line x1="318" y1="770" x2="311" y2="828" stroke="url(#zl-leg)" strokeWidth="40" strokeLinecap="round" />
-                <circle cx="311" cy="832" r="13.5" fill="url(#zl-goldV)" />
-                <circle cx="311" cy="832" r="7" fill="#3E111B" />
-                <ellipse cx="307" cy="851" rx="30" ry="16.5" fill="url(#zl-foot)" />
-                <path d="M 281,856 Q 307,866 333,856" stroke="url(#zl-goldV)" strokeWidth="2" fill="none" opacity=".5" />
-                <ellipse cx="297" cy="845" rx="11" ry="5.5" fill="#FFFFFF" opacity=".07" />
-                <line x1="402" y1="770" x2="409" y2="828" stroke="url(#zl-leg)" strokeWidth="40" strokeLinecap="round" />
-                <circle cx="409" cy="832" r="13.5" fill="url(#zl-goldV)" />
-                <circle cx="409" cy="832" r="7" fill="#3E111B" />
-                <ellipse cx="413" cy="851" rx="30" ry="16.5" fill="url(#zl-foot)" />
-                <path d="M 387,856 Q 413,866 439,856" stroke="url(#zl-goldV)" strokeWidth="2" fill="none" opacity=".5" />
-                <ellipse cx="403" cy="845" rx="11" ry="5.5" fill="#FFFFFF" opacity=".07" />
-              </g>
-
-              {/* ── گردن طلایی (اتصال سر و تنه) ── */}
-              <rect x="326" y="506" width="68" height="48" rx="16" fill="url(#zl-goldV)" />
-              <rect x="332" y="508" width="56" height="10" rx="5" fill="#8A6A2C" opacity=".4" />
-
-              {/* ── تنهٔ گرد: زرشکی تیره و مات ── */}
-              <g id="g-torso">
-                <rect x="245" y="545" width="230" height="235" rx="98" fill="url(#zl-body)" />
-                <g clipPath="url(#zl-torsoClip)">
-                  <ellipse cx="322" cy="588" rx="96" ry="42" fill="#FFFFFF" opacity=".12" filter="url(#zl-b16)" />
-                  <ellipse cx="480" cy="665" rx="42" ry="112" fill="#2E0913" opacity=".28" filter="url(#zl-b16)" />
-                  <ellipse cx="360" cy="778" rx="112" ry="28" fill="#2E0913" opacity=".3" filter="url(#zl-b8)" />
-                  {/* نوار کمر طلایی مات */}
-                  <rect x="245" y="737" width="230" height="10" fill="url(#zl-goldV)" opacity=".85" />
-                  <rect x="245" y="747" width="230" height="2.5" fill="#2E0913" opacity=".3" />
-                </g>
-                {/* نور لبهٔ طلایی (سینمایی) */}
-                <path d="M 254,616 Q 254,562 316,550" fill="none" stroke="#F5D9A0" strokeWidth="4.5" strokeLinecap="round" opacity=".26" filter="url(#zl-b4)" />
-                {/* درزهای جانبی ظریف */}
-                <line x1="260" y1="572" x2="260" y2="732" stroke="#2E0913" strokeWidth="1.4" opacity=".22" />
-                <line x1="460" y1="572" x2="460" y2="732" stroke="#2E0913" strokeWidth="1.4" opacity=".22" />
-                {/* پنل سینهٔ فرورفته */}
-                <rect x="304" y="590" width="112" height="76" rx="24" fill="#3E111B" stroke="rgba(201,165,95,.4)" strokeWidth="1.2" />
-                <path d="M 316,598 Q 360,591 404,598" stroke="#000000" strokeWidth="3" opacity=".25" fill="none" strokeLinecap="round" />
-                {/* نشان کوچک برند: حلقهٔ طلایی با مونوگرام */}
-                <circle cx="360" cy="618" r="12.5" fill="none" stroke="url(#zl-gold)" strokeWidth="2.4" />
-                <path
-                  d="M 354.5,612.5 L 365.5,612.5 L 354.5,623.5 L 365.5,623.5"
-                  fill="none"
-                  stroke="#EAD097"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  opacity=".95"
-                />
-                {/* چراغ‌های وضعیت */}
-                <circle cx="346" cy="648" r="2.4" fill="#C9A55F" opacity=".85" />
-                <circle cx="360" cy="648" r="2.4" fill="#EAD097" />
-                <circle cx="374" cy="648" r="2.4" fill="#C9A55F" opacity=".4" />
-              </g>
-
-              {/* ── بازوی چپ: کوتاه و گرد ── */}
-              <g id="g-upper-l">
-                <line x1="243" y1="590" x2="222" y2="668" stroke="url(#zl-bodyL)" strokeWidth="38" strokeLinecap="round" />
-                <g id="g-fore-l">
-                  <line x1="222" y1="668" x2="209" y2="726" stroke="url(#zl-bodyL)" strokeWidth="33" strokeLinecap="round" />
-                  <circle cx="208" cy="730" r="11.5" fill="url(#zl-goldV)" />
-                  <circle cx="208" cy="730" r="6" fill="#3E111B" />
-                  {/* دست گرد توپ‌شکل با جزئیات ظریف */}
-                  <circle cx="206" cy="750" r="20.5" fill="url(#zl-bodyR)" />
-                  <path d="M 193,742 Q 206,735 219,742" stroke="#2E0913" strokeWidth="1.5" opacity=".3" fill="none" />
-                  <ellipse cx="199" cy="742" rx="7" ry="8" fill="#FFFFFF" opacity=".07" />
-                </g>
-              </g>
-              {/* درپوش شانهٔ طلایی */}
-              <circle cx="243" cy="590" r="25" fill="url(#zl-gold)" />
-              <circle cx="243" cy="590" r="16.5" fill="url(#zl-bodyR)" />
-              <circle cx="243" cy="590" r="4.5" fill="#8A6A2C" opacity=".7" />
-              {/* مفصل آرنج طلایی */}
-              <g id="g-elbow-l" transform="rotate(8 222 668)">
-                <circle cx="222" cy="668" r="15" fill="url(#zl-goldV)" />
-                <circle cx="222" cy="668" r="8" fill="#3E111B" />
-                <circle cx="222" cy="668" r="2.5" fill="#8A6A2C" opacity=".8" />
-              </g>
-
-              {/* ── بازوی راست ── */}
-              <g id="g-upper-r">
-                <line x1="477" y1="590" x2="498" y2="668" stroke="url(#zl-bodyL)" strokeWidth="38" strokeLinecap="round" />
-                <g id="g-fore-r">
-                  <line x1="498" y1="668" x2="511" y2="726" stroke="url(#zl-bodyL)" strokeWidth="33" strokeLinecap="round" />
-                  <circle cx="512" cy="730" r="11.5" fill="url(#zl-goldV)" />
-                  <circle cx="512" cy="730" r="6" fill="#3E111B" />
-                  <circle cx="514" cy="750" r="20.5" fill="url(#zl-bodyR)" />
-                  <path d="M 501,742 Q 514,735 527,742" stroke="#2E0913" strokeWidth="1.5" opacity=".3" fill="none" />
-                  <ellipse cx="521" cy="742" rx="7" ry="8" fill="#FFFFFF" opacity=".07" />
-                </g>
-              </g>
-              <circle cx="477" cy="590" r="25" fill="url(#zl-gold)" />
-              <circle cx="477" cy="590" r="16.5" fill="url(#zl-bodyR)" />
-              <circle cx="477" cy="590" r="4.5" fill="#8A6A2C" opacity=".7" />
-              <g id="g-elbow-r" transform="rotate(-8 498 668)">
-                <circle cx="498" cy="668" r="15" fill="url(#zl-goldV)" />
-                <circle cx="498" cy="668" r="8" fill="#3E111B" />
-                <circle cx="498" cy="668" r="2.5" fill="#8A6A2C" opacity=".8" />
-              </g>
-
-              {/* ── سر گرد با نمایشگر چهره ── */}
-              <g id="g-head">
-                {/* بدنهٔ سر: زرشکی تیره و مات */}
-                <circle cx="360" cy="372" r="158" fill="url(#zl-bodyR)" />
-                <g clipPath="url(#zl-headClip)">
-                  <ellipse cx="312" cy="272" rx="92" ry="44" fill="#FFFFFF" opacity=".12" filter="url(#zl-b16)" />
-                  <ellipse cx="520" cy="390" rx="42" ry="100" fill="#2E0913" opacity=".25" filter="url(#zl-b16)" />
-                  <ellipse cx="360" cy="516" rx="130" ry="34" fill="#2E0913" opacity=".3" filter="url(#zl-b8)" />
-                </g>
-                {/* نور لبهٔ طلایی روی شانهٔ سر */}
-                <path d="M 220,300 A 158,158 0 0 1 306,224" fill="none" stroke="#F5D9A0" strokeWidth="5" strokeLinecap="round" opacity=".3" filter="url(#zl-b4)" />
-                <path d="M 232,292 A 158,158 0 0 1 288,236" fill="none" stroke="#FFE8BC" strokeWidth="2.5" strokeLinecap="round" opacity=".45" />
-
-                {/* گوش‌های رباتیک (حلقهٔ طلایی + میدان زرشکی) */}
-                <g className="zl-ears">
-                  <circle cx="198" cy="372" r="27" fill="url(#zl-gold)" />
-                  <circle cx="198" cy="372" r="19.5" fill="#3E111B" />
-                  <circle cx="198" cy="372" r="8" fill="#E8D5B5" />
-                  <circle cx="198" cy="372" r="3" fill="url(#zl-gold)" />
-                  <circle cx="522" cy="372" r="27" fill="url(#zl-gold)" />
-                  <circle cx="522" cy="372" r="19.5" fill="#3E111B" />
-                  <circle cx="522" cy="372" r="8" fill="#E8D5B5" />
-                  <circle cx="522" cy="372" r="3" fill="url(#zl-gold)" />
-                </g>
-
-                {/* آنتن ظریف با گوی طلایی */}
-                <g id="g-antenna">
-                  <path d="M 268,244 L 256,198" stroke="url(#zl-goldV)" strokeWidth="5" strokeLinecap="round" />
-                  <circle cx="254" cy="190" r="15" fill="rgba(238,217,164,.4)" filter="url(#zl-b4)" />
-                  <circle cx="254" cy="190" r="10.5" fill="url(#zl-gold)" />
-                  <circle cx="250.5" cy="186" r="3" fill="#FFFFFF" opacity=".6" />
-                </g>
-
-                {/* نمایشگر: بازِ فرورفته + شیشهٔ تیره با عمق سه‌بعدی */}
-                <rect x="236" y="276" width="248" height="192" rx="76" fill="url(#zl-bezel)" />
-                <rect x="236" y="276" width="248" height="192" rx="76" fill="none" stroke="#8A4653" strokeWidth="1.5" opacity=".35" />
-                <rect x="244" y="284" width="232" height="176" rx="68" fill="url(#zl-screen)" />
-                {/* سایهٔ داخلی بالای شیشه + بازتاب گرم پایین */}
-                <ellipse cx="360" cy="292" rx="108" ry="16" fill="#000000" opacity=".3" filter="url(#zl-b8)" />
-                <ellipse cx="360" cy="452" rx="100" ry="10" fill="#FFD98A" opacity=".06" filter="url(#zl-b8)" />
-                {/* درخشش شیشه */}
-                <path d="M 262,318 Q 330,286 420,296 L 424,306 Q 336,298 268,330 Z" fill="#FFFFFF" opacity=".07" />
-                <ellipse cx="430" cy="312" rx="26" ry="8" fill="#FFFFFF" opacity=".06" transform="rotate(-14 430 312)" />
-
-                {/* ── چشم‌های LED: درخشان، زنده، بدون انسانی‌شدن ── */}
-                <g id="g-eyes">
-                  <ellipse cx="306" cy="358" rx="36" ry="38" fill="url(#zl-eyeGlow)" />
-                  <ellipse cx="414" cy="358" rx="36" ry="38" fill="url(#zl-eyeGlow)" />
-                  <ellipse cx="306" cy="358" rx="20" ry="23" fill="url(#zl-eyeCore)" />
-                  <ellipse cx="414" cy="358" rx="20" ry="23" fill="url(#zl-eyeCore)" />
-                  <ellipse cx="306" cy="355" rx="9.5" ry="11.5" fill="#FFFBEF" opacity=".95" />
-                  <ellipse cx="414" cy="355" rx="9.5" ry="11.5" fill="#FFFBEF" opacity=".95" />
-                  <circle cx="298" cy="349" r="4.2" fill="#FFFFFF" opacity=".95" />
-                  <circle cx="406" cy="349" r="4.2" fill="#FFFFFF" opacity=".95" />
-                  <circle cx="314" cy="366" r="2" fill="#FFFFFF" opacity=".5" />
-                  <circle cx="422" cy="366" r="2" fill="#FFFFFF" opacity=".5" />
-                </g>
-
-                {/* گونه‌های گرم و ظریف */}
-                <ellipse cx="266" cy="402" rx="12" ry="7.5" fill="#FFC673" opacity=".15" />
-                <ellipse cx="454" cy="402" rx="12" ry="7.5" fill="#FFC673" opacity=".15" />
-
-                {/* ── دهان LED (لبخند / صحبت / خندهٔ پهن) ── */}
-                <g id="g-mouth">
-                  <g id="m-smile">
-                    <path d="M 324,426 Q 360,450 396,426" fill="none" stroke="#F09F3C" strokeWidth="10" strokeLinecap="round" filter="url(#zl-b4)" opacity="0.85" />
-                    <path d="M 324,426 Q 360,450 396,426" fill="none" stroke="#FFC673" strokeWidth="6.5" strokeDasharray="0.1 9.65" strokeLinecap="round" />
-                  </g>
-                  <g id="m-talk" opacity="0">
-                    <ellipse id="m-talk-glow" cx="360" cy="434" rx="9" ry="2.5" fill="none" stroke="#F09F3C" strokeWidth="10" filter="url(#zl-b4)" opacity="0.85" />
-                    <ellipse id="m-talk-dots" cx="360" cy="434" rx="9" ry="2.5" fill="none" stroke="#FFC673" strokeWidth="6" strokeDasharray="0.1 8.2" strokeLinecap="round" />
-                  </g>
-                  <g id="m-grin" opacity="0">
-                    <path d="M 312,420 Q 360,462 408,420" fill="none" stroke="#F09F3C" strokeWidth="10" strokeLinecap="round" filter="url(#zl-b4)" opacity="0.85" />
-                    <path d="M 312,420 Q 360,462 408,420" fill="none" stroke="#FFC673" strokeWidth="6.5" strokeDasharray="0.1 9.4" strokeLinecap="round" />
-                  </g>
-                </g>
-
-                {/* چراغ‌های کوچک گوشهٔ نمایشگر */}
-                <circle cx="264" cy="440" r="2.4" fill="#FFD98A" opacity=".45" />
-                <circle cx="456" cy="440" r="2.4" fill="#FFD98A" opacity=".45" />
-              </g>
+              {/* تصویر واقعی ربات — همان فایل، با نسبت اصلی (1024x1536)؛
+                  نه کشیده می‌شود نه بریده */}
+              <image
+                className="zl-bot-photo"
+                href={ASSISTANT_BOT_IMAGE}
+                x={BOT_PHOTO_X}
+                y={BOT_PHOTO_Y}
+                width={BOT_PHOTO_W}
+                height={BOT_PHOTO_H}
+                preserveAspectRatio="xMidYMid meet"
+              />
             </g>
           </g>
 

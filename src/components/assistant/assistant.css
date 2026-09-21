@@ -96,7 +96,8 @@
   place-items: center;
   width: 2.9rem;
   height: 2.9rem;
-  border-radius: 9999px;
+  /* گوشه‌های نرم به‌جای دایرهٔ کامل تا سرِ ربات در تصویر واقعی کراپ نشود */
+  border-radius: 30%;
   background: radial-gradient(
     120% 120% at 50% 0%,
     #faf7f2 0%,
@@ -388,7 +389,8 @@
   place-items: center;
   width: 2.35rem;
   height: 2.35rem;
-  border-radius: 9999px;
+  /* گوشه‌های نرم به‌جای دایرهٔ کامل تا سرِ ربات در تصویر واقعی کراپ نشود */
+  border-radius: 30%;
   background: radial-gradient(
     120% 120% at 50% 0%,
     #faf7f2 0%,
@@ -992,7 +994,8 @@
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 9999px;
+  /* گوشه‌های نرم به‌جای دایرهٔ کامل تا سرِ ربات در تصویر واقعی کراپ نشود */
+  border-radius: 30%;
   background: radial-gradient(
     120% 120% at 50% 0%,
     #faf7f2 0%,
@@ -2389,5 +2392,210 @@
   .zhino-welcome-char-btn:hover,
   .zhino-welcome-char-btn:active {
     transform: none;
+  }
+}
+
+/* ============================================================
+   تصویر واقعی ربات (بارگیری.jpeg) — بدون افکت، با نسبت اصلی
+   ============================================================ */
+
+/* عکس ربات داخل هر ظرف آواتار: کامل، بدون کشیدگی و بدون برش */
+.zhino-bot-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+/* تصویر خوش‌آمدگویی صفحهٔ دستیار — همان فایل با نسبت ۲:۳ */
+.zhino-welcome-photo {
+  position: relative;
+  z-index: 2;
+  display: block;
+  height: clamp(180px, 55vw, 220px);
+  width: auto;
+  aspect-ratio: 1024 / 1536;
+  object-fit: contain;
+  border-radius: 1.1rem;
+  user-select: none;
+}
+
+/* حباب سلامِ ثابت — فقط ورود، بدون حرکت شناور */
+.zhino-welcome-bubble.is-still {
+  animation: zhino-welcome-bubble-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ============================================================
+   فاز ۹ — بازطراحی تخت و یکپارچهٔ محیط چت
+   یک سطح و یک پس‌زمینهٔ هماهنگ؛ کارت‌های تو‌در‌تو، پس‌زمینه‌های
+   چندلایه، بلور و سایه‌های سنگین حذف می‌شوند. ربات فقط به‌صورت
+   یک تصویر کوچکِ تمام‌قد در مرکز خوش‌آمدگویی دیده می‌شود.
+   ============================================================ */
+
+/* صفحه: تک‌رنگ، بدون لایه‌های رنگی */
+.zhino-assistant-page {
+  background-image: none;
+}
+
+/* سربرگ: هم‌رنگ صفحه، بدون بلور، فقط یک خط جداکنندهٔ مویی */
+.zhino-assistant-topbar {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom: 1px solid rgba(41, 35, 33, 0.08);
+  padding-left: clamp(0.7rem, 3vw, 1.5rem);
+}
+
+.zhino-assistant-topbar::after {
+  content: none;
+}
+
+/* نشان برند و آواتارها: سطح تخت سفید با خط مویی (فقط صفحهٔ چت) */
+.zhino-assistant-brand-mark,
+.zhino-assistant-avatar {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.09);
+}
+
+/* دکمه‌های سربرگ: بی‌صدا و هم‌خانواده */
+.zhino-assistant-ghost {
+  background: transparent;
+  border-color: rgba(41, 35, 33, 0.14);
+  color: var(--color-mocha);
+}
+
+@media (hover: hover) {
+  .zhino-assistant-ghost:hover {
+    background: #ffffff;
+    border-color: rgba(113, 49, 59, 0.32);
+    color: var(--color-wine-800);
+    transform: none;
+  }
+}
+
+.zhino-assistant-ghost:active {
+  transform: none;
+}
+
+/* هیچ انیمیشن ورود/حرکتی در محیط چت */
+.zhino-assistant-console,
+.zhino-assistant-welcome,
+.zhino-assistant-ideas-body,
+.zhino-assistant-voice-note,
+.zhino-welcome-hint {
+  animation: none;
+}
+
+/* ربات کوچک و تمام‌قد در مرکز — نه کشیده، نه بریده */
+.zhino-welcome-photo {
+  height: clamp(5.5rem, 22vh, 7.5rem);
+  width: auto;
+  aspect-ratio: 1024 / 1536;
+  object-fit: contain;
+  border-radius: 0.8rem;
+}
+
+/* پیام‌ها: دو سطح سادهٔ تخت */
+.zhino-assistant-bubble.is-bot {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.zhino-assistant-bubble.is-user {
+  background-image: none;
+  box-shadow: none;
+}
+
+/* کارت محصول و تأیید سبد: تخت و هم‌سطح */
+.zhino-assistant-product {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.zhino-assistant-product-swatch {
+  background: #faf7f2;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.09);
+}
+
+.zhino-assistant-cart-confirm {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+/* دکمه‌های کنشی: تک‌رنگ، بدون گرادیان و سایه */
+.zhino-assistant-send,
+.zhino-assistant-add,
+.zhino-assistant-cart-yes {
+  background-image: none;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-send:not(:disabled):hover,
+  .zhino-assistant-add:not(:disabled):hover,
+  .zhino-assistant-cart-yes:hover {
+    transform: none;
+    box-shadow: none;
+    filter: brightness(1.06);
+  }
+}
+
+/* کادر نوشتن: نوار سادهٔ سفید روی همان سطح */
+.zhino-assistant-composer::before {
+  content: none;
+}
+
+.zhino-assistant-composer-form {
+  background: #ffffff;
+  border: 1px solid rgba(41, 35, 33, 0.12);
+  border-radius: 1.1rem;
+  box-shadow: none;
+}
+
+.zhino-assistant-composer-form:focus-within {
+  border-color: rgba(113, 49, 59, 0.4);
+  box-shadow: 0 0 0 3px rgba(113, 49, 59, 0.08);
+}
+
+/* چیپ‌ها و فهرست پیشنهادها: تخت */
+.zhino-assistant-chip {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-chip:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: rgba(184, 154, 98, 0.55);
+  }
+}
+
+.zhino-assistant-ideas-body {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+/* دکمهٔ صدا: تخت */
+.zhino-assistant-voice {
+  background: #ffffff;
+}
+
+.zhino-assistant-voice.is-on {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(184, 154, 98, 0.55);
+}
+
+/* فضای رزروشدهٔ قدیمی برای دکمهٔ مطلق دیگر لازم نیست (موبایل) */
+@media (max-width: 639px) {
+  .zhino-assistant-topbar {
+    padding-left: clamp(0.7rem, 3vw, 1.5rem);
+  }
+}
+
+@media (max-width: 380px) {
+  .zhino-assistant-topbar {
+    padding-left: 0.7rem;
   }
 }
