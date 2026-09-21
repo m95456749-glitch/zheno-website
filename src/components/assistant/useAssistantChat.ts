@@ -27,13 +27,14 @@ import { useRemoteSiteData } from '../../services/siteDataSync';
 import { useCartContext } from '../../context/CartContext';
 import { getProductById, getVariantById } from '../../services/catalog';
 import { productPath, searchProducts } from '../../services/assistant/knowledge';
+import { formatPrice } from '../../utils/format';
 import {
   AssistantRemoteError,
   askRemoteAssistant,
   isAssistantRemoteConfigured,
   probeAssistantRemote,
 } from '../../services/assistant/client';
-import { DEFAULT_SUGGESTIONS, answerLocally } from '../../services/assistant/engine';
+import { DEFAULT_SUGGESTIONS, answerLocally, createAssistantMemory } from '../../services/assistant/engine';
 import { buildAssistantContext, getAssistantDataSource } from '../../services/assistant/knowledge';
 import type {
   AssistantCartOffer,
@@ -124,6 +125,13 @@ export function useAssistantChat(): UseAssistantChatResult {
 
   const nextId = useRef(2);
   const busy = useRef(false);
+  /**
+   * حافظهٔ گفتگو (فاز ۱۲) — موتور محلی با آن «پیام قبلی» را می‌فهمد:
+   * آخرین محصولاتِ موضوعِ بحث برای پیگیری‌های مثل «قیمتش چنده؟»،
+   * و واریانت‌های تازه‌استفاده‌شده تا پاسخ‌ها فوراً تکرار نشوند.
+   * روی «گفتگوی تازه» ریست می‌شود.
+   */
+  const memory = useRef(createAssistantMemory());
   /** آخرین پرسش کاربر — برای دکمهٔ «تلاش دوباره» */
   const lastQuestion = useRef<string>('');
   const mounted = useRef(true);
@@ -200,7 +208,7 @@ export function useAssistantChat(): UseAssistantChatResult {
         await sleep(420 + Math.round(Math.random() * 240));
         if (!mounted.current) return;
         const context = buildAssistantContext();
-        const answer = answerLocally(clean, context);
+        const answer = answerLocally(clean, context, memory.current);
         push({
           from: 'bot',
           text: answer.text,
@@ -322,12 +330,26 @@ export function useAssistantChat(): UseAssistantChatResult {
       }
 
       const result = cart.addItemWithToast(offer.productId, offer.variantId, 1);
+
+      // رفتار فروشندهٔ واقعی (فاز ۱۲): بعد از افزودن، صادقانه بگوییم
+      // تا ارسال رایگان چقدر مانده — عدد از خود سبد/تنظیمات فروشگاه،
+      // نه از حدس. (سبد همان لحظه به‌روز می‌شود؛ ماندهٔ جدید = ماندهٔ
+      // فعلی منهای همین اقلام تازه.)
+      const remainingAfterAdd = Math.max(0, cart.remainingForFreeShipping - offer.price);
+
+      const successText =
+        Math.random() < 0.5
+          ? `${label} (${variant.weight}) به سبد خرید اضافه شد. ثبت سفارش و پرداخت با خودتان است؛ هر وقت خواستید از سبد خرید انجامش بدهید.`
+          : `${label} (${variant.weight}) به سبد خرید اضافه شد — توی سبد منتظر شماست. پرداخت و ثبت نهایی همیشه دست خودتان می‌ماند.`;
+      const progressLine =
+        remainingAfterAdd > 0
+          ? ` فقط ${formatPrice(remainingAfterAdd)} تا ارسال رایگان مانده — اگر بخواهید، پیشنهادهای هم‌سبدتان را می‌گویم.`
+          : ' با همین سفارش، ارسال رایگان می‌شود.';
+
       markAdded();
       push({
         from: 'bot',
-        text: result.success
-          ? `${label} (${variant.weight}) به سبد خرید اضافه شد. ثبت سفارش و پرداخت با خودتان است؛ هر وقت خواستید از سبد خرید انجامش بدهید.`
-          : `افزودن «${label}» به سبد انجام نشد${result.error ? `: ${result.error}` : ''}. از صفحهٔ محصول هم می‌توانید اضافه‌اش کنید.`,
+        text: result.success ? successText + progressLine : `افزودن «${label}» به سبد انجام نشد${result.error ? `: ${result.error}` : ''}. از صفحهٔ محصول هم می‌توانید اضافه‌اش کنید.`,
         links: result.success
           ? [{ label: 'دیدن سبد خرید', to: '/cart' }]
           : [{ label: 'صفحهٔ محصول', to: productPath(product.id) }],
@@ -376,6 +398,7 @@ export function useAssistantChat(): UseAssistantChatResult {
     busy.current = false;
     remoteFailures.current = 0;
     lastQuestion.current = '';
+    memory.current = createAssistantMemory();
     setThinking(false);
     setDraft('');
     // بازگشت به همان حالت خوشامد اولیه: پیام تازه، وسط صفحه، با
