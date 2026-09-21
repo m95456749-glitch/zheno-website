@@ -2702,7 +2702,7 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
 // ASSISTANT SUITE (phase 5 → ): the standalone /assistant page rendered
 // as an immersive, ChatGPT-style chat environment (no storefront
 // header/footer), the floating launcher → route (no popup),
-// «بازگشت به فروشگاه», the browser back button, and the chat itself —
+// «بازگشت به سایت», the browser back button, and the chat itself —
 // offline (local grounded engine) and connected (AI proxy, mocked).
 //
 // Phase 8 adds the customer-experience contract: nothing technical is ever
@@ -2794,9 +2794,9 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (!rendered) fail('assistant page — never rendered: ' + text().slice(0, 160));
     const body = text();
     expectContains('assistant page', body, 'دستیار ژینو');
-    // Phase 7 — the chat environment: a quiet «بازگشت به فروشگاه»
+    // Phase 7 — the chat environment: a quiet «بازگشت به سایت»
     // button, a short Persian welcome, and no storefront chrome.
-    expectContains('assistant page', body, 'بازگشت به فروشگاه');
+    expectContains('assistant page', body, 'بازگشت به سایت');
     expectContains('assistant page', body, ASSISTANT_WELCOME_HEADING);
     // the sidebar / capability column and the storefront footer are gone
     expectNotContains('assistant page', body, 'توانایی‌های دستیار');
@@ -2945,7 +2945,7 @@ async function openAssistantFromStore(dom, waitFor, text) {
   }
 }
 
-// ── 33. «بازگشت به فروشگاه» → home, and the browser Back works ─
+// ── 33. «بازگشت به سایت» → home, and the browser Back works ─
 {
   const { dom, text, waitFor, errors } = await renderWithStub('/zheno-website/products', {
     stub: { fetchImpl: OFFLINE_FETCH },
@@ -2956,14 +2956,14 @@ async function openAssistantFromStore(dom, waitFor, text) {
     const opened = await openAssistantFromStore(dom, waitFor, text);
     if (!opened) fail('assistant back — could not open /assistant');
 
-    clickButtonByContains(dom, 'بازگشت به فروشگاه');
+    clickButtonByContains(dom, 'بازگشت به سایت');
     const home = await waitFor(() => text().includes('واردکننده و پخش‌کننده پودر ژله و کاستر'));
-    if (home) ok('«بازگشت به فروشگاه» — lands on the storefront home page');
-    else fail('«بازگشت به فروشگاه» — home did not render: ' + text().slice(0, 160));
+    if (home) ok('«بازگشت به سایت» — lands on the storefront home page');
+    else fail('«بازگشت به سایت» — home did not render: ' + text().slice(0, 160));
     if (dom.window.location.pathname.replace(/\/+$/, '') === '/zheno-website') {
-      ok('«بازگشت به فروشگاه» — the URL is the site root');
+      ok('«بازگشت به سایت» — the URL is the site root');
     } else {
-      fail('«بازگشت به فروشگاه» — unexpected URL: ' + dom.window.location.pathname);
+      fail('«بازگشت به سایت» — unexpected URL: ' + dom.window.location.pathname);
     }
 
     // The browser's own Back button must walk back into the app (SPA),
@@ -4486,8 +4486,8 @@ async function loadAssistantEdgeFunction(env, marker) {
     const ready = await waitFor(() => text().includes(ASSISTANT_WELCOME_HEADING));
     if (!ready) fail('assistant routes — /assistant never rendered');
 
-    // «بازگشت به فروشگاه» → home, then the existing routes still work
-    clickButtonByContains(dom, 'بازگشت به فروشگاه');
+    // «بازگشت به سایت» → home, then the existing routes still work
+    clickButtonByContains(dom, 'بازگشت به سایت');
     await waitFor(() => text().includes('واردکننده و پخش‌کننده پودر ژله و کاستر'));
 
     const header = dom.window.document.querySelector('header');
