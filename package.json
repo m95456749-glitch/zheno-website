@@ -16,7 +16,8 @@
     "test:voice-android": "node scripts/tts-android-sim.mjs",
     "test:voice-cloud": "node scripts/tts-cloud-sim.mjs",
     "verify:voice": "node scripts/verify-voice.mjs",
-    "verify:voice-settings": "node scripts/verify-voice-settings-ui.mjs"
+    "verify:voice-settings": "node scripts/verify-voice-settings-ui.mjs",
+    "verify:assistant-scene": "node scripts/verify-assistant-scene.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

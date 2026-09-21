@@ -7,7 +7,10 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { formatPrice, toPersianDigits } from '../../utils/format';
+import { FLAVORS } from '../../data/products';
+import { getProductById } from '../../services/catalog';
 import { cheapestVariant } from '../../services/assistant/knowledge';
+import type { AssistantProductFact } from '../../services/assistant/types';
 import AssistantAvatar from './AssistantAvatar';
 import ZhinoWelcomeAnimation from './ZhinoWelcomeAnimation';
 import { ASSISTANT_NAME } from './assistantData';
@@ -32,6 +35,18 @@ const LOADING_VOICE_MSG = 'در حال آماده‌سازی صدا… لطفا�
 const CLOUD_FAILED_MSG = 'صدا این لحظه در دسترس نیست؛ متن پاسخ را همین‌جا می‌خوانید.';
 const NOT_ALLOWED_MSG = 'پخش خودکار توسط مرورگر مسدود شد؛ برای شنیدن روی دکمهٔ «خواندن پاسخ» بزنید.';
 const PREPARING_VOICE_MSG = 'در حال آماده‌سازی صدا…';
+
+/**
+ * رنگِ نگینِ کارت محصول — از همان کاتالوگ واقعی فروشگاه (FLAVORS)،
+ * نه رنگِ ساختگی. اگر طعمی در داده‌ها نباشد، رنگِ دسته به کار
+ * می‌رود؛ هیچ رنگی از خودمان اختراع نمی‌شود.
+ */
+function swatchColor(product: AssistantProductFact): string {
+  const catalogProduct = getProductById(product.id);
+  const flavor = catalogProduct ? FLAVORS[catalogProduct.flavorId] : undefined;
+  if (flavor) return flavor.color;
+  return product.category === 'custard' ? '#D9A05B' : '#B34A57';
+}
 
 function isAndroidDevice(): boolean {
   try {
@@ -127,6 +142,24 @@ export default function AssistantChat({ chat, className }: Props) {
   const voiceSite = useVoiceSettings();
   const [ideasOpen, setIdeasOpen] = useState(false);
   /**
+   * تعداد پیام‌ها در لحظه‌ای که کاربر ردیفِ پیشنهادها را باز کرده است.
+   *
+   * چرا لازم است: جمع‌شدنِ خودکارِ این ردیف در یک افکت (passive effect)
+   * انجام می‌شود. اگر افکت روی دستگاهِ کُند یا زیرِ بار دیر اجرا شود،
+   * می‌تواند ردیفی را ببندد که کاربر چند لحظه قبل — برای همین پیام —
+   * باز کرده بود (ردیف زیرِ دستِ کاربر جمع می‌شود). با نگه داشتنِ این
+   * شمارنده، افکتِ دیررسد می‌فهمد که بازبودنِ فعلی خواستهٔ کاربر است و
+   * کاری نمی‌کند؛ با آمدنِ پیامِ تازه (تغییرِ شمارنده) ردیف مثل قبل جمع
+   * می‌شود. رفتارِ قابل‌دیدن تغییر نمی‌کند، فقط قطعی می‌شود.
+   */
+  const ideasOpenedAt = useRef<number | null>(null);
+
+  const toggleIdeas = () => {
+    const next = !ideasOpen;
+    ideasOpenedAt.current = next ? messages.length : null;
+    setIdeasOpen(next);
+  };
+  /**
    * پیام کوتاه صوتی — یک دولت واحد برای «متن اصلی + راهنمای اختیاری».
    * قبلاً دو دولت جدا بودند و افکت پاک‌سازی در سوارشدن صفحه یک
    * setVoiceHint(null) زودتر از لمس کاربر در صف می‌گذاشت که می‌توانست
@@ -162,6 +195,7 @@ export default function AssistantChat({ chat, className }: Props) {
     stop();
     setReadingId(null);
     spokenId.current = 0;
+    ideasOpenedAt.current = null;
     setIdeasOpen(false);
   }, [fresh, stop]);
 
@@ -176,6 +210,10 @@ export default function AssistantChat({ chat, className }: Props) {
   }, [messages, thinking, voiceOn, voiceSite.autoVoice, voiceSite.voiceEnabled, speak]);
 
   useEffect(() => {
+    /* ردیفِ پیشنهادها با هر پیامِ تازه جمع می‌شود تا روی گفتگو انباشته
+       نشود — مگر این‌که کاربر خودش آن را برای همین پیام باز کرده باشد
+       (در آن صورت افکتِ دیررسد حقِ بستنش را ندارد). */
+    if (ideasOpenedAt.current === messages.length) return;
     setIdeasOpen(false);
   }, [messages.length]);
 
@@ -295,7 +333,7 @@ export default function AssistantChat({ chat, className }: Props) {
             <h2 className="zhino-assistant-welcome-title">{ASSISTANT_WELCOME_TITLE}</h2>
             <span className="rule-lux zhino-assistant-welcome-rule" aria-hidden="true" />
             {voiceSite.suggestions && <div className="zhino-assistant-welcome-chips">{chips}</div>}
-            <p className="zhino-assistant-welcome-hint">قفسهٔ استودیو را هم می‌توانید لمس کنید</p>
+            <p className="zhino-assistant-welcome-hint">برای دیدن محصولات ژینو کافی است بپرسید</p>
           </div>
         ) : (
           messages.map((message) => (
@@ -332,6 +370,11 @@ export default function AssistantChat({ chat, className }: Props) {
                         const lowStock = option !== null && option.stock > 0 && option.stock <= 5;
                         return (
                           <span key={`${message.id}-${product.id}`} className={cn('zhino-assistant-product', out && 'is-out')}>
+                            {/* نگینِ طعم — رنگ از همان کاتالوگ واقعی */}
+                            <span className="zhino-assistant-product-swatch" aria-hidden="true">
+                              <i style={{ background: swatchColor(product) }} />
+                            </span>
+
                             <span className="zhino-assistant-product-main">
                               <span className="zhino-assistant-product-name">{product.name}</span>
                               <span className="zhino-assistant-product-meta">
@@ -350,26 +393,32 @@ export default function AssistantChat({ chat, className }: Props) {
                                 )}
                               </span>
                             </span>
-                            <button
-                              type="button"
-                              className="zhino-assistant-add"
-                              disabled={out || thinking}
-                              onClick={() => {
-                                if (!option) return;
-                                acceptCartOffer(message.id, {
-                                  productId: product.id,
-                                  variantId: option.id,
-                                  label: `${product.shortName}${option.weight ? ` ${option.weight}` : ''}`.trim(),
-                                  price: option.price,
-                                  stock: option.stock,
-                                });
-                              }}
-                              aria-label={out ? `${product.shortName} ناموجود است` : `درخواست افزودن ${product.shortName} به سبد خرید`}
-                              title={out ? 'ناموجود' : 'افزودن به سبد خرید — با تأیید شما'}
-                            >
-                              {out ? <span>ناموجود</span> : <BasketIcon />}
-                              {!out && <span>افزودن به سبد</span>}
-                            </button>
+
+                            <span className="zhino-assistant-product-actions">
+                              <Link className="zhino-assistant-product-link" to={product.to}>
+                                جزئیات
+                              </Link>
+                              <button
+                                type="button"
+                                className="zhino-assistant-add"
+                                disabled={out || thinking}
+                                onClick={() => {
+                                  if (!option) return;
+                                  acceptCartOffer(message.id, {
+                                    productId: product.id,
+                                    variantId: option.id,
+                                    label: `${product.shortName}${option.weight ? ` ${option.weight}` : ''}`.trim(),
+                                    price: option.price,
+                                    stock: option.stock,
+                                  });
+                                }}
+                                aria-label={out ? `${product.shortName} ناموجود است` : `درخواست افزودن ${product.shortName} به سبد خرید`}
+                                title={out ? 'ناموجود' : 'افزودن به سبد خرید — با تأیید شما'}
+                              >
+                                {out ? <span>ناموجود</span> : <BasketIcon />}
+                                {!out && <span>افزودن به سبد</span>}
+                              </button>
+                            </span>
                           </span>
                         );
                       })}
@@ -441,7 +490,7 @@ export default function AssistantChat({ chat, className }: Props) {
       <div className="zhino-assistant-composer">
         {!fresh && voiceSite.suggestions && suggestions.length > 0 && (
           <div className="zhino-assistant-ideas">
-            <button type="button" className="zhino-assistant-ideas-toggle" onClick={() => setIdeasOpen((open) => !open)} aria-expanded={ideasOpen} aria-controls="zhino-assistant-ideas-list">
+            <button type="button" className="zhino-assistant-ideas-toggle" onClick={toggleIdeas} aria-expanded={ideasOpen} aria-controls="zhino-assistant-ideas-list">
               <IdeaIcon />
               <span>پیشنهادها</span>
               <span className="zhino-assistant-ideas-caret" aria-hidden="true">

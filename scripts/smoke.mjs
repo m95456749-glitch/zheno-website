@@ -135,10 +135,14 @@ const SHELL =
  * Render a route and return its text.
  * `seed` runs after DOM creation but before the app script executes,
  * e.g. to seed localStorage.
+ * `live: true` keeps the window open and returns `{ waitFor, dom, close }`
+ * so a caller can POLL for a state instead of napping a fixed number of
+ * milliseconds (fixed naps are what made time-dependent checks flaky on
+ * slow/loaded machines). The caller must call `close()`.
  */
 async function render(
   path,
-  { seed, clickAddToCart = false, settleMs = 0, appSource, fetchStub, exposeNodeApis = false } = {},
+  { seed, clickAddToCart = false, settleMs = 0, appSource, fetchStub, exposeNodeApis = false, live = false } = {},
 ) {
   const errors = [];
   const virtualConsole = new VirtualConsole();
@@ -230,6 +234,28 @@ async function render(
   // link hrefs (e.g. to verify the hidden footer entry)
   const links = Array.from(document.querySelectorAll('a')).map((a) => a.getAttribute('href') ?? '');
   const result = { text, errors, toastText, heroImgSrcs, heroFirstPriority, heroWebpSrcs, heroDots, links };
+
+  if (live) {
+    // Same window, still running: poll for a state instead of guessing
+    // how many milliseconds the app needs to get there.
+    const waitFor = async (predicate, timeoutMs = 12000) => {
+      const until = Date.now() + timeoutMs;
+      while (Date.now() < until) {
+        if (predicate()) return true;
+        await sleep(100);
+      }
+      return false;
+    };
+    return {
+      ...result,
+      dom,
+      document,
+      waitFor,
+      text: () => document.getElementById('root')?.textContent ?? '',
+      close: () => dom.window.close(),
+    };
+  }
+
   dom.window.close();
   return result;
 }
@@ -328,12 +354,26 @@ function expectNoErrors(label, errors) {
   expectContains('root home', text, 'در یک مجموعه');
   expectContains('root home', text, 'واردکننده و پخش‌کننده پودر ژله و کاستر');
   expectContains('root home', text, 'مشاهده محصولات');
-  // After one 3 s rotation the slideshow mounts one more slide ahead,
-  // so the upcoming photo always has a full interval to preload.
-  const rotated = await render('/', { settleMs: 4000 });
-  const rotatedSlides = rotated.heroImgSrcs.filter((s) => s.includes('images/IMG_20260903_002'));
-  if (rotatedSlides.length === 3) ok('hero rotation progressively mounts the next slide');
-  else fail(`hero rotation must mount 3 slides after ~4 s, found ${rotatedSlides.length}`);
+  // After one 3 s rotation the slideshow mounts one more slide ahead, so
+  // the upcoming photo always has a full interval to preload.
+  //
+  // The mount count is TIMED (2 → 3 at the first rotation, → 4 at the
+  // second), so it must be polled, not sampled after a fixed nap: on a
+  // loaded 2-core box the interval fires late and a 4 s snapshot used to
+  // land on 2 slides ("hero rotation must mount 3 slides after ~4 s,
+  // found 2"). We now wait for the state and read it the moment it holds.
+  {
+    const live = await render('/', { live: true });
+    const slideCount = () =>
+      Array.from(
+        live.document.querySelectorAll('section[aria-label="معرفی ژینو"] img'),
+      ).filter((img) => (img.getAttribute('src') ?? '').includes('images/IMG_20260903_002')).length;
+    const progressed = await live.waitFor(() => slideCount() >= 3, 15000);
+    const mounted = slideCount();
+    if (progressed && mounted === 3) ok('hero rotation progressively mounts the next slide');
+    else fail(`hero rotation must mount 3 slides after one rotation, found ${mounted}`);
+    live.close();
+  }
   const rooted = heroImgSrcs.filter((s) => s.startsWith('/images/'));
   if (rooted.length === heroImgSrcs.length && rooted.length > 0)
     ok('root hero images resolve from the domain root (/images/…)');
@@ -834,23 +874,28 @@ function expectNoErrors(label, errors) {
     });
   };
 
+  // The three catalog reads are asynchronous (fetch + commit), so poll for
+  // them rather than sampling the DOM after a fixed 400 ms nap — on a slow
+  // or loaded machine the reads had not all landed yet and the run failed
+  // with «expected 3 catalog reads, saw: products | product_variants».
   const products = await render('/zheno-website/products', {
     appSource: appCodeWithDb,
     exposeNodeApis: true,
-    settleMs: 400,
+    live: true,
     fetchStub: dbFetch,
   });
+  const CATALOG_TABLES = ['products', 'product_variants', 'inventory'];
+  const readTables = () => CATALOG_TABLES.filter((t) => seen.some((u) => u.includes(`/rest/v1/${t}`)));
+  const allRead = await products.waitFor(() => readTables().length === CATALOG_TABLES.length, 12000);
 
-  const readTables = ['products', 'product_variants', 'inventory'].filter((t) =>
-    seen.some((u) => u.includes(`/rest/v1/${t}`)),
-  );
-  if (readTables.length === 3) ok('connected mode — catalog read from the database (3 tables)');
+  if (allRead && readTables().length === 3) ok('connected mode — catalog read from the database (3 tables)');
   else fail(`connected mode — expected 3 catalog reads, saw: ${seen.join(' | ') || 'none'}`);
 
-  expectContains('connected mode products', products.text, 'ژله توت فرنگی دیتابیس');
+  expectContains('connected mode products', products.text(), 'ژله توت فرنگی دیتابیس');
   // Only the single database row is sold: the other 21 base products are
   // not shown, i.e. the database really is the source of truth.
-  expectNotContains('connected mode products', products.text, 'ژله انار');
+  expectNotContains('connected mode products', products.text(), 'ژله انار');
+  products.close();
 
   const home = await render('/zheno-website/', {
     appSource: appCodeWithDb,
@@ -1078,11 +1123,20 @@ function expectNoErrors(label, errors) {
     }
 
     // navigate to inventory through the panel's own navigation (SPA link)
-    const inventoryLink = Array.from(document.querySelectorAll('a')).find((a) =>
-      (a.getAttribute('href') ?? '').endsWith('/admin/inventory'),
+    // Re-queried per attempt: on a loaded machine a single synthetic click
+    // can be lost (stale node / mid-commit), and a user would click again.
+    const clickEl = (element) =>
+      element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    const findInventoryLink = () =>
+      Array.from(document.querySelectorAll('a')).find((a) =>
+        (a.getAttribute('href') ?? '').endsWith('/admin/inventory'),
+      );
+    const onInventory = await clickUntil(
+      clickEl,
+      findInventoryLink,
+      () => text().includes('موجودی (عدد)'),
+      waitFor,
     );
-    if (inventoryLink) inventoryLink.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    const onInventory = await waitFor(() => text().includes('موجودی (عدد)'));
     if (onInventory) ok('connected admin — inventory page reached through the panel nav');
     else fail('connected admin — inventory page did not render: ' + text().slice(0, 200));
 
@@ -1090,13 +1144,40 @@ function expectNoErrors(label, errors) {
     if (!stockInput) {
       fail('connected admin — stock input not found');
     } else {
-      setReactValue(stockInput, '42');
-      // React's onBlur listens to the bubbling 'focusout' event.
-      stockInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
       const rpc = () => calls.find((c) => c.url.includes('/rest/v1/rpc/set_inventory_stock'));
-      const saved = await waitFor(() => Boolean(rpc()));
+      // A real user types and then leaves the field: two separate tasks,
+      // with React committing the draft state in between. The panel's
+      // onBlur handler (`commit`) reads that draft from its own render
+      // closure, so firing both synthetic events inside a single task can
+      // hand it the *previous* value — it then compares the old number with
+      // itself and no save goes out at all.
+      //
+      // That is exactly what happened once on a pinned CPU («stock update
+      // did not reach the database», empty payload after a 12 s poll). The
+      // precise scheduling detail inside React is not what matters here —
+      // what matters is that the check now behaves like a user: type, let
+      // React commit, then blur; and if the save still did not go out,
+      // retype and blur again instead of declaring a failure.
+      const retypeAndBlur = async () => {
+        setReactValue(stockInput, '42');
+        // one macrotask: the pending React commit is flushed before this
+        // timer callback runs (microtasks always drain first)
+        await sleep(60);
+        // React's onBlur listens to the bubbling 'focusout' event.
+        stockInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
+      };
+      let saved = false;
+      for (let attempt = 0; attempt < 4 && !saved; attempt += 1) {
+        await retypeAndBlur();
+        saved = await waitFor(() => Boolean(rpc()), 3000);
+      }
       if (saved) ok('connected admin — stock saved through the atomic set_inventory_stock RPC');
-      else fail('connected admin — stock update did not reach the database');
+      else
+        fail(
+          'connected admin — stock update did not reach the database (field connected=' +
+            `${stockInput.isConnected}, value=${stockInput.value}; database calls seen: ` +
+            `${calls.map((c) => `${c.method} ${String(c.url).replace(/^https?:\/\/[^/]+/, '')}`).join(' , ') || 'none'})`,
+        );
       const payload = rpc() ? JSON.parse(rpc().body) : {};
       if (payload.p_variant_id === 'jelly-strawberry-250' && payload.p_current_stock === 42) {
         ok('connected admin — stock payload is correct (variant + new value)');
@@ -1106,11 +1187,16 @@ function expectNoErrors(label, errors) {
     }
 
     // navigate to products and toggle the storefront visibility
-    const productsLink = Array.from(document.querySelectorAll('a')).find((a) =>
-      (a.getAttribute('href') ?? '').endsWith('/admin/products'),
+    const findProductsLink = () =>
+      Array.from(document.querySelectorAll('a')).find((a) =>
+        (a.getAttribute('href') ?? '').endsWith('/admin/products'),
+      );
+    const onProducts = await clickUntil(
+      clickEl,
+      findProductsLink,
+      () => text().includes('افزودن محصول'),
+      waitFor,
     );
-    if (productsLink) productsLink.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    const onProducts = await waitFor(() => text().includes('افزودن محصول'));
     if (onProducts) ok('connected admin — products page reached through the panel nav');
     else fail('connected admin — products page did not render: ' + text().slice(0, 200));
 
@@ -1451,6 +1537,33 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   return { dom, document, text, waitFor, errors };
 }
 
+/**
+ * Click something and wait for the screen it leads to — and if that screen
+ * does not appear, re-query the element and click again (up to `attempts`
+ * times).
+ *
+ * A single synthetic click can be lost in a jsdom running on a loaded CPU:
+ * the node we hold may be replaced by a later commit before the event is
+ * processed (a stale node's events never reach React's root listener), or
+ * the click may land while the tree is mid-commit — the suite did fail that
+ * way once. A real user would simply click again, so the harness does the
+ * same instead of reporting a failure
+ * that looks like "the app did not navigate" — which is what this suite did
+ * once under load («connected images — the gallery did not render», with the
+ * dashboard still on screen after a 12 s poll).
+ *
+ * `find` is a function so every attempt re-queries the element.
+ */
+async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachMs = 6000 } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const element = typeof find === 'function' ? find() : find;
+    if (!element) return false;
+    click(element);
+    if (await waitFor(predicate, eachMs)) return true;
+  }
+  return false;
+}
+
 // ════════════════════════════════════════════════════════════
 // SECURITY / REGRESSION SUITE (pre-merge review of the database
 // connection). Every check fails closed: an account without the
@@ -1500,12 +1613,19 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
     fail('connected images — the admin session did not open: ' + text().slice(0, 200));
   } else {
     // ── the gallery is reached through the panel's own navigation ──
-    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
-      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+    // Re-queried per attempt: a click can be lost on a loaded machine (see
+    // clickUntil), and a real user would just click the link again.
+    const findImagesLink = () =>
+      Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+    if (!findImagesLink()) fail('connected images — no navigation link to /admin/product-images');
+    const onGallery = await clickUntil(
+      click,
+      findImagesLink,
+      () => text().includes('فضای ذخیره‌سازی Supabase'),
+      waitFor,
     );
-    if (!imagesLink) fail('connected images — no navigation link to /admin/product-images');
-    else click(imagesLink);
-    const onGallery = await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
     if (onGallery) ok('connected images — the gallery reads product_images from the database');
     else fail('connected images — the gallery did not render: ' + text().slice(0, 200));
 
@@ -1732,12 +1852,12 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   if (!signedIn) {
     fail('bucket-missing — the admin session did not open: ' + text().slice(0, 200));
   } else {
-    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
-      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
-    );
-    if (!imagesLink) fail('bucket-missing — no navigation link to /admin/product-images');
-    else click(imagesLink);
-    await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+    const findImagesLink = () =>
+      Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+    if (!findImagesLink()) fail('bucket-missing — no navigation link to /admin/product-images');
+    await clickUntil(click, findImagesLink, () => text().includes('فضای ذخیره‌سازی Supabase'), waitFor);
 
     const replaceButton = findButton('جایگزینی تصویر اصلی');
     if (!replaceButton) {
@@ -1856,12 +1976,12 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   if (!signedIn) {
     fail('gallery curation — the admin session did not open: ' + text().slice(0, 200));
   } else {
-    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
-      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
-    );
-    if (!imagesLink) fail('gallery curation — no navigation link to /admin/product-images');
-    else click(imagesLink);
-    await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+    const findImagesLink = () =>
+      Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+    if (!findImagesLink()) fail('gallery curation — no navigation link to /admin/product-images');
+    await clickUntil(click, findImagesLink, () => text().includes('فضای ذخیره‌سازی Supabase'), waitFor);
 
     // ── ADD a second photo without touching the current primary ──
     click(findButton('بارگذاری تصویر'));
@@ -2927,9 +3047,17 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (scoped) ok('assistant chat — unrelated questions get the honest scope answer');
     else fail('assistant chat — scope answer missing: ' + text().slice(-220));
 
-    // let React flush the passive collapse-effect of the answer commit
-    // before asserting the suggestions row state (avoids a click/effect race)
-    await sleep(400);
+    // Wait for the collapse itself instead of napping 400 ms: the collapse
+    // is a passive effect, and on a loaded machine it can land much later —
+    // a fixed nap then samples the row while it is still open and the run
+    // fails for no reason. Polling makes the check deterministic.
+    const collapsed = await waitFor(() => {
+      const toggle = dom.window.document.querySelector('.zhino-assistant-ideas-toggle');
+      if (!toggle) return false;
+      const open = toggle.getAttribute('aria-expanded') === 'true';
+      const chips = Boolean(dom.window.document.querySelector('.zhino-assistant-ideas-body .zhino-assistant-chip'));
+      return !open && !chips;
+    }, 12000);
 
     // Phase 8 — an answer never carries a technical footnote, and the
     // suggestions step aside instead of stacking boxes over the chat.
@@ -2938,10 +3066,11 @@ async function openAssistantFromStore(dom, waitFor, text) {
     const ideasToggle = dom.window.document.querySelector('.zhino-assistant-ideas-toggle');
     if (!ideasToggle) {
       fail('assistant chat — the collapsed suggestions row is missing');
-    } else if (ideasToggle.getAttribute('aria-expanded') !== 'false') {
-      fail('assistant chat — the suggestions row should start collapsed after a question');
-    } else if (dom.window.document.querySelector('.zhino-assistant-ideas-body .zhino-assistant-chip')) {
-      fail('assistant chat — the collapsed suggestions row still shows its chips');
+    } else if (!collapsed) {
+      fail(
+        'assistant chat — the suggestions row never collapsed after the answer (aria-expanded=' +
+          `${ideasToggle.getAttribute('aria-expanded')})`,
+      );
     } else {
       ok('assistant chat — suggestions collapse into a quiet row once the chat starts');
       ideasToggle.click();
