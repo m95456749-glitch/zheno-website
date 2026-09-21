@@ -1,12 +1,13 @@
 /* ============================================================
-   ZHINO — «استودیوی ژینو» (ترکیب کانسپت B + A)
+   ZHINO — «فروشگاه ژینو» — صحنهٔ میزبان ربات (طراحی نهایی)
    استایل مخصوص صفحهٔ /assistant — فقط با اسکوپ zhino-lounge-mode
    و کلاس‌های zl-* ؛ assistant.css دست‌نخورده می‌ماند و بدون این
    کلاس‌ها همه‌چیز مثل قبل کار می‌کند.
 
    لایه‌ها:
-     ۱) استودیو (اتاق، نور زنده، پارالاکس، ذرات)
-     ۲) هماهنگ‌سازی اجزای چت با استودیو (حباب شیشه‌ای، کارت محصول،
+     ۱) فروشگاه (اتاق گرم، نور سینمایی، پارالاکس، ذرات) — بدون
+        قاب‌های بزرگ و ویترین‌مانند: یک کارت نرم با مرز ظریف
+     ۲) هماهنگ‌سازی اجزای چت با فروشگاه (حباب شیشه‌ای، کارت محصول،
         چیپ‌های زنده، سربرگ و کادر پیام)
    ============================================================ */
 
@@ -58,41 +59,28 @@
   position: relative;
   width: 100%;
   max-width: 720px;
-  height: clamp(320px, 48vh, 600px);
-  height: clamp(320px, 48dvh, 600px);
-  border-radius: 28px;
+  /* ربات کوچک است؛ صحنه هم جمع‌تر می‌شود تا فضای اصلی به چت بماند */
+  height: clamp(300px, 44vh, 520px);
+  height: clamp(300px, 44dvh, 520px);
+  border-radius: 24px;
   overflow: hidden;
   border: 1px solid var(--zl-line-2);
   background: linear-gradient(180deg, #f8f0e2 0%, #f1e4cd 100%);
   box-shadow:
-    0 40px 70px -38px rgba(90, 23, 37, 0.42),
-    0 14px 30px -20px rgba(41, 35, 33, 0.3),
-    0 2px 0 rgba(255, 255, 255, 0.8) inset;
+    0 26px 50px -34px rgba(90, 23, 37, 0.38),
+    0 10px 22px -18px rgba(41, 35, 33, 0.24),
+    0 2px 0 rgba(255, 255, 255, 0.75) inset;
   transition: height 0.5s cubic-bezier(0.33, 1, 0.5, 1);
 }
 
-/* قاب طلایی داخلی (مولدینگ لوکس) */
-.zl-room::after {
-  content: "";
-  position: absolute;
-  inset: 8px;
-  z-index: 13;
-  pointer-events: none;
-  border-radius: 21px;
-  border: 1.5px solid rgba(201, 165, 95, 0.5);
-  box-shadow:
-    0 0 0 3px rgba(201, 165, 95, 0.1),
-    inset 0 0 22px rgba(255, 244, 214, 0.4);
-}
-
-/* وینیت عمق لبه‌ها */
+/* وینیت بسیار ظریف برای عمق لبه‌ها — بدون قاب بزرگ/ویترین‌مانند */
 .zl-room::before {
   content: "";
   position: absolute;
   inset: 0;
   z-index: 12;
   pointer-events: none;
-  background: radial-gradient(125% 95% at 50% 40%, transparent 56%, rgba(90, 23, 37, 0.09) 100%);
+  background: radial-gradient(125% 95% at 50% 42%, transparent 60%, rgba(90, 23, 37, 0.07) 100%);
 }
 
 .zl-room > svg {
@@ -130,8 +118,8 @@
 
 /* حالت گفتگو: صحنه جمع‌تر می‌شود ولی ربات همچنان دیده می‌شود */
 .zl-hero.is-compact .zl-room {
-  height: clamp(190px, 26vh, 330px);
-  height: clamp(190px, 26dvh, 330px);
+  height: clamp(180px, 24vh, 300px);
+  height: clamp(180px, 24dvh, 300px);
 }
 
 .zl-hero.is-compact .zl-plaque {
@@ -510,26 +498,6 @@
   100% {
     transform: translateY(-13px);
     opacity: 0;
-  }
-}
-
-.zl-bulb {
-  animation: zlTwinkle 2.6s ease-in-out infinite;
-}
-.zl-bulb:nth-of-type(2n) {
-  animation-delay: 0.9s;
-}
-.zl-bulb:nth-of-type(3n) {
-  animation-delay: 1.6s;
-}
-
-@keyframes zlTwinkle {
-  0%,
-  100% {
-    opacity: 0.55;
-  }
-  50% {
-    opacity: 1;
   }
 }
 
@@ -1028,13 +996,13 @@ svg.zl-is-happy .zl-haloBreath {
   }
 
   .zl-room {
-    height: clamp(360px, 54vh, 640px);
-    height: clamp(360px, 54dvh, 640px);
+    height: clamp(330px, 48vh, 560px);
+    height: clamp(330px, 48dvh, 560px);
   }
 
   .zl-hero.is-compact .zl-room {
-    height: clamp(230px, 32vh, 380px);
-    height: clamp(230px, 32dvh, 380px);
+    height: clamp(210px, 28vh, 330px);
+    height: clamp(210px, 28dvh, 330px);
   }
 
   .zhino-lounge-mode .zhino-assistant-feed {
@@ -1073,11 +1041,6 @@ svg.zl-is-happy .zl-haloBreath {
   .zl-room {
     border-radius: 22px;
   }
-
-  .zl-room::after {
-    inset: 6px;
-    border-radius: 17px;
-  }
 }
 
 @media (max-width: 360px) {
@@ -1100,8 +1063,8 @@ svg.zl-is-happy .zl-haloBreath {
   }
 
   .zl-room {
-    height: clamp(220px, 52vh, 340px);
-    height: clamp(220px, 52dvh, 340px);
+    height: clamp(200px, 48vh, 320px);
+    height: clamp(200px, 48dvh, 320px);
   }
 }
 
@@ -1111,7 +1074,6 @@ svg.zl-is-happy .zl-haloBreath {
   .zl-motes i,
   .zl-wobble,
   .zl-steam path,
-  .zl-bulb,
   .zl-leaf,
   .zl-lampGlow,
   .zl-sconceGlow,
