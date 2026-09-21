@@ -362,16 +362,125 @@ function reply(
   };
 }
 
-/* ── پاسخ‌های ثابت (بدون داده) ─────────────────────────────── */
+/* ── حافظهٔ گفتگو + لایهٔ تنوع پاسخ (فاز ۱۲) ──────────────────
+   چرا لازم است؟ تا دیروز هر موقعیت فقط «یک جملهٔ» آماده داشت؛
+   دو بار یک سؤال یعنی دو بار همان جمله. حالا:
+     • pick() برای هر «جایگاه متن» چند واریانت طبیعی دارد و هیچ
+       واریانتی دو بار پشت‌سرهم تکرار نمی‌شود (آخرین‌ها را به‌خاطر
+       می‌سپارد).
+     • memory چیزی که گفتگو تا الان دیده را نگه می‌دارد: آخرین
+       محصولاتِ موضوعِ بحث (برای پیگیریِ «قیمتش چنده؟»)، سلام
+       اول است یا دوباره، و چند نوبت رد و بدل شده.
+   مهم: حافظه فقط «قالب حرف‌زدن» را عوض می‌کند؛ عدد و دادهٔ پاسخ
+   همیشه از همان کارت اطلاعات زندهٔ فروشگاه خوانده می‌شود.        */
 
-const SCOPE_REPLY = bubble(
-  'راستش من فقط دربارهٔ محصولات ژینو، تهیهٔ ژله و کاستر، انتخاب دسر و سفارش فروشگاه می‌تونم کمکتون کنم.',
-  'در همین موضوع‌ها بپرسید: انتخاب طعم، دستور تهیه، قیمت و موجودی، یا یه دسر برای مهمانی.',
-);
+export interface AssistantConversationMemory {
+  /** جایگاه متن → اندیس واریانت‌هایی که به‌تازگی استفاده شده‌اند */
+  recent: Map<string, number[]>;
+  /** موضوع (قابلیت) پاسخ قبلی */
+  lastIntent: AssistantReply['capability'] | null;
+  /** محصولاتی که اخیراً موضوع حرف بودند — برای پیگیریِ طبیعی گفتگو */
+  lastProducts: AssistantProductFact[];
+  /** آیا در این گفتگو قبلاً خودمان را معرفی کرده‌ایم؟ */
+  greeted: boolean;
+  /** تعداد نوبت‌های رد و بدل شده */
+  turns: number;
+}
 
-const CLARIFY_REPLY = bubble(
-  'سؤال‌تان را کامل متوجه نشدم. کوتاه‌تر بپرسید — یا یکی از پیشنهادها را بزنید: قیمت و موجودی، دستور تهیه، یا پیشنهاد دسر.',
-);
+export function createAssistantMemory(): AssistantConversationMemory {
+  return {
+    recent: new Map(),
+    lastIntent: null,
+    lastProducts: [],
+    greeted: false,
+    turns: 0,
+  };
+}
+
+/**
+ * یک واریانت از میان گزینه‌ها برمی‌دارد — بدون تکرارِ فوری.
+ * اگر حافظه نباشد (مثلاً تست‌ها) فقط تصادفی انتخاب می‌کند.
+ * متن‌های «داده‌ای» (قیمت، موجودی، مرحلهٔ دستور) از این مسیر
+ * رد نمی‌شوند؛ این تابع فقط برای جمله‌بندی‌هاست.
+ */
+function pick(memory: AssistantConversationMemory, slot: string, variants: string[]): string {
+  if (variants.length === 0) return '';
+  if (variants.length === 1) return variants[0];
+  const recent = memory.recent.get(slot) ?? [];
+  const fresh = variants.map((_, index) => index).filter((index) => !recent.includes(index));
+  const pool = fresh.length > 0 ? fresh : variants.map((_, index) => index);
+  const index = pool[Math.floor(Math.random() * pool.length)];
+  const keep = Math.max(1, Math.min(3, variants.length - 1));
+  memory.recent.set(slot, [...recent, index].slice(-keep));
+  return variants[index];
+}
+
+/* ── بانک‌های جمله‌بندی (بدون هیچ داده) ──────────────────────
+   هر جایگاه چند واریانت طبیعی دارد؛ pick() تکرارِ فوری را می‌گیرد.
+   هیچ عدد، قیمت یا محصولی اینجا نوشته نشده — داده‌ها فقط از
+   کارت اطلاعات واقعی فروشگاه به متن می‌پیوندند. */
+
+const SCOPE_VARIANTS = [
+  bubble(
+    'راستش تخصص من همین قفسهٔ ژینوئه: پودر ژله، پودر کاستر، طعم‌ها و دسرهای خونگی.',
+    'همین موضوع‌ها بپرسید تا دقیق جواب بدم؛ بقیه‌اش را ترجیح می‌دهم از خودم نسازم.',
+  ),
+  bubble(
+    'این یکی از حوزهٔ من خارجه! من فقط تو دنیای ژله و کاستر دستم پر است.',
+    'برگردیم به دسر؟ انتخاب طعم، دستور تهیه، قیمت یا یه پیشنهاد برای مهمانی — هرکدوم خواستید.',
+  ),
+  bubble(
+    'وای، این از دستم خارجه! چیزی که بلد نیستم را از خودم نمی‌گویم.',
+    'ولی دربارهٔ ژله، کاستر و خرید از ژینو هر چه بپرسید در خدمتم.',
+  ),
+];
+
+const CLARIFY_VARIANTS = [
+  bubble('کامل متوجه نشدم؛ ساده‌تر بگویید؟ مثلاً «قیمت ژله انار» یا «یه دسر برای مهمانی».'),
+  bubble('این‌بار نگرفتم چی پرسیدید! کوتاه‌تر بنویسید، یا از پیشنهادهای پایین یکی را بزنید.'),
+  bubble('راستش سؤالتون را خوب نگرفتم. بگید دنبال چه طعم یا دسری‌اید تا سریع پیدایش کنم.'),
+];
+
+const GREETING_FIRST_VARIANTS = [
+  ASSISTANT_INTRO,
+  'سلام و خوش اومدید! من دستیار ژینو هستم. دنبال ژله‌اید یا کاستر؟ کمکتون می‌کنم انتخاب کنید.',
+  'سلام! خوشحالم که این‌جایید. بگویید چه دسری تو ذهن‌تونه تا از قفسهٔ ژینو براتون پیدا کنم.',
+];
+
+const GREETING_AGAIN_VARIANTS = [
+  'باز هم سلام! بفرمایید، این‌بار در چه کمکی باشم؟',
+  'سلام دوباره! گوش می‌دم — طعم خاصی تو ذهن‌ست یا یه پیشنهاد تازه می‌خواید؟',
+  'در خدمتم! سؤال یا درخواستتون رو بگید، همین‌جا رسیدگی می‌کنم.',
+];
+
+const THANKS_VARIANTS = [
+  'خواهش می‌کنم! کار ما همین دیگه. اگر چیز دیگه‌ای خواستید، من همین‌جام.',
+  'قربانت! هر وقت دسر خواستید، من آماده‌ام.',
+  'ممنون از شما! چیز دیگه‌ای از قفسهٔ ژینو خواستید، در خدمتم.',
+];
+
+const BYE_VARIANTS = [
+  'خدانگهدار! هر وقت برگشتید، قفسهٔ ژینو همین‌جاست.',
+  'به امید دیدار! دسر خوبی داشته باشید.',
+  'موفق باشید! برای خرید بعدی من دوباره همین‌جام.',
+];
+
+const AFFIRM_NUDGE_VARIANTS = [
+  bubble('چه خوب! پس بگویید از کجا شروع کنیم: طعم خاصی مدنظرتونه، بودجه‌ای دارید، یا یه پیشنهاد آماده بخواید؟'),
+  bubble('عالیه! حالا بگید سلیقه‌تون چیه — سرد و میوه‌ای؟ شکلاتی و مخملی؟ یا مناسبتی خاص در راهه؟'),
+];
+
+const DECLINE_VARIANTS = [
+  bubble('باشه! هیچ عجله‌ای نیست. هر وقت آماده بودید، من همین‌جام.'),
+  bubble('چشم! هر وقت دل‌تون دسر خواست، یه سلام کافیه.'),
+];
+
+/** پرسش کوتاه فروشندگی بعد از معرفی محصول — بسته به موقعیت چرخیده می‌شود */
+const FLAVOR_FOLLOWUP_VARIANTS = [
+  'بپرسم چند نفره می‌خواید؟ مقدار دقیقش را همین‌جا براتون حساب می‌کنم.',
+  'برای مهمانی می‌خواید یا دسر خونگی؟ بگید تا مقدار و ترکیب مناسبش رو بگم.',
+  'اگر بخواید، همون حالا با تأیید خودتون به سبد خرید اضافه‌ش می‌کنم.',
+];
 
 /* ── پرسش «اطلاعاتت را از کجا می‌آوری؟» ────────────────────── */
 
@@ -399,13 +508,23 @@ const SOURCE_INFO_KEYWORDS = [
   'به روز هستی',
 ];
 
-function sourceInfoReply(context: AssistantContext): LocalReply {
+function sourceInfoReply(context: AssistantContext, memory: AssistantConversationMemory): LocalReply {
   const lines: string[] = [];
   if (context.dataSource === 'database') {
     // صادقانه، ولی بدون واژه‌های فنی: مشتری می‌فهمد عدد «همین حالا» گرفته شده
-    lines.push('بله — قیمت‌ها، موجودی، طعم‌ها و دستورهای تهیه را لحظه‌ای از خودِ فروشگاه می‌گیرم؛ همان چیزی که همین حالا در سایت ثبت شده.');
+    lines.push(
+      pick(memory, 'source-live', [
+        'بله — قیمت‌ها، موجودی، طعم‌ها و دستورهای تهیه را لحظه‌ای از خودِ فروشگاه می‌گیرم؛ همان چیزی که همین حالا در سایت ثبت شده.',
+        'بله، همین حالا از خود فروشگاه نگاه می‌کنم؛ چیزی که می‌گم همان است که الان توی سایت ثبت شده.',
+      ]),
+    );
   } else {
-    lines.push('قیمت‌ها، موجودی و دستورهای تهیه را از همان فهرست فروشگاه می‌گیرم، نه از حافظهٔ خودم.');
+    lines.push(
+      pick(memory, 'source-local', [
+        'قیمت‌ها، موجودی و دستورهای تهیه را از همان فهرست فروشگاه می‌گیرم، نه از حافظهٔ خودم.',
+        'همهٔ اعدادم از فهرست خودِ ژینو می‌آید؛ چیزی از حفظ نمی‌گویم.',
+      ]),
+    );
   }
   lines.push(`ارسال رایگان از ${formatPrice(context.settings.freeShippingThreshold)} شروع می‌شه؛ همان چیزی که در سبد خرید می‌بینید.`);
   lines.push('هیچ عددی را از خودم نمی‌سازم؛ چیزی که نباشد، می‌گویم پیدا نمی‌کنم.');
@@ -426,7 +545,7 @@ function sourceInfoReply(context: AssistantContext): LocalReply {
 
 /* ── قابلیت‌ها ─────────────────────────────────────────────── */
 
-function catalogReply(context: AssistantContext): LocalReply {
+function catalogReply(context: AssistantContext, memory: AssistantConversationMemory): LocalReply {
   const weights = new Set(context.products.flatMap((product) => product.variants.map((v) => v.weight)));
   const weightLine = weights.size === 1 ? `همه در بستهٔ ${[...weights][0]} عرضه می‌شه.` : '';
   const priceLine = context.priceRange
@@ -435,11 +554,17 @@ function catalogReply(context: AssistantContext): LocalReply {
   return reply(
     'catalog',
     bubble(
-      `الان ${fa(context.counts.total)} محصول داریم: ${fa(context.counts.jelly)} طعم پودر ژله و ${fa(context.counts.custard)} طعم پودر کاستر.`,
+      pick(memory, 'catalog-open', [
+        `الان ${fa(context.counts.total)} محصول داریم: ${fa(context.counts.jelly)} طعم پودر ژله و ${fa(context.counts.custard)} طعم پودر کاستر.`,
+        `قفسهٔ ژینو الان ${fa(context.counts.total)} محصول دارد — ${fa(context.counts.jelly)} ژله و ${fa(context.counts.custard)} کاستر.`,
+      ]),
       weightLine,
       priceLine,
       freeShippingLine(context),
-      'قیمت و موجودی هر محصول توی صفحهٔ خودش هست؛ از صفحهٔ محصولات شروع کنید.',
+      pick(memory, 'catalog-close', [
+        'بگید مناسبتی که دارید چیه، تا از بین همین‌ها دقیق پیشنهاد بدم.',
+        'قیمت و موجودی هر محصول توی صفحهٔ خودش هست؛ از صفحهٔ محصولات شروع کنید.',
+      ]),
     ),
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
@@ -459,7 +584,7 @@ function catalogReply(context: AssistantContext): LocalReply {
  * قبلاً این پرسش («چه طعم‌هایی دارید؟») به پاسخ راهنما می‌رفت؛ از
  * فاز ۶ پاسخ مستقیم و کوتاه می‌دهد و فقط از دادهٔ همین لحظه می‌گوید.
  */
-function flavorsReply(context: AssistantContext): LocalReply {
+function flavorsReply(context: AssistantContext, memory: AssistantConversationMemory): LocalReply {
   const flavors = availableFlavors(context);
   if (flavors.jelly.length === 0 && flavors.custard.length === 0) {
     return reply(
@@ -486,9 +611,17 @@ function flavorsReply(context: AssistantContext): LocalReply {
   return reply(
     'flavors',
     bubble(
-      'طعم‌های موجود در فروشگاه ژینو:',
+      pick(memory, 'flavors-open', [
+        'طعم‌های موجود در فروشگاه ژینو:',
+        'الان این طعم‌ها روی قفسهٔ ژینو هست:',
+        'فهرست طعم‌های همین لحظهٔ فروشگاه:',
+      ]),
       ...lines,
-      'طعم خاصی مدنظرتان است؟ نامش را بنویسید تا قیمت و موجودی همان را بگویم.',
+      pick(memory, 'flavors-close', [
+        'طعم خاصی مدنظرتان است؟ نامش را بنویسید تا قیمت و موجودی همان را بگویم.',
+        'کدومش به دلتون نشست؟ اسمش را بگویید تا همان را دقیق نگاه کنم.',
+        'اگر وسواس طعم دارید، بگویید عاشق چه میوه‌ای هستید — من نزدیک‌ترش را پیدا می‌کنم.',
+      ]),
     ),
     {
       links: [link('همهٔ محصولات', '/products')],
@@ -501,15 +634,22 @@ function flavorsReply(context: AssistantContext): LocalReply {
   );
 }
 
-function guideReply(context: AssistantContext): LocalReply {
+function guideReply(context: AssistantContext, memory: AssistantConversationMemory): LocalReply {
   return reply(
     'guide',
     bubble(
-      'اول ببینید دسرتان سرد می‌خواهید یا گرم:',
+      pick(memory, 'guide-open', [
+        'اول ببینید دسرتان سرد می‌خواهید یا گرم:',
+        'راه انتخاب خیلی ساده است — ببینید چه حال‌وهوایی می‌خواهید:',
+      ]),
       '• پودر ژله: سبک و لرزان، سرو سرد — مناسب مهمانی، تابستان و لایه‌های رنگی.',
       '• پودر کاستر: مخملی و خامه‌ای، سرد یا گرم — روی میوه، لایهٔ میانی کیک و دسر خانگی.',
       `الان ${fa(context.counts.jelly)} طعم ژله و ${fa(context.counts.custard)} طعم کاستر داریم.`,
-      'تازه‌کارید؟ با یک طعم آشنا شروع کنید، بعد سراغ طعم‌های خاص بروید.',
+      pick(memory, 'guide-close', [
+        'تازه‌کارید؟ با یک طعم آشنا شروع کنید، بعد سراغ طعم‌های خاص بروید.',
+        'بگید سرد می‌خواید یا گرم، میوه‌ای یا شکلاتی — من دقیق‌تر راهنمایی‌تون می‌کنم.',
+        'اگر بگید برای چه مناسبتی می‌خواید، خودم دو سه تا گزینهٔ درست‌وحسابی جلوتون می‌چینم.',
+      ]),
     ),
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
@@ -522,25 +662,37 @@ function guideReply(context: AssistantContext): LocalReply {
   );
 }
 
-function flavorReply(context: AssistantContext, products: AssistantProductFact[]): LocalReply {
+function flavorReply(
+  context: AssistantContext,
+  memory: AssistantConversationMemory,
+  products: AssistantProductFact[],
+): LocalReply {
   if (products.length === 0) {
     // طعم‌نمای ناموجود: پاسخ ساختگی داده نمی‌شود
     const available = context.products.slice(0, 4).map((product) => product.shortName);
     return reply(
       'flavor',
       bubble(
-        'این طعم را الان در فروشگاه نداریم؛ نمی‌خواهم چیزی از خودم اضافه کنم.',
+        pick(memory, 'flavor-miss', [
+          'این طعم را الان در فروشگاه نداریم؛ نمی‌خواهم چیزی از خودم اضافه کنم.',
+          'راستش را بخواهید، این طعم فعلاً روی قفسهٔ ژینو نیست — و من از خودم محصول نمی‌سازم.',
+          'این طعم را الان نداریم؛ دستِ خودم نیست. ولی ناامید نشید:',
+        ]),
         available.length > 0
           ? `طعم‌های موجود الان: ${available.join('، ')}${context.products.length > 4 ? ' و …' : ''}.`
           : null,
-        'اگر طعم خاصی مدنظرتان است، از صفحهٔ محصولات فهرست کامل را ببینید.',
+        pick(memory, 'flavor-miss-close', [
+          'اگر طعم خاصی مدنظرتان است، از صفحهٔ محصولات فهرست کامل را ببینید.',
+          'از بین همین‌ها چیزی به دلتون نشست؟ بگید تا دقیق نگاهش کنم.',
+        ]),
       ),
       {
         links: [link('همهٔ محصولات', '/products')],
         grounded: true,
+        products: [],
         suggestions: [
           { label: 'معرفی محصولات', prompt: 'محصولات ژینو را معرفی می‌کنید؟' },
-  { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
+          { label: 'طعم‌های موجود', prompt: 'چه طعم‌هایی دارید؟' },
           { label: 'راهنمای انتخاب', prompt: 'برای انتخاب محصول راهنمایی می‌کنید؟' },
         ],
       },
@@ -549,14 +701,26 @@ function flavorReply(context: AssistantContext, products: AssistantProductFact[]
 
   const lines = products.slice(0, 4).map((product) => `• ${describeProduct(product)}`);
   const anyAvailable = products.some(isAvailable);
+  const followUp =
+    products.length === 1 && anyAvailable
+      ? pick(memory, 'flavor-followup', FLAVOR_FOLLOWUP_VARIANTS)
+      : '';
   return reply(
     'flavor',
     bubble(
-      products.length === 1 ? 'این محصول در فروشگاه موجود است:' : 'این گزینه‌ها را در فروشگاه داریم:',
+      pick(memory, 'flavor-hit', [
+        products.length === 1 ? 'این محصول در فروشگاه موجود است:' : 'این گزینه‌ها را در فروشگاه داریم:',
+        products.length === 1 ? 'پیدا شد! همین الان روی قفسه هست:' : 'از این‌ها که می‌پسندید:',
+        products.length === 1 ? 'بله، این را داریم:' : 'این‌ها نزدیک‌ترین گزینه‌های قفسهٔ ژینو هستند:',
+      ]),
       ...lines,
       anyAvailable
-        ? 'قیمت و موجودی بالا دقیق همونه؛ روی صفحهٔ محصول هم همین را می‌بینید.'
+        ? pick(memory, 'flavor-hit-close', [
+            'قیمت و موجودی بالا دقیق همونه؛ روی صفحهٔ محصول هم همین را می‌بینید.',
+            'همین اعداد را از خود فروشگاه خواندم — قیمت صفحهٔ محصول هم همین است.',
+          ])
         : 'این محصول الان توی فروشگاه موجود نیست.',
+      followUp,
     ),
     {
       links: productLinks(products),
@@ -570,7 +734,12 @@ function flavorReply(context: AssistantContext, products: AssistantProductFact[]
   );
 }
 
-function priceStockReply(context: AssistantContext, products: AssistantProductFact[]): LocalReply {
+function priceStockReply(
+  context: AssistantContext,
+  memory: AssistantConversationMemory,
+  products: AssistantProductFact[],
+  refersBack = false,
+): LocalReply {
   if (products.length > 0) {
     const lines = products.slice(0, 5).map((product) => {
       const variant = cheapestVariant(product);
@@ -581,7 +750,17 @@ function priceStockReply(context: AssistantContext, products: AssistantProductFa
           : `موجود در انبار`;
       return `• ${product.shortName} — ${variant.weight}: ${price(variant.price)} — ${stock}`;
     });
-    return reply('price-stock', bubble('قیمت و موجودی امروز:', ...lines), {
+    const intro = refersBack
+      ? pick(memory, 'price-back', [
+          'اگه منظورتون همون‌هایی است که چند لحظه پیش گفتیم، قیمت و موجودی‌شان الان این است:',
+          'آهان، همون قبلی‌ها! وضعیت همین الان‌شان این است:',
+        ])
+      : pick(memory, 'price-open', [
+          'قیمت و موجودی امروز:',
+          'این اعداد مستقیم از خود فروشگاه است:',
+          'همین الان نگاه کردم:',
+        ]);
+    return reply('price-stock', bubble(intro, ...lines), {
       links: [...productLinks(products), link('همهٔ محصولات', '/products')],
       grounded: true,
       products: products.slice(0, 5),
@@ -601,7 +780,11 @@ function priceStockReply(context: AssistantContext, products: AssistantProductFa
   return reply(
     'price-stock',
     bubble(
-      'اسم طعم یا محصول را بفرمایید تا قیمت و موجودی همان را بگویم (مثلاً «قیمت ژله انار»).',
+      pick(memory, 'price-ask', [
+        'اسم طعم یا محصول را بفرمایید تا قیمت و موجودی همان را بگویم (مثلاً «قیمت ژله انار»).',
+        'بگید کدام طعم را می‌خواید تا قیمت و موجودی همان را همین‌جا بگویم — مثلاً «ژله انار».',
+        'کدام یک از محصولات را نگاه می‌کنید؟ اسمش را بنویسید تا عدد دقیقش را بگویم.',
+      ]),
       cheapest ? `قیمت‌ها از ${cheapest} شروع می‌شود.` : null,
       freeShippingLine(context),
     ),
@@ -618,6 +801,7 @@ function priceStockReply(context: AssistantContext, products: AssistantProductFa
 
 function recipeReply(
   context: AssistantContext,
+  memory: AssistantConversationMemory,
   category: ProductCategory | null,
 ): LocalReply {
   const wanted: ProductCategory[] = category ? [category] : ['jelly', 'custard'];
@@ -653,9 +837,18 @@ function recipeReply(
   return reply(
     category === 'custard' ? 'recipe-custard' : 'recipe-jelly',
     bubble(
+      pick(memory, 'recipe-open', [
+        'این دستور، همان دستور رسمی روی بستهٔ ژینو است:',
+        'با کمال میل! همان مراحل ساده‌ای که روی بسته چاپ شده:',
+        'حتماً — مراحل کوتاه و رسمی، همان که ژینو روی بسته نوشته:',
+      ]),
       ...blocks,
       'همین دستوری است که روی بستهٔ ژینو نوشته شده.',
-      'برای لایه‌های رنگی، هر لایه را جدا درست کنید و کمی در یخچال بگذارید تا ببندد.',
+      pick(memory, 'recipe-close', [
+        'برای لایه‌های رنگی، هر لایه را جدا درست کنید و کمی در یخچال بگذارید تا ببندد.',
+        'ترفند کوچک: برای دسر لایه‌ای، صبر کنید هر لایه در یخچال ببندد بعد لایهٔ بعد را بریزید.',
+        'اگر مهمانی دارید، از شب قبل بسازید — صبح کاملاً جا افتاده و آماده است.',
+      ]),
     ),
     {
       links: [link('صفحهٔ دستور تهیه', '/recipes'), ...productLinks(relatedProducts, 2)],
@@ -668,7 +861,12 @@ function recipeReply(
   );
 }
 
-function servingsReply(context: AssistantContext, people: number, category: ProductCategory | null): LocalReply {
+function servingsReply(
+  context: AssistantContext,
+  memory: AssistantConversationMemory,
+  people: number,
+  category: ProductCategory | null,
+): LocalReply {
   const wanted: ProductCategory[] = category ? [category] : ['jelly', 'custard'];
   const lines: string[] = [];
   const usedProducts: AssistantProductFact[] = [];
@@ -690,7 +888,7 @@ function servingsReply(context: AssistantContext, people: number, category: Prod
   }
 
   if (lines.length === 0) {
-    return reply('servings', CLARIFY_REPLY, {
+    return reply('servings', CLARIFY_VARIANTS[0], {
       grounded: true,
       suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
     });
@@ -699,10 +897,18 @@ function servingsReply(context: AssistantContext, people: number, category: Prod
   return reply(
     'servings',
     bubble(
-      `برای ${fa(people)} نفر، برآورد تقریبی این مقدار است:`,
+      pick(memory, 'servings-open', [
+        `برای ${fa(people)} نفر، برآورد تقریبی این مقدار است:`,
+        `حساب کردم؛ برای ${fa(people)} نفر تقریباً این‌ها لازم است:`,
+        `برای ${fa(people)} نفر، این برآورد بر پایهٔ دستور روی بسته است:`,
+      ]),
       ...lines,
       'این برآورد تقریبی است — به اندازهٔ کاسه‌ها و لایه‌های شما کم و زیاد می‌شود.',
-      'هر دو دسر را سرو می‌کنید؟ برای هر نفر یک پرس از هر کدام کافی است.',
+      pick(memory, 'servings-close', [
+        'هر دو دسر را سرو می‌کنید؟ برای هر نفر یک پرس از هر کدام کافی است.',
+        'اگر بخواید، همین بسته‌ها را با تأیید خودتون به سبد اضافه می‌کنم.',
+        'بگید کدوم دسته را برمی‌دارید تا دقیق‌تر و با قیمت واقعی بچینمش.',
+      ]),
     ),
     {
       links: [...productLinks(usedProducts, 2), link('دستور تهیه', '/recipes')],
@@ -715,7 +921,7 @@ function servingsReply(context: AssistantContext, people: number, category: Prod
   );
 }
 
-function budgetReply(context: AssistantContext, budget: number): LocalReply {
+function budgetReply(context: AssistantContext, memory: AssistantConversationMemory, budget: number): LocalReply {
   const candidates = context.products
     .map((product) => ({ product, variant: cheapestVariant(product) }))
     .filter(
@@ -777,7 +983,10 @@ function budgetReply(context: AssistantContext, budget: number): LocalReply {
   return reply(
     'budget',
     bubble(
-      `با بودجهٔ ${price(budget)} این ترکیب را از محصولات موجود پیشنهاد می‌کنم:`,
+      pick(memory, 'budget-open', [
+        `با بودجهٔ ${price(budget)} این ترکیب را از محصولات موجود پیشنهاد می‌کنم:`,
+        `بودجهٔ ${price(budget)} را که نگاه کنم، این سبد از قفسهٔ ژینو جواب می‌دهد:`,
+      ]),
       ...picked.map(
         (item, index) =>
           `${fa(index + 1)}. ${item.product.shortName} — ${item.variant.weight}: ${price(item.variant.price)}`,
@@ -786,6 +995,10 @@ function budgetReply(context: AssistantContext, budget: number): LocalReply {
       remaining >= context.settings.standardShippingCost
         ? 'با باقی‌ماندهٔ بودجه، کرایهٔ ارسال هم حساب می‌شه.'
         : freeShippingLine(context),
+      pick(memory, 'budget-close', [
+        'اگر دوست داشتید، همین‌ها را با یک تأیید خودتان به سبد اضافه می‌کنم.',
+        'موردی از این فهرست را نخواستید؟ بگید تا جایگزین واقعیِ هم‌قیمتش را پیشنهاد بدم.',
+      ]),
     ),
     {
       links: [...productLinks(picked.map((item) => item.product)), link('سبد خرید', '/cart')],
@@ -799,7 +1012,7 @@ function budgetReply(context: AssistantContext, budget: number): LocalReply {
   );
 }
 
-function pairingReply(context: AssistantContext, products: AssistantProductFact[]): LocalReply {
+function pairingReply(context: AssistantContext, memory: AssistantConversationMemory, products: AssistantProductFact[]): LocalReply {
   const anchor = products[0];
   const suggestions: AssistantProductFact[] = [];
   let note = '';
@@ -864,10 +1077,17 @@ function pairingReply(context: AssistantContext, products: AssistantProductFact[
   return reply(
     'pairing',
     bubble(
-      'این ترکیب را پیشنهاد می‌کنم:',
+      pick(memory, 'pairing-open', [
+        'این ترکیب را پیشنهاد می‌کنم:',
+        'جفت خوبی که به ذهنم می‌رسد این است:',
+        'کنار هم که بگذاریم، این دو تا عالی می‌شینند:',
+      ]),
       ...suggestions.map((product) => `• ${describeProduct(product)}`),
       note,
-      'اگر دوست داشتید، همین‌جا با تأیید خودتان به سبد اضافه‌شان می‌کنم.',
+      pick(memory, 'pairing-close', [
+        'اگر دوست داشتید، همین‌جا با تأیید خودتان به سبد اضافه‌شان می‌کنم.',
+        'هرکدام را خواستید بگویید تا با قیمت و موجودی دقیق براتون بچینمش.',
+      ]),
     ),
     {
       links: [...productLinks(suggestions, 3), link('سبد خرید', '/cart')],
@@ -900,12 +1120,16 @@ function detectPreferences(normalized: string): Preference[] {
   ).map((rule) => rule.preference);
 }
 
-function suggestionReply(context: AssistantContext, preferences: Preference[]): LocalReply {
+function suggestionReply(context: AssistantContext, memory: AssistantConversationMemory, preferences: Preference[]): LocalReply {
   if (preferences.length === 0) {
     return reply(
       'suggestion',
       bubble(
-        'دو چیز بگویید تا دقیق پیشنهاد بدهم: سرد می‌خواهید یا گرم؟ شکلاتی یا میوه‌ای؟',
+        pick(memory, 'suggestion-ask', [
+          'دو چیز بگویید تا دقیق پیشنهاد بدهم: سرد می‌خواهید یا گرم؟ شکلاتی یا میوه‌ای؟',
+          'برای اینکه واقعاً پیشنهاد خوبی بدهم، دو سؤال کوچک دارم: سرد یا گرم؟ میوه‌ای یا شکلاتی؟',
+          'بگذارید درست پیشنهاد بدهم — چه حال‌وهوایی می‌خواهید؟ خنک و سبک، یا مخملی و شکلاتی؟',
+        ]),
         'بعد از محصولات موجود، ترکیب مناسب را با قیمت واقعی برایتان می‌چینم.',
       ),
       {
@@ -953,20 +1177,37 @@ function suggestionReply(context: AssistantContext, preferences: Preference[]): 
     pushPick(context.products.find(isAvailable), 'نزدیک‌ترین گزینهٔ موجود به سلیقهٔ شما.');
   }
   if (picks.length === 0) {
-    return reply('suggestion', CLARIFY_REPLY, { grounded: true });
+    return reply('suggestion', CLARIFY_VARIANTS[0], { grounded: true });
   }
 
-  const summary = preferences.includes('party')
-    ? 'برای پذیرایی، ترکیب ژله سرد و کاستر مخملی معمولاً جواب می‌دهد.'
-    : preferences.includes('quick')
-      ? 'این گزینه‌ها کم‌زحمت‌ترین راه رسیدن به یک دسر خانگی‌اند.'
-      : 'این ترکیب با سلیقهٔ گفته‌شدهٔ شما هم‌خوان است.';
+  const summary = pick(
+    memory,
+    'suggestion-summary',
+    preferences.includes('party')
+      ? [
+          'برای پذیرایی، ترکیب ژله سرد و کاستر مخملی معمولاً جواب می‌دهد.',
+          'مهمونی است؟ این ترکیب روی میز هم قشنگ می‌شود هم راحت پذیرایی می‌شوید.',
+        ]
+      : preferences.includes('quick')
+        ? [
+            'این گزینه‌ها کم‌زحمت‌ترین راه رسیدن به یک دسر خانگی‌اند.',
+            'عجله دارید؟ این‌ها سریع‌ترین گزینه‌های قفسه‌اند.',
+          ]
+        : [
+            'این ترکیب با سلیقهٔ گفته‌شدهٔ شما هم‌خوان است.',
+            'از آنچه گفتید، این‌ها بیشترین تناسب را با سلیقهٔ شما دارند.',
+          ],
+  );
 
   return reply(
     'suggestion',
     bubble(
       summary,
       ...picks.map((product, index) => `${fa(index + 1)}. ${describeProduct(product)} — ${reasons[index] ?? ''}`.trim()),
+      pick(memory, 'suggestion-close', [
+        'موردی را پسندیدید؟ با یک تأیید، همین‌جا به سبد اضافه‌اش می‌کنم.',
+        'اگر یکی از این‌ها مدنظرتون شد، بگید تا قیمت دقیق و موجودی‌ش را بگویم.',
+      ]),
     ),
     {
       links: [...productLinks(picks, 3), link('سبد خرید', '/cart')],
@@ -980,13 +1221,16 @@ function suggestionReply(context: AssistantContext, preferences: Preference[]): 
   );
 }
 
-function shippingReply(context: AssistantContext): LocalReply {
+function shippingReply(context: AssistantContext, memory: AssistantConversationMemory): LocalReply {
   return reply(
     'shipping',
     bubble(
       freeShippingLine(context),
       `کرایهٔ ارسال عادی ${price(context.settings.standardShippingCost)} و ارسال سریع ${price(context.settings.expressShippingCost)} است.`,
-      'مبلغ نهایی و ارسال رایگان را در سبد خرید و تسویه حساب می‌بینید.',
+      pick(memory, 'shipping-close', [
+        'مبلغ نهایی و ارسال رایگان را در سبد خرید و تسویه حساب می‌بینید.',
+        'اگر سفارش‌تان به آستانهٔ ارسال رایگان نزدیک است، قبل از ثبت نهایی بگویید تا با هم حساب کنیم.',
+      ]),
     ),
     {
       links: [link('سبد خرید', '/cart'), link('مشاهدهٔ محصولات', '/products')],
@@ -1005,6 +1249,7 @@ function shippingReply(context: AssistantContext): LocalReply {
  */
 function addToCartReply(
   context: AssistantContext,
+  memory: AssistantConversationMemory,
   products: AssistantProductFact[],
 ): LocalReply {
   const offer = cartOffersFor(products, 1)[0];
@@ -1020,11 +1265,17 @@ function addToCartReply(
       return reply(
         'add-to-cart',
         bubble(
-          `«${first.shortName}» را پیدا کردم، ولی همین لحظه موجود نیست و چیزی به سبد اضافه نکردم.`,
+          pick(memory, 'cart-miss', [
+            `«${first.shortName}» را پیدا کردم، ولی همین لحظه موجود نیست و چیزی به سبد اضافه نکردم.`,
+            `متأسفانه «${first.shortName}» الان روی قفسه نیست؛ چیزی اضافه نکردم که بعداً دستتان بماند.`,
+          ]),
           others.length > 0
             ? `طعم‌های موجود الان: ${others.map((item) => item.shortName).join('، ')}.`
             : 'بقیهٔ محصولات را هم که نگاه می‌کنم، فعلاً قابل سفارش نیستند.',
-          'هر وقت موجود شد، همین‌جا بگویید تا با تأیید خودتان اضافه کنم.',
+          pick(memory, 'cart-miss-close', [
+            'هر وقت موجود شد، همین‌جا بگویید تا با تأیید خودتان اضافه کنم.',
+            'یکی از همین‌های موجود نزدیک‌ترِ دل شماست؟ بگید تا با تأییدتان اضافه‌اش کنم.',
+          ]),
         ),
         {
           links: [link('مشاهدهٔ محصولات', '/products')],
@@ -1081,7 +1332,10 @@ function addToCartReply(
     'add-to-cart',
     bubble(
       `حتماً — این گزینه را پیدا کردم: ${offer.label} به قیمت ${price(offer.price)}${stockNote}.`,
-      'دکمهٔ «بله، اضافه کن» را بزنید تا به سبد خرید اضافه شود؛ پرداخت و ثبت سفارش با خودتان است و من خودکار انجامش نمی‌دهم.',
+      pick(memory, 'cart-offer', [
+        'دکمهٔ «بله، اضافه کن» را بزنید تا به سبد خرید اضافه شود؛ پرداخت و ثبت سفارش با خودتان است و من خودکار انجامش نمی‌دهم.',
+        'فقط دکمهٔ «بله، اضافه کن» را بزنید. هیچ‌چیز را بدون اجازهٔ شما به سبد نمی‌برم.',
+      ]),
     ),
     {
       links: [link('سبد خرید', '/cart')],
@@ -1093,15 +1347,22 @@ function addToCartReply(
   );
 }
 
-function orderHelpReply(): LocalReply {
+function orderHelpReply(memory: AssistantConversationMemory): LocalReply {
   return reply(
     'order-help',
     bubble(
-      'سفارش خیلی ساده است:',
+      pick(memory, 'order-open', [
+        'سفارش خیلی ساده است:',
+        'خرید از ژینو سه قدم دارد:',
+        'راهنمای سریع سفارش:',
+      ]),
       '۱. محصول را انتخاب کنید — از صفحهٔ محصولات، یا همین‌جا بگویید تا با تأیید خودتان به سبد اضافه کنم.',
       '۲. در سبد خرید تعداد را بررسی کنید.',
       '۳. در تسویه حساب مشخصات تحویل‌گیرنده را پر کنید و سفارش را ثبت کنید.',
-      'جایی گیر کردید؟ همین‌جا بنویسید، با هم ردیفش می‌کنیم.',
+      pick(memory, 'order-close', [
+        'جایی گیر کردید؟ همین‌جا بنویسید، با هم ردیفش می‌کنیم.',
+        'هر قدمش که سؤال داشت، همین‌جا هستم.',
+      ]),
     ),
     {
       links: [link('مشاهدهٔ محصولات', '/products'), link('سبد خرید', '/cart'), link('تسویه حساب', '/checkout')],
@@ -1204,22 +1465,91 @@ function detectIntent(normalized: string): { id: AssistantCapabilityId; score: n
 
 const GREETING_PATTERNS = ['سلام', 'درود', 'وقت بخیر', 'روز بخیر', 'hello', 'hi', 'کمک', 'شروع'];
 
+/** تشکر کوتاه مشتری — به‌جای پاسخ رباتیکِ «محدودهٔ من»، گرم جواب می‌دهیم */
+const THANKS_PATTERNS = ['مرسی', 'ممنون', 'مچکریم', 'مچ کریم', 'دستت درد نکنه', 'دست درد نکنه', 'متشکرم', 'متشکر', 'لطف کردید', 'لطف کردی'];
+
+/** خداحافظی کوتاه */
+const BYE_PATTERNS = ['خداحافظ', 'خدافظ', 'بدرود', 'بای بای', 'بای'];
+
+/** تأیید کوتاه («بله/آره») — اگر محصولی موضوعِ بحث بود، همان را پیشنهاد افزودن می‌دهیم */
+const AFFIRM_PATTERNS = ['بله', 'بلی', 'اره', 'آره', 'اوهوم', 'اوکی', 'اکی', 'باشه', 'حله', 'قبوله', 'آری', 'اوکیه'];
+
+/** رد کوتاه — بدون اصرار */
+const DECLINE_PATTERNS = ['نخیر', 'نمیخوام', 'نمی خوام', 'بیخیال', 'بی خیال', 'فعلا نه', 'نه ممنون', 'بعدا'];
+
 const DOMAIN_HINTS = [
   'ژینو', 'ژله', 'کاستر', 'دسر', 'محصول', 'خرید', 'سفارش', 'قیمت', 'موجود', 'طعم',
   'تهیه', 'دستور', 'بسته', 'ارسال', 'سبد', 'پودر', 'مهمانی', 'پیشنهاد', 'ترکیب', 'کیک', 'دسر',
 ];
 
 /** هستهٔ تشخیص موضوع و ساخت پاسخ (بدون پیوست‌کردن منبع داده) */
-function resolveAnswer(question: string, context: AssistantContext): LocalReply {
+function resolveAnswer(
+  question: string,
+  context: AssistantContext,
+  memory: AssistantConversationMemory,
+): LocalReply {
   const normalized = normalizePersian(question);
 
   if (normalized.length === 0) {
-    return reply('open', CLARIFY_REPLY, { suggestions: DEFAULT_SUGGESTIONS.slice(0, 4) });
+    return reply('open', pick(memory, 'clarify', CLARIFY_VARIANTS), {
+      suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+    });
   }
 
-  // سلام و احوال‌پرسی
+  const intent = detectIntent(normalized);
+  const flavorProducts = matchFlavorProducts(context, normalized);
+  const people = parsePeople(normalized);
+
+  /* ── لایهٔ مکالمهٔ طبیعی (فاز ۱۲) ──
+     سلام، تشکر، خداحافظی، «بله/نه» — این‌ها سؤال نیستند؛ رفتار
+     فروشنده را می‌سازند. فقط وقتی هیچ نشانهٔ موضوعی دیگری در متن
+     نیست فعال می‌شوند تا سؤال‌های واقعی هیچ‌وقت قربانی نشوند. */
+
+  // سلام و احوال‌پرسی — بار اول خود معرفی، دفعات بعد گرم و کوتاه
   if (normalized.length <= 12 && GREETING_PATTERNS.some((item) => normalized.includes(item))) {
-    return reply('open', ASSISTANT_INTRO, {
+    memory.greeted = true;
+    const text =
+      memory.turns === 0
+        ? pick(memory, 'greet-first', GREETING_FIRST_VARIANTS)
+        : pick(memory, 'greet-again', GREETING_AGAIN_VARIANTS);
+    return reply('open', text, {
+      grounded: true,
+      suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+    });
+  }
+
+  const noOtherSignal = intent.score === 0 && flavorProducts.length === 0;
+
+  // تشکر — به‌جای پاسخ رباتیکِ «محدودهٔ من»
+  if (noOtherSignal && normalized.length <= 20 && THANKS_PATTERNS.some((item) => normalized.includes(item))) {
+    return reply('open', pick(memory, 'thanks', THANKS_VARIANTS), {
+      grounded: true,
+      suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
+    });
+  }
+
+  // خداحافظی کوتاه — بدون اصرار
+  if (noOtherSignal && normalized.length <= 16 && BYE_PATTERNS.some((item) => normalized.includes(item))) {
+    return reply('open', pick(memory, 'bye', BYE_VARIANTS), {
+      grounded: true,
+    });
+  }
+
+  // رد کوتاه («نه ممنون») — فاصله را محترم می‌شماریم
+  if (noOtherSignal && normalized.length <= 16 && DECLINE_PATTERNS.some((item) => normalized.includes(item))) {
+    return reply('open', pick(memory, 'decline', DECLINE_VARIANTS), {
+      grounded: true,
+    });
+  }
+
+  // تأیید کوتاه («بله/آره») — اگر محصولی چند لحظه پیش موضوع بود،
+  // پیشنهاد افزودنِ همان را با دکمهٔ تأیید می‌آوریم (بدون افزودن خودکار)
+  if (noOtherSignal && normalized.length <= 14 && AFFIRM_PATTERNS.some((item) => normalized.includes(item))) {
+    const discussed = memory.lastProducts.find(isAvailable);
+    if (discussed) {
+      return addToCartReply(context, memory, [discussed]);
+    }
+    return reply('open', pick(memory, 'affirm', AFFIRM_NUDGE_VARIANTS), {
       grounded: true,
       suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
     });
@@ -1227,18 +1557,18 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
 
   // «اطلاعاتت را از کجا می‌آوری؟» → پاسخ صادقانه از وضعیت واقعی همگام‌سازی
   if (SOURCE_INFO_KEYWORDS.some((keyword) => normalized.includes(normalizePersian(keyword)))) {
-    return sourceInfoReply(context);
+    return sourceInfoReply(context, memory);
   }
-
-  const people = parsePeople(normalized);
-  const intent = detectIntent(normalized);
-  const flavorProducts = matchFlavorProducts(context, normalized);
 
   // «این را به سبد اضافه کن» — پیش از بقیهٔ موضوع‌ها بررسی می‌شود، چون
   // واژهٔ «سبد» در غیر این صورت به راهنمای سفارش می‌رفت. خروجی فقط یک
   // پیشنهاد است؛ افزودن واقعی با تأیید مشتری در رابط کاربری انجام می‌شود.
   if (intent.id === 'add-to-cart') {
-    return addToCartReply(context, flavorProducts);
+    // اگر مشتری نام طعم را در همین پیام نیاورده ولی همین‌قبل دربارهٔ
+    // محصولی حرف زده‌ایم، همان را پیشنهاد می‌دهیم (فروشندهٔ گوش‌دهنده).
+    const discussed = memory.lastProducts.filter(isAvailable).slice(0, 1);
+    const productsForCart = flavorProducts.length > 0 ? flavorProducts : discussed;
+    return addToCartReply(context, memory, productsForCart);
   }
 
   // اولویت‌ها: عدد نفرات ← بودجه ← تشخیص موضوع ← تطبیق طعم
@@ -1248,7 +1578,7 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
       : normalized.includes('ژله')
         ? 'jelly'
         : null;
-    return servingsReply(context, people, category);
+    return servingsReply(context, memory, people, category);
   }
 
   const mentionsShipping = /(ارسال|کرایه|پست|پیک)/.test(normalized);
@@ -1259,18 +1589,31 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
     flavorProducts.length === 0 &&
     ((intent.id === 'shipping' && mentionsShipping) || (mentionsShipping && asksCost))
   ) {
-    return shippingReply(context);
+    return shippingReply(context, memory);
   }
 
   if (intent.id === 'budget' || (intent.id !== 'price-stock' && !mentionsShipping && /(بودجه|با \d)/.test(normalized))) {
     const amount = parseAmount(normalized);
-    if (amount !== null) return budgetReply(context, amount);
+    if (amount !== null) return budgetReply(context, memory, amount);
+  }
+
+  /* پیگیری طبیعی گفتگو: «قیمتش چنده؟» / «موجوده؟» بدون ذکر نام طعم.
+     اگر چند لحظه قبل محصولی معرفی کرده‌ایم، دربارهٔ همان جواب می‌دهیم
+     — مثل یک فروشنده که می‌داند مشتری دربارهٔ چه حرف می‌زند. */
+  const asksCatalogList = /(همه|لیست|فهرست|چیا|چه طعم)/.test(normalized);
+  if (
+    flavorProducts.length === 0 &&
+    !asksCatalogList &&
+    intent.id === 'price-stock' &&
+    memory.lastProducts.length > 0
+  ) {
+    return priceStockReply(context, memory, memory.lastProducts, true);
   }
 
   if (flavorProducts.length > 0 && (intent.id === 'price-stock' || intent.score === 0)) {
     return intent.id === 'price-stock'
-      ? priceStockReply(context, flavorProducts)
-      : flavorReply(context, flavorProducts);
+      ? priceStockReply(context, memory, flavorProducts)
+      : flavorReply(context, memory, flavorProducts);
   }
 
   // اگر کاربر دنبال محصولی با طعمی است که در فروشگاه نیست
@@ -1282,70 +1625,77 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
       !context.products.some((product) => product.flavorLabel.includes(normalizePersian(hint))),
   );
   if (missingFlavor && asksAboutAvailability && intent.score < 9) {
-    return flavorReply(context, []);
+    return flavorReply(context, memory, []);
   }
 
   // فقط موضوع‌های واقعاً تشخیص‌داده‌شده پاسخ می‌گیرند؛ وقتی هیچ
   // کلیدواژه‌ای پیدا نشد، سراغ پاسخ‌های عمومی/محدودهٔ کار می‌رویم.
   if (intent.score > 0) switch (intent.id) {
     case 'recipe-jelly':
-      return recipeReply(context, normalized.includes('کاستر') && !normalized.includes('ژله') ? 'custard' : 'jelly');
+      return recipeReply(context, memory, normalized.includes('کاستر') && !normalized.includes('ژله') ? 'custard' : 'jelly');
     case 'recipe-custard':
-      return recipeReply(context, 'custard');
+      return recipeReply(context, memory, 'custard');
     case 'servings':
-      return servingsReply(context, people ?? 8, normalized.includes('کاستر') ? 'custard' : normalized.includes('ژله') ? 'jelly' : null);
+      return servingsReply(context, memory, people ?? 8, normalized.includes('کاستر') ? 'custard' : normalized.includes('ژله') ? 'jelly' : null);
     case 'budget': {
       const amount = parseAmount(normalized);
       return amount !== null
-        ? budgetReply(context, amount)
-        : reply('budget', 'بودجهٔ تقریبی‌تان را بگویید (مثلاً «۵۰۰ هزار تومان») تا ترکیب پیشنهادی را از محصولات موجود بسازم.', {
-            grounded: true,
-            suggestions: [
-              { label: '۳۰۰ هزار تومان', prompt: 'با ۳۰۰ هزار تومان چه ترکیبی بگیرم؟' },
-              { label: '۵۰۰ هزار تومان', prompt: 'با ۵۰۰ هزار تومان چه ترکیبی بگیرم؟' },
-            ],
-          });
+        ? budgetReply(context, memory, amount)
+        : reply(
+            'budget',
+            pick(memory, 'budget-ask', [
+              'بودجهٔ تقریبی‌تان را بگویید (مثلاً «۵۰۰ هزار تومان») تا ترکیب پیشنهادی را از محصولات موجود بسازم.',
+              'حدوداً چقدر در نظر دارید؟ بگید تا سبدی متناسب از همین قفسهٔ ژینو بچینم.',
+            ]),
+            {
+              grounded: true,
+              suggestions: [
+                { label: '۳۰۰ هزار تومان', prompt: 'با ۳۰۰ هزار تومان چه ترکیبی بگیرم؟' },
+                { label: '۵۰۰ هزار تومان', prompt: 'با ۵۰۰ هزار تومان چه ترکیبی بگیرم؟' },
+              ],
+            },
+          );
     }
     case 'pairing':
-      return pairingReply(context, flavorProducts);
+      return pairingReply(context, memory, flavorProducts);
     case 'suggestion': {
       const preferences = detectPreferences(normalized);
       // بدون هیچ نشانهٔ سلیقه، اگر مشتری طعم/محصول مشخصی را نام برده،
       // همان را معرفی می‌کنیم؛ وگرنه دو پرسش کوتاه برای دقیق‌شدن می‌پرسیم.
       if (preferences.length === 0 && flavorProducts.length > 0) {
-        return flavorReply(context, flavorProducts);
+        return flavorReply(context, memory, flavorProducts);
       }
-      return suggestionReply(context, preferences);
+      return suggestionReply(context, memory, preferences);
     }
     case 'shipping':
-      return shippingReply(context);
+      return shippingReply(context, memory);
     case 'order-help':
-      return orderHelpReply();
+      return orderHelpReply(memory);
     case 'price-stock':
-      return priceStockReply(context, flavorProducts);
+      return priceStockReply(context, memory, flavorProducts);
     case 'catalog':
-      return catalogReply(context);
+      return catalogReply(context, memory);
     case 'flavors':
-      return flavorsReply(context);
+      return flavorsReply(context, memory);
     case 'guide':
-      return flavorProducts.length > 0 ? flavorReply(context, flavorProducts) : guideReply(context);
+      return flavorProducts.length > 0 ? flavorReply(context, memory, flavorProducts) : guideReply(context, memory);
     default:
       break;
   }
 
-  if (flavorProducts.length > 0) return flavorReply(context, flavorProducts);
+  if (flavorProducts.length > 0) return flavorReply(context, memory, flavorProducts);
 
   // پرسش بیرون از حوزهٔ ژینو
   const inDomain = DOMAIN_HINTS.some((hint) => normalized.includes(normalizePersian(hint)));
   if (!inDomain) {
-    return reply('scope', SCOPE_REPLY, {
+    return reply('scope', pick(memory, 'scope', SCOPE_VARIANTS), {
       grounded: true,
       links: [link('مشاهدهٔ محصولات', '/products'), link('دستور تهیه', '/recipes')],
       suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
     });
   }
 
-  return reply('open', CLARIFY_REPLY, {
+  return reply('open', pick(memory, 'clarify', CLARIFY_VARIANTS), {
     grounded: true,
     suggestions: DEFAULT_SUGGESTIONS.slice(0, 4),
   });
@@ -1357,9 +1707,24 @@ function resolveAnswer(question: string, context: AssistantContext): LocalReply 
  * خروجی همیشه یک AssistantReply است؛ هیچ خطایی به UI نمی‌رسد و
  * منبع داده (دیتابیس یا دادهٔ محلی) همیشه به پاسخ پیوست می‌شود تا
  * رابط کاربری و مدل بتوانند صادقانه بگویند پاسخ بر چه چیزی ساخته شده.
+ *
+ * `memory` حافظهٔ همین گفتگوست (اختیاری؛ اگر نیاید گفتگوی تازه فرض
+ * می‌شود): آخرین محصولاتِ موضوعِ بحث و واریانت‌های تازه‌استفاده‌شده
+ * را نگه می‌دارد تا پاسخ‌ها متناسب با پیام قبلی باشند و تکراری نشوند.
  */
-export function answerLocally(question: string, context: AssistantContext): AssistantReply {
-  return { ...resolveAnswer(question, context), dataSource: context.dataSource };
+export function answerLocally(
+  question: string,
+  context: AssistantContext,
+  memory: AssistantConversationMemory = createAssistantMemory(),
+): AssistantReply {
+  const answer = resolveAnswer(question, context, memory);
+  // به‌روزرسانی حافظه پس از ساختن پاسخ — برای پیگیری‌های طبیعی نوبت بعد
+  memory.turns += 1;
+  memory.lastIntent = answer.capability;
+  if (answer.products && answer.products.length > 0) {
+    memory.lastProducts = answer.products;
+  }
+  return { ...answer, dataSource: context.dataSource };
 }
 
 /*

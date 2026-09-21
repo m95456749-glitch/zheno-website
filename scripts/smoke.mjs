@@ -3041,9 +3041,11 @@ async function openAssistantFromStore(dom, waitFor, text) {
     if (budget) ok('assistant chat — budget suggestion is computed from real prices');
     else fail('assistant chat — budget answer missing: ' + text().slice(-220));
 
-    // out-of-scope questions are politely declined (no invented answer)
+    // out-of-scope questions are politely declined (no invented answer).
+    // فاز ۱۲: پاسخ محدوده چند واریانت طبیعی دارد؛ این بررسی «صادقانه
+    // رد شدن» را می‌سنجد، نه یک جملهٔ مشخص.
     await sendChatMessage(dom, waitFor, 'هوا امروز چطور است؟');
-    const scoped = await waitFor(() => text().includes('فقط دربارهٔ محصولات ژینو'));
+    const scoped = await waitFor(() => /(تخصص من همین قفسهٔ ژینوئه|از حوزهٔ من خارجه|از دستم خارجه)/.test(text()));
     if (scoped) ok('assistant chat — unrelated questions get the honest scope answer');
     else fail('assistant chat — scope answer missing: ' + text().slice(-220));
 
@@ -3169,7 +3171,8 @@ async function openAssistantFromStore(dom, waitFor, text) {
       } else {
         fail('assistant shop — unexpected cart content: ' + JSON.stringify(lines));
       }
-      if (text().includes('ثبت سفارش و پرداخت با خودتان است')) {
+      // هر دو واریانتِ پیام موفق، بر «پرداخت دست مشتری است» تأکید دارند
+      if (/(ثبت سفارش و پرداخت با خودتان است|پرداخت و ثبت نهایی همیشه دست خودتان)/.test(text())) {
         ok('assistant shop — the assistant states that payment stays with the customer');
       } else {
         fail('assistant shop — no clear "payment is yours" note after adding');
@@ -3934,7 +3937,8 @@ function makeAssistantDbStub({ seen = [] } = {}) {
 
     // ۴) honesty about the source — in the customer's own language
     await sendChatMessage(dom, waitFor, 'اطلاعاتت رو از کجا میاری؟');
-    const source = await waitFor(() => text().includes('لحظه‌ای از خودِ فروشگاه می‌گیرم'));
+    // واریانت‌های پاسخِ «منبع» — هر دو یعنی: اعداد از خود فروشگاه است
+    const source = await waitFor(() => /(لحظه‌ای از خودِ فروشگاه می‌گیرم|همین حالا از خود فروشگاه نگاه می‌کنم)/.test(text()));
     if (source) ok('assistant database — the assistant says its numbers come from the shop itself, live');
     else fail('assistant database — source answer missing: ' + text().slice(-200));
 
@@ -4004,7 +4008,8 @@ function makeAssistantDbStub({ seen = [] } = {}) {
       { ask: 'سلام ژله انار چنده؟', expect: '۲۰۰٬۰۰۰ تومان', label: '«چنده» price question' },
       { ask: 'با ۵۰۰ تومن چی بخرم؟', expect: 'بودجهٔ ۵۰۰٬۰۰۰ تومان', label: '«۵۰۰ تومن» budget' },
       { ask: 'برای ۶ نفر چقدر پودر لازمه؟', expect: 'برای ۶ نفر', label: '«چقدر پودر لازمه» servings' },
-      { ask: 'چه طعم هایی دارید؟', expect: 'طعم‌های موجود در فروشگاه', label: '«چه طعم هایی» flavor list' },
+      // سؤال طعم‌ها همیشه فهرست واقعی را با همین بولت می‌آورد (عنوان جمله‌بندی دارد)
+      { ask: 'چه طعم هایی دارید؟', expect: '• ژله (', label: '«چه طعم هایی» flavor list' },
       { ask: 'کاستر کاکائو موجوده؟', expect: 'کاستر کاکائو', label: '«موجوده» availability' },
       { ask: 'هزینه پست چنده؟', expect: 'کرایهٔ ارسال عادی', label: '«هزینه پست» shipping' },
       { ask: 'میخوام ژله رو با کاستر لایه لایه کنم، ترکیب چی خوبه؟', expect: 'ترکیب', label: 'layer/combination question' },
@@ -4030,7 +4035,7 @@ function makeAssistantDbStub({ seen = [] } = {}) {
 
     // a story request must be declined in scope, not answered
     await sendChatMessage(dom, waitFor, 'برام یه شعر بگو');
-    const scoped = await waitFor(() => text().includes('فقط دربارهٔ محصولات ژینو'));
+    const scoped = await waitFor(() => /(تخصص من همین قفسهٔ ژینوئه|از حوزهٔ من خارجه|از دستم خارجه)/.test(text()));
     if (scoped) ok('assistant colloquial — an out-of-scope request is declined with the honest scope answer');
     else fail('assistant colloquial — scope answer missing: ' + text().slice(-200));
 
@@ -4097,7 +4102,8 @@ function makeAssistantDbStub({ seen = [] } = {}) {
 
       // پیام دوم: پس از دو خطای پشت‌سرهم، دیگر منتظر Endpoint خراب نمی‌مانیم
       await sendChatMessage(dom, waitFor, 'چه طعم‌هایی دارید؟');
-      const second = await waitFor(() => text().includes('طعم‌های موجود در فروشگاه'), 8000);
+      // هر سه واریانتِ پاسخ طعم‌ها، فهرست واقعی را با این بولت‌ها می‌آورند
+      const second = await waitFor(() => text().includes('• ژله ('), 8000);
       if (second) ok('assistant fallback — the second message answers locally right away');
       else fail('assistant fallback — the second message did not get a local answer');
       expectNoErrors('assistant fallback', errors);
