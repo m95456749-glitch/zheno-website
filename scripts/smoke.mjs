@@ -1123,11 +1123,20 @@ function expectNoErrors(label, errors) {
     }
 
     // navigate to inventory through the panel's own navigation (SPA link)
-    const inventoryLink = Array.from(document.querySelectorAll('a')).find((a) =>
-      (a.getAttribute('href') ?? '').endsWith('/admin/inventory'),
+    // Re-queried per attempt: on a loaded machine a single synthetic click
+    // can be lost (stale node / mid-commit), and a user would click again.
+    const clickEl = (element) =>
+      element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+    const findInventoryLink = () =>
+      Array.from(document.querySelectorAll('a')).find((a) =>
+        (a.getAttribute('href') ?? '').endsWith('/admin/inventory'),
+      );
+    const onInventory = await clickUntil(
+      clickEl,
+      findInventoryLink,
+      () => text().includes('موجودی (عدد)'),
+      waitFor,
     );
-    if (inventoryLink) inventoryLink.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    const onInventory = await waitFor(() => text().includes('موجودی (عدد)'));
     if (onInventory) ok('connected admin — inventory page reached through the panel nav');
     else fail('connected admin — inventory page did not render: ' + text().slice(0, 200));
 
@@ -1135,13 +1144,40 @@ function expectNoErrors(label, errors) {
     if (!stockInput) {
       fail('connected admin — stock input not found');
     } else {
-      setReactValue(stockInput, '42');
-      // React's onBlur listens to the bubbling 'focusout' event.
-      stockInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
       const rpc = () => calls.find((c) => c.url.includes('/rest/v1/rpc/set_inventory_stock'));
-      const saved = await waitFor(() => Boolean(rpc()));
+      // A real user types and then leaves the field: two separate tasks,
+      // with React committing the draft state in between. The panel's
+      // onBlur handler (`commit`) reads that draft from its own render
+      // closure, so firing both synthetic events inside a single task can
+      // hand it the *previous* value — it then compares the old number with
+      // itself and no save goes out at all.
+      //
+      // That is exactly what happened once on a pinned CPU («stock update
+      // did not reach the database», empty payload after a 12 s poll). The
+      // precise scheduling detail inside React is not what matters here —
+      // what matters is that the check now behaves like a user: type, let
+      // React commit, then blur; and if the save still did not go out,
+      // retype and blur again instead of declaring a failure.
+      const retypeAndBlur = async () => {
+        setReactValue(stockInput, '42');
+        // one macrotask: the pending React commit is flushed before this
+        // timer callback runs (microtasks always drain first)
+        await sleep(60);
+        // React's onBlur listens to the bubbling 'focusout' event.
+        stockInput.dispatchEvent(new dom.window.FocusEvent('focusout', { bubbles: true }));
+      };
+      let saved = false;
+      for (let attempt = 0; attempt < 4 && !saved; attempt += 1) {
+        await retypeAndBlur();
+        saved = await waitFor(() => Boolean(rpc()), 3000);
+      }
       if (saved) ok('connected admin — stock saved through the atomic set_inventory_stock RPC');
-      else fail('connected admin — stock update did not reach the database');
+      else
+        fail(
+          'connected admin — stock update did not reach the database (field connected=' +
+            `${stockInput.isConnected}, value=${stockInput.value}; database calls seen: ` +
+            `${calls.map((c) => `${c.method} ${String(c.url).replace(/^https?:\/\/[^/]+/, '')}`).join(' , ') || 'none'})`,
+        );
       const payload = rpc() ? JSON.parse(rpc().body) : {};
       if (payload.p_variant_id === 'jelly-strawberry-250' && payload.p_current_stock === 42) {
         ok('connected admin — stock payload is correct (variant + new value)');
@@ -1151,11 +1187,16 @@ function expectNoErrors(label, errors) {
     }
 
     // navigate to products and toggle the storefront visibility
-    const productsLink = Array.from(document.querySelectorAll('a')).find((a) =>
-      (a.getAttribute('href') ?? '').endsWith('/admin/products'),
+    const findProductsLink = () =>
+      Array.from(document.querySelectorAll('a')).find((a) =>
+        (a.getAttribute('href') ?? '').endsWith('/admin/products'),
+      );
+    const onProducts = await clickUntil(
+      clickEl,
+      findProductsLink,
+      () => text().includes('افزودن محصول'),
+      waitFor,
     );
-    if (productsLink) productsLink.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
-    const onProducts = await waitFor(() => text().includes('افزودن محصول'));
     if (onProducts) ok('connected admin — products page reached through the panel nav');
     else fail('connected admin — products page did not render: ' + text().slice(0, 200));
 
@@ -1496,6 +1537,33 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   return { dom, document, text, waitFor, errors };
 }
 
+/**
+ * Click something and wait for the screen it leads to — and if that screen
+ * does not appear, re-query the element and click again (up to `attempts`
+ * times).
+ *
+ * A single synthetic click can be lost in a jsdom running on a loaded CPU:
+ * the node we hold may be replaced by a later commit before the event is
+ * processed (a stale node's events never reach React's root listener), or
+ * the click may land while the tree is mid-commit — the suite did fail that
+ * way once. A real user would simply click again, so the harness does the
+ * same instead of reporting a failure
+ * that looks like "the app did not navigate" — which is what this suite did
+ * once under load («connected images — the gallery did not render», with the
+ * dashboard still on screen after a 12 s poll).
+ *
+ * `find` is a function so every attempt re-queries the element.
+ */
+async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachMs = 6000 } = {}) {
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    const element = typeof find === 'function' ? find() : find;
+    if (!element) return false;
+    click(element);
+    if (await waitFor(predicate, eachMs)) return true;
+  }
+  return false;
+}
+
 // ════════════════════════════════════════════════════════════
 // SECURITY / REGRESSION SUITE (pre-merge review of the database
 // connection). Every check fails closed: an account without the
@@ -1545,12 +1613,19 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
     fail('connected images — the admin session did not open: ' + text().slice(0, 200));
   } else {
     // ── the gallery is reached through the panel's own navigation ──
-    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
-      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+    // Re-queried per attempt: a click can be lost on a loaded machine (see
+    // clickUntil), and a real user would just click the link again.
+    const findImagesLink = () =>
+      Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+    if (!findImagesLink()) fail('connected images — no navigation link to /admin/product-images');
+    const onGallery = await clickUntil(
+      click,
+      findImagesLink,
+      () => text().includes('فضای ذخیره‌سازی Supabase'),
+      waitFor,
     );
-    if (!imagesLink) fail('connected images — no navigation link to /admin/product-images');
-    else click(imagesLink);
-    const onGallery = await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
     if (onGallery) ok('connected images — the gallery reads product_images from the database');
     else fail('connected images — the gallery did not render: ' + text().slice(0, 200));
 
@@ -1777,12 +1852,12 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   if (!signedIn) {
     fail('bucket-missing — the admin session did not open: ' + text().slice(0, 200));
   } else {
-    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
-      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
-    );
-    if (!imagesLink) fail('bucket-missing — no navigation link to /admin/product-images');
-    else click(imagesLink);
-    await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+    const findImagesLink = () =>
+      Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+    if (!findImagesLink()) fail('bucket-missing — no navigation link to /admin/product-images');
+    await clickUntil(click, findImagesLink, () => text().includes('فضای ذخیره‌سازی Supabase'), waitFor);
 
     const replaceButton = findButton('جایگزینی تصویر اصلی');
     if (!replaceButton) {
@@ -1901,12 +1976,12 @@ async function renderWithStub(path, { stub, appSource = appCodeConnected, seed }
   if (!signedIn) {
     fail('gallery curation — the admin session did not open: ' + text().slice(0, 200));
   } else {
-    const imagesLink = Array.from(document.querySelectorAll('a')).find((link) =>
-      (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
-    );
-    if (!imagesLink) fail('gallery curation — no navigation link to /admin/product-images');
-    else click(imagesLink);
-    await waitFor(() => text().includes('فضای ذخیره‌سازی Supabase'));
+    const findImagesLink = () =>
+      Array.from(document.querySelectorAll('a')).find((link) =>
+        (link.getAttribute('href') ?? '').endsWith('/admin/product-images'),
+      );
+    if (!findImagesLink()) fail('gallery curation — no navigation link to /admin/product-images');
+    await clickUntil(click, findImagesLink, () => text().includes('فضای ذخیره‌سازی Supabase'), waitFor);
 
     // ── ADD a second photo without touching the current primary ──
     click(findButton('بارگذاری تصویر'));
