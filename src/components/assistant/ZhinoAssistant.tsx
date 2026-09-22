@@ -43,7 +43,15 @@ export default function ZhinoAssistant() {
     >
       <span className="zhino-assistant-float">
         <span className="zhino-assistant-medallion">
-          <AssistantAvatar compact={true} size={44} mode="idle" />
+          {/* بدون size: آواتار کل قاب مدالی را می‌پوشاند (crop سر و بالاتنه
+              در assistant.css، بخش «فاز ۱۰») */}
+          <AssistantAvatar compact={true} mode="idle" />
+          {/* پلکِ بسیار ریز روی چشم‌های واقعی تصویر — حرکتی در حدِ اندازهٔ
+              دکمه (assistant.css، بخش «فاز ۱۱»؛ با reduced-motion خاموش) */}
+          <span className="zhino-avatar-eyes" aria-hidden="true">
+            <span className="zhino-avatar-eye is-left" />
+            <span className="zhino-avatar-eye is-right" />
+          </span>
           {!visited && <span className="zhino-assistant-dot" aria-hidden="true" />}
         </span>
         <span className="zhino-assistant-tip" aria-hidden="true">

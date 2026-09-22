@@ -71,7 +71,7 @@ image. No generated artwork is committed here.
 
 | File                              | Role                                                     |
 | --------------------------------- | -------------------------------------------------------- |
-| `assistant/zhino-assistant.png`   | تصویر اختصاصی ربات دستیار (۳۲۰×۳۲۰، شفاف)                 |
+| `assistant/بارگیری.jpeg`          | تصویر واقعی ربات دستیار (1024x1536، JPEG) — هویت بصری ژینو |
 
 Unlike the placeholders above this **is** committed artwork: a 3D-style
 mascot illustration **generated with an image model** (not a photograph,

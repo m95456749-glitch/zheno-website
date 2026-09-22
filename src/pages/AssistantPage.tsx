@@ -1,24 +1,17 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» (فاز ۷ و ۸) — محیط چت تمام‌صفحه
+// ZHINO — «دستیار ژینو» — محیط چت یکپارچه و خلوت
 //
-// صفحهٔ /assistant شبیه یک صفحهٔ معمولی سایت نیست:
+// بازطراحی کامل پوسته (فاز ۹): صفحه یک سطح و یک پس‌زمینهٔ هماهنگ
+// دارد؛ صحنهٔ چندلایهٔ استودیو حذف شده و ربات واقعی فقط به‌صورت یک
+// تصویر کوچک و تمام‌قد در مرکز بخش خوش‌آمدگویی دیده می‌شود.
 //
-//   • فوتر، منوها، پرچم‌ها، بخش معرفی قابلیت‌ها و ستون کنار حذف
-//     شده‌اند (Layout روی همین مسیر هدر/فوتر فروشگاه را رندر نمی‌کند).
-//   • صفحه دقیقاً هم‌قد دید کاربر است و فقط فهرست پیام‌ها اسکرول
-//     می‌شود؛ کادر نوشتن پیام همیشه پایین می‌ماند (الگوی ChatGPT).
-//   • سربرگ خیلی ساده و Premium: نشان کوچک ژینو، عنوان «دستیار ژینو»،
-//     «گفتگوی تازه» و دکمهٔ ظریف «بازگشت به فروشگاه».
+//   • سربرگ باریک و هم‌رنگ صفحه: نشان ژینو، «گفتگوی تازه» و
+//     «بازگشت به سایت» — عملکرد بازگشت همان ناوبری به '/' است.
+//   • محیط گفتگو (AssistantChat) بدون هیچ لایهٔ اضافه زیر سربرگ
+//     می‌نشیند و کادر نوشتن همیشه پایین می‌ماند (الگوی ChatGPT).
 //
-// فاز ۸: پیل وضعیت هم از سربرگ برداشته شد. «دیتابیس وصل است / نیست»،
-// «مدل هوشمند فعال است / نیست» و «منبع داده» حرف‌های داخلی ماست؛ مشتری
-// فقط چت را می‌بیند. اتصال دیتابیس، مدل هوش مصنوعی و Fallback محلی
-// پشت صحنه دقیقاً مثل قبل کار می‌کنند (useAssistantChat +
-// services/assistant) — فقط هیچ‌جا در این صفحه نوشته نمی‌شوند.
-// هیچ قابلیت فنی‌ای اینجا حذف نشده و قیمت/موجودی/دستور تهیه همچنان از
-// دادهٔ واقعی فروشگاه می‌آید. «بازگشت به فروشگاه» به صفحهٔ اصلی (/)
-// می‌رود؛ مسیر هم با push در تاریخچه ثبت می‌شود، پس دکمهٔ Back مرورگر
-// مثل قبل کار می‌کند.
+// منطق چت، API و اتصال‌ها دست‌نخورده‌اند (useAssistantChat +
+// services/assistant) — فقط پوسته عوض شده است.
 // ============================================================
 
 import { useNavigate } from 'react-router-dom';
@@ -27,12 +20,12 @@ import AssistantChat from '../components/assistant/AssistantChat';
 import { useAssistantChat } from '../components/assistant/useAssistantChat';
 import { ASSISTANT_NAME } from '../components/assistant/assistantData';
 
-/** آیکن فروشگاه برای دکمهٔ «بازگشت به فروشگاه» */
+/** آیکن فروشگاه برای دکمهٔ «بازگشت به سایت» */
 function StoreIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
       <path
-        d="M3.4 7.6V16c0 .5.4.9.9.9h11.4c.5 0 .9-.4.9-.9V7.6M2.3 7.6h15.4l-1-3.2a1.4 1.4 0 0 0-1.3-1H4.6a1.4 1.4 0 0 0-1.3 1l-1 3.2Zm4.1 0c0 1.1.9 2 2 2s2-.9 2-2m4 0c0 1.1.9 2 2 2s2-.9 2-2"
+        d="M3.4 7.6V16c0 .5.4.9.9.9h11.4c.5 0 .9-.4.9-.9V7.6M2.3 7.6h15.4l-1-3.2a1.4 1.4 0 0 0-1.3-1H4.6a1.4 1.4 0 0 0-1.3 1l-1 3.2Zm4.1 0c1.1 0 2 .9 2 2s2-.9 2-2m4 0c1.1 0 2 .9 2 2s2-.9 2-2"
         stroke="currentColor"
         strokeWidth="1.4"
         strokeLinecap="round"
@@ -65,25 +58,11 @@ export default function AssistantPage() {
 
   return (
     <div className="zhino-assistant-page">
-      {/* ── دکمه بازگشت به سایت — بالای سمت چپ، ثابت، Premium ── */}
-      <button
-        type="button"
-        className="zhino-assistant-back-site"
-        onClick={goHome}
-        aria-label="بازگشت به سایت"
-        title="بازگشت به سایت"
-      >
-        <svg viewBox="0 0 20 20" fill="none" className="zhino-assistant-back-site-icon" aria-hidden="true">
-          <path d="M12.5 4.5 7 10l5.5 5.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
-        </svg>
-        <span>بازگشت به سایت</span>
-      </button>
-
-      {/* ── سربرگ بسیار ساده: نشان، عنوان، گفتگوی تازه ── */}
+      {/* ── سربرگ باریک و هم‌سطح صفحه: نشان، گفتگوی تازه، بازگشت ── */}
       <header className="zhino-assistant-topbar">
         <span className="zhino-assistant-brand">
           <span className="zhino-assistant-brand-mark">
-            <AssistantAvatar compact={true} size={36} mode="idle" />
+            <AssistantAvatar compact={true} />
           </span>
           <span className="zhino-assistant-brand-text">
             <span className="zhino-assistant-brand-name">Zhino</span>
@@ -105,17 +84,15 @@ export default function AssistantPage() {
           type="button"
           className="zhino-assistant-ghost is-back"
           onClick={goHome}
-          aria-label="بازگشت به فروشگاه"
-          title="بازگشت به فروشگاه"
+          aria-label="بازگشت به سایت"
+          title="بازگشت به سایت"
         >
           <StoreIcon />
-          <span className="zhino-assistant-back-text">بازگشت به فروشگاه</span>
+          <span className="zhino-assistant-back-text">بازگشت به سایت</span>
         </button>
       </header>
 
-      {/* ── محیط گفتگو — تمام‌قد، بدون هیچ بخش اضافی ──
-          «گفتگوی تازه» به chat.clear وصل است: گفتگو با همان پیام
-          خوشامد و پیشنهادهای پیش‌فرض از نو شروع می‌شود. */}
+      {/* ── محیط گفتگو — یک سطح، بدون لایهٔ اضافه ── */}
       <AssistantChat chat={chat} />
     </div>
   );

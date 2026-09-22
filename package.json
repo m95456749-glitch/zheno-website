@@ -23,7 +23,8 @@
     "verify:images:bundle": "node scripts/verify-image-bundle.mjs",
     "test:images:migration": "node scripts/test-product-image-migration-safety.mjs",
     "test:images:automation": "python3 scripts/test-product-image-automation.py",
-    "test:images:cli": "node scripts/test-product-image-cli.mjs"
+    "test:images:cli": "node scripts/test-product-image-cli.mjs",
+    "verify:assistant-scene": "node scripts/verify-assistant-scene.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",

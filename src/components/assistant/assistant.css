@@ -96,7 +96,8 @@
   place-items: center;
   width: 2.9rem;
   height: 2.9rem;
-  border-radius: 9999px;
+  /* گوشه‌های نرم به‌جای دایرهٔ کامل تا سرِ ربات در تصویر واقعی کراپ نشود */
+  border-radius: 30%;
   background: radial-gradient(
     120% 120% at 50% 0%,
     #faf7f2 0%,
@@ -388,7 +389,8 @@
   place-items: center;
   width: 2.35rem;
   height: 2.35rem;
-  border-radius: 9999px;
+  /* گوشه‌های نرم به‌جای دایرهٔ کامل تا سرِ ربات در تصویر واقعی کراپ نشود */
+  border-radius: 30%;
   background: radial-gradient(
     120% 120% at 50% 0%,
     #faf7f2 0%,
@@ -992,7 +994,8 @@
   place-items: center;
   width: 2rem;
   height: 2rem;
-  border-radius: 9999px;
+  /* گوشه‌های نرم به‌جای دایرهٔ کامل تا سرِ ربات در تصویر واقعی کراپ نشود */
+  border-radius: 30%;
   background: radial-gradient(
     120% 120% at 50% 0%,
     #faf7f2 0%,
@@ -1732,9 +1735,82 @@
   color: rgba(41, 35, 33, 0.28);
 }
 
+/* نگینِ طعم — رنگ از کاتالوگ واقعی، قابِ عاجی/طلاییِ ژینو */
+.zhino-assistant-product-swatch {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.15rem;
+  height: 2.15rem;
+  border-radius: 9999px;
+  background: radial-gradient(120% 120% at 50% 0%, #ffffff 0%, #f4ece2 58%, #e4d6c7 100%);
+  box-shadow:
+    inset 0 0 0 1px rgba(184, 154, 98, 0.45),
+    0 8px 16px -12px rgba(42, 11, 18, 0.6);
+}
+
+.zhino-assistant-product-swatch i {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-radius: 9999px;
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.5),
+    0 2px 5px -2px rgba(42, 11, 18, 0.5);
+}
+
+/* ردیفِ کنش‌های کارت: «جزئیات» + «افزودن به سبد» */
+.zhino-assistant-product-actions {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.zhino-assistant-product-link {
+  display: inline-flex;
+  align-items: center;
+  height: 2.05rem;
+  padding: 0 0.7rem;
+  border: 1px solid rgba(42, 11, 18, 0.14);
+  border-radius: 9999px;
+  background: rgba(255, 255, 255, 0.75);
+  color: var(--color-wine-900);
+  font-size: 0.68rem;
+  font-weight: 700;
+  line-height: 1;
+  white-space: nowrap;
+  transition:
+    border-color 0.2s ease,
+    background-color 0.2s ease,
+    color 0.2s ease;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-product-link:hover {
+    border-color: rgba(184, 154, 98, 0.75);
+    background: rgba(255, 252, 245, 0.95);
+  }
+}
+
+.zhino-assistant-product-link:focus-visible {
+  outline: 2px solid rgba(184, 154, 98, 0.75);
+  outline-offset: 2px;
+}
+
 .zhino-assistant-product-stock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
   font-weight: 700;
   color: #047857;
+}
+
+.zhino-assistant-product-stock::before {
+  content: "";
+  width: 0.34rem;
+  height: 0.34rem;
+  border-radius: 50%;
+  background: currentColor;
 }
 
 .zhino-assistant-product-stock.is-low {
@@ -1944,15 +2020,26 @@
     gap: 0.4rem;
   }
 
-  /* کارت محصول در موبایل: نام و قیمت بالا، دکمهٔ گرد پایین */
+  /* کارت محصول در موبایل: نگین + نام/قیمت/موجودی در یک ردیف،
+     و ردیفِ دکمه‌ها زیر آن با عرض کامل — هیچ چیزی از کادر بیرون نمی‌زند */
   .zhino-assistant-product {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 0.5rem;
+    flex-wrap: wrap;
+    row-gap: 0.55rem;
+    padding: 0.6rem;
+  }
+
+  .zhino-assistant-product-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .zhino-assistant-product-swatch {
+    width: 1.9rem;
+    height: 1.9rem;
   }
 
   .zhino-assistant-add {
-    align-self: stretch;
+    flex: 1 1 auto;
     justify-content: center;
     height: 2.3rem;
     font-size: 0.72rem;
@@ -2305,5 +2392,425 @@
   .zhino-welcome-char-btn:hover,
   .zhino-welcome-char-btn:active {
     transform: none;
+  }
+}
+
+/* ============================================================
+   تصویر واقعی ربات (بارگیری.jpeg) — بدون افکت، با نسبت اصلی
+   ============================================================ */
+
+/* عکس ربات داخل هر ظرف آواتار: کامل، بدون کشیدگی و بدون برش */
+.zhino-bot-photo {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  user-select: none;
+}
+
+/* تصویر خوش‌آمدگویی صفحهٔ دستیار — همان فایل با نسبت ۲:۳.
+   اندازه، جای‌گذاری و هم‌آمیزی با صفحه در بخش «فاز ۱۱» تعیین می‌شود. */
+.zhino-welcome-photo {
+  display: block;
+  object-fit: contain;
+  user-select: none;
+}
+
+/* حباب سلامِ ثابت — فقط ورود، بدون حرکت شناور */
+.zhino-welcome-bubble.is-still {
+  animation: zhino-welcome-bubble-in 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ============================================================
+   فاز ۹ — بازطراحی تخت و یکپارچهٔ محیط چت
+   یک سطح و یک پس‌زمینهٔ هماهنگ؛ کارت‌های تو‌در‌تو، پس‌زمینه‌های
+   چندلایه، بلور و سایه‌های سنگین حذف می‌شوند. ربات فقط به‌صورت
+   یک تصویر کوچکِ تمام‌قد در مرکز خوش‌آمدگویی دیده می‌شود.
+   ============================================================ */
+
+/* صفحه: تک‌رنگ، بدون لایه‌های رنگی */
+.zhino-assistant-page {
+  background-image: none;
+}
+
+/* سربرگ: هم‌رنگ صفحه، بدون بلور، فقط یک خط جداکنندهٔ مویی */
+.zhino-assistant-topbar {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  border-bottom: 1px solid rgba(41, 35, 33, 0.08);
+  padding-left: clamp(0.7rem, 3vw, 1.5rem);
+}
+
+.zhino-assistant-topbar::after {
+  content: none;
+}
+
+/* نشان برند و آواتارها: سطح تخت سفید با خط مویی (فقط صفحهٔ چت) */
+.zhino-assistant-brand-mark,
+.zhino-assistant-avatar {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.09);
+}
+
+/* دکمه‌های سربرگ: بی‌صدا و هم‌خانواده */
+.zhino-assistant-ghost {
+  background: transparent;
+  border-color: rgba(41, 35, 33, 0.14);
+  color: var(--color-mocha);
+}
+
+@media (hover: hover) {
+  .zhino-assistant-ghost:hover {
+    background: #ffffff;
+    border-color: rgba(113, 49, 59, 0.32);
+    color: var(--color-wine-800);
+    transform: none;
+  }
+}
+
+.zhino-assistant-ghost:active {
+  transform: none;
+}
+
+/* هیچ انیمیشن ورود/حرکتی در محیط چت */
+.zhino-assistant-console,
+.zhino-assistant-welcome,
+.zhino-assistant-ideas-body,
+.zhino-assistant-voice-note,
+.zhino-welcome-hint {
+  animation: none;
+}
+
+/* ============================================================
+   فاز ۱۴ — انیمیشن طبیعی و Premium ربات تمام‌قد (بارگیری.jpeg)
+   هدف: زنده‌تر و طبیعی‌تر، اما همچنان ظریف و لوکس — بدون حرکت درشت.
+   ساختار لایه‌ای (همه transform/opacity، بدون jank):
+     • body    → تنفس نرم (translateY + scaleY) — دامنه بسیار کم
+     • shoulder→ micro-movement شانه و دست — چرخش و جابجایی جزئی
+     • head    → sway ظریف سر (rotate + translate) — چپ/راست ملایم
+     • eyes    → پلک نامنظم + تغییر جزئی نگاه (gaze offset)
+   هر لایه timing متفاوت دارد تا حس رباتیک همزمان از بین برود.
+   فایل تصویر دست‌نخورده — همه‌چیز CSS + JS سبک.
+   ============================================================ */
+
+/* قاب = فقط اندازه و نسبت. بدون خط دور، بدون سایه، بدون گوشهٔ گرد */
+.zhino-welcome-photo-wrap {
+  position: relative;
+  z-index: 2;
+  height: clamp(10.5rem, 34vh, 15rem);
+  width: auto;
+  aspect-ratio: 1024 / 1536;
+  overflow: hidden;
+  background: var(--color-cream-page, #faf7f2);
+  user-select: none;
+  contain: layout paint;
+}
+
+.zhino-welcome-photo-wrap::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  z-index: 4;
+  pointer-events: none;
+  background:
+    linear-gradient(to right, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%),
+    linear-gradient(to left, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%),
+    linear-gradient(to bottom, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 8%),
+    linear-gradient(to top, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%);
+}
+
+/* لایهٔ تنفس بدن — بسیار کم دامنه، مرکز ثقل پایین */
+.zhino-welcome-photo-body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 78%;
+  will-change: transform;
+  transition: transform 3.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* لایهٔ micro شانه و دست — فقط حرکت جزئی، بدون بالا رفتن دست */
+.zhino-welcome-photo-shoulder {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 62%;
+  will-change: transform;
+  transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* لایهٔ سر — sway ظریف چپ/راست، بدون جدا شدن از محیط */
+.zhino-welcome-photo-stage {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 28%;
+  will-change: transform;
+  transition: transform 1.15s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zhino-welcome-photo-wrap .zhino-welcome-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  -webkit-mask-image: radial-gradient(55% 55% at 49.2% 48.8%, #000 0%, #000 76%, transparent 100%);
+  mask-image: radial-gradient(55% 55% at 49.2% 48.8%, #000 0%, #000 76%, transparent 100%);
+  will-change: transform;
+}
+
+/* پلک طبیعی — دو لکهٔ هم‌رنگ وایزر روی چشم‌های واقعی عکس
+   معمولاً نامرئی (opacity 0) — فقط هنگام blink با کلاس is-blinking نمایان
+   gaze offset از طریق transform والد اعمال می‌شود تا جهت نگاه تغییر جزئی کند */
+.zhino-welcome-eyes {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.09s ease,
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zhino-welcome-eyes.is-blinking {
+  opacity: 1;
+  transition: opacity 0.06s ease;
+}
+
+.zhino-welcome-eye {
+  position: absolute;
+  width: 13.6%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle closest-side, #0d0c0a 0%, #0d0c0a 72%, rgba(13, 12, 10, 0) 100%);
+}
+
+.zhino-welcome-eye.is-left {
+  left: 44.73%;
+  top: 27.41%;
+}
+
+.zhino-welcome-eye.is-right {
+  left: 65.82%;
+  top: 27.15%;
+}
+
+/* پیام‌ها: دو سطح سادهٔ تخت */
+.zhino-assistant-bubble.is-bot {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.zhino-assistant-bubble.is-user {
+  background-image: none;
+  box-shadow: none;
+}
+
+/* کارت محصول و تأیید سبد: تخت و هم‌سطح */
+.zhino-assistant-product {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+.zhino-assistant-product-swatch {
+  background: #faf7f2;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.09);
+}
+
+.zhino-assistant-cart-confirm {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+/* دکمه‌های کنشی: تک‌رنگ، بدون گرادیان و سایه */
+.zhino-assistant-send,
+.zhino-assistant-add,
+.zhino-assistant-cart-yes {
+  background-image: none;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-send:not(:disabled):hover,
+  .zhino-assistant-add:not(:disabled):hover,
+  .zhino-assistant-cart-yes:hover {
+    transform: none;
+    box-shadow: none;
+    filter: brightness(1.06);
+  }
+}
+
+/* کادر نوشتن: نوار سادهٔ سفید روی همان سطح */
+.zhino-assistant-composer::before {
+  content: none;
+}
+
+.zhino-assistant-composer-form {
+  background: #ffffff;
+  border: 1px solid rgba(41, 35, 33, 0.12);
+  border-radius: 1.1rem;
+  box-shadow: none;
+}
+
+.zhino-assistant-composer-form:focus-within {
+  border-color: rgba(113, 49, 59, 0.4);
+  box-shadow: 0 0 0 3px rgba(113, 49, 59, 0.08);
+}
+
+/* چیپ‌ها و فهرست پیشنهادها: تخت */
+.zhino-assistant-chip {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-chip:hover {
+    transform: none;
+    box-shadow: none;
+    border-color: rgba(184, 154, 98, 0.55);
+  }
+}
+
+.zhino-assistant-ideas-body {
+  background: #ffffff;
+  box-shadow: none;
+}
+
+/* دکمهٔ صدا: تخت */
+.zhino-assistant-voice {
+  background: #ffffff;
+}
+
+.zhino-assistant-voice.is-on {
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(184, 154, 98, 0.55);
+}
+
+/* فضای رزروشدهٔ قدیمی برای دکمهٔ مطلق دیگر لازم نیست (موبایل) */
+@media (max-width: 639px) {
+  .zhino-assistant-topbar {
+    padding-left: clamp(0.7rem, 3vw, 1.5rem);
+  }
+}
+
+@media (max-width: 380px) {
+  .zhino-assistant-topbar {
+    padding-left: 0.7rem;
+  }
+}
+
+/* ============================================================
+   فاز ۱۰ — اصلاح نمایش تصویر (فایل اصلی یکسان، بدون انیمیشن)
+   آواتار کوچک دکمهٔ شناور (پایین صفحهٔ اصلی و سایر صفحه‌های
+   فروشگاه): به‌جای تمام‌قدِ ریز، فقط سر و بالاتنه — تقریباً از
+   سینه به بالا — با wrapper و CSS crop. صورت و چشم‌ها در قاب
+   کوچک واضح می‌مانند و قاب، طبیعی و حرفه‌ای دیده می‌شود.
+   ============================================================ */
+
+/* قابِ برش — مرجعِ img مطلق؛ گوشه‌ها و برش از همین قاب می‌آیند */
+.zhino-assistant-medallion .zhino-avatar-wrap {
+  position: relative;
+}
+
+/* پنجرهٔ برش روی تصویر اصلی (1024×1536): x 147–877 و y 140–870 —
+   قاب مربعیِ مدالی (2.9rem): سر، چشم‌ها و لبخند کمی بالاتر از مرکز،
+   دوش و سینه در پایین قاب؛ پایین قاب از میان سینه می‌گذرد */
+.zhino-assistant-medallion .zhino-bot-photo {
+  position: absolute;
+  left: -20.14%;
+  top: -19.18%;
+  width: 140.27%;
+  height: auto;
+  max-width: none;
+  object-fit: cover;
+}
+
+/* ============================================================
+   فاز ۱۱ — حرکت بسیار محدود آواتار کوچک (دکمهٔ شناور پایین صفحه)
+   تنفسِ ~۱ پیکسلی + پلکِ ریز؛ کاملاً متناسب با اندازهٔ کوچک دکمه.
+   فقط transform/opacity، بدون JS — هیچ تداخلی با کلیک/ناوبری دکمه.
+   ============================================================ */
+
+/* تنفس: نیم‌پیکسل تا یک پیکسل بالا/پایین در هر ~۷ ثانیه */
+.zhino-assistant-medallion {
+  animation: zhino-avatar-float 7.2s ease-in-out infinite;
+}
+
+/* فاز ۱۳ — آواتار کوچک بدون قاب اضافی: حلقهٔ دور و سایهٔ تزئینی حذف
+   می‌شود؛ فقط برشِ نرمِ خود عکس می‌ماند (حرکتِ تنفس حفظ می‌شود). */
+.zhino-assistant-medallion {
+  box-shadow: none;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-launcher:hover .zhino-assistant-medallion {
+    box-shadow: none;
+  }
+}
+
+@keyframes zhino-avatar-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-2%);
+  }
+}
+
+/* پلک روی چشم‌های واقعی تصویر داخل قاب مدالی — مختصات از همان
+   crop «فاز ۱۰» (پنجرهٔ x 147–877 و y 140–870) تبدیل شده است:
+   چپ (۴۵۸، ۴۲۱) → 42.6% / 38.5% و راست (۶۷۴، ۴۱۷) → 72.2% / 37.9%.
+   زمان‌بندی پلک با welcomephoto یکی است ولی دورهٔ متفاوت (۷٫۳s) —
+   این دو هرگز با هم دیده نمی‌شوند (دکمهٔ شناور روی /assistant نیست). */
+.zhino-avatar-eyes {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0;
+  animation: zhino-bot-blink 7.3s linear infinite;
+}
+
+.zhino-avatar-eye {
+  position: absolute;
+  width: 20%;
+  aspect-ratio: 1;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle closest-side, #0d0c0a 0%, #0d0c0a 72%, rgba(13, 12, 10, 0) 100%);
+}
+
+.zhino-avatar-eye.is-left {
+  left: 42.6%;
+  top: 38.5%;
+}
+
+.zhino-avatar-eye.is-right {
+  left: 72.2%;
+  top: 37.9%;
+}
+
+/* کاهش حرکت سیستم: sway، تنفس و پلک‌ها کاملاً خاموش — پلک‌ها هرگز
+   ظاهر نمی‌شوند. فاز ۱۴: لایه‌های body/shoulder/head هم transition ندارند */
+@media (prefers-reduced-motion: reduce) {
+  .zhino-welcome-photo-body,
+  .zhino-welcome-photo-shoulder,
+  .zhino-welcome-photo-stage,
+  .zhino-welcome-eyes,
+  .zhino-assistant-medallion,
+  .zhino-avatar-eyes {
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
+  }
+
+  .zhino-welcome-eyes,
+  .zhino-avatar-eyes {
+    opacity: 0 !important;
   }
 }

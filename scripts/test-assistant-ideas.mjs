@@ -35,28 +35,34 @@ const code = (await build({
       let source = readFileSync(path, 'utf8');
       // Preserve the actual hook type. The test must fail if it regresses back
       // to a passive effect, rather than silently replacing it in the bundle.
-      const hook = source.match(/  (useEffect|useLayoutEffect)\(\(\) => \{\n    setIdeasOpen\(false\);\n  \}, \[messages.length\]\);/);
+      const hooks = [...source.matchAll(/^  (useEffect|useLayoutEffect)\(\(\) => \{\n([\s\S]*?)^  \}, \[([^\]\n]*)\]\);/gm)];
+      const hook = hooks.find(match => match[3] === 'messages.length');
       assert.ok(hook, 'Cannot locate the message-collapse effect');
+      assert.ok(hook[2].includes('if (ideasOpenedAt.current === messages.length) return;'), 'The explicit-open guard from main must be preserved');
+      // Keep the real effect body, including its early-return guard. Finally
+      // records completion even when that guard preserves an explicit opening.
       source = replaceOnce(source, hook[0], `
   useLayoutEffect(() => window.__ideasTrace('commit', { reactMessages: messages.length, ideasOpen, suggestions: suggestions.length }));
   ${hook[1]}(() => {
-    window.__ideasTrace('effect.before', { reactMessages: messages.length, ideasOpen });
-    setIdeasOpen(false);
-    window.__ideasTrace('effect.after-schedule', { reactMessages: messages.length, ideasOpen });
+    window.__ideasTrace('effect.before', { reactMessages: messages.length, ideasOpen, openedAt: ideasOpenedAt.current });
+    try {
+${hook[2]}    } finally {
+      window.__ideasTrace('effect.after-schedule', { reactMessages: messages.length, ideasOpen, openedAt: ideasOpenedAt.current });
+    }
   }, [messages.length]);`);
       // Import a tracing layout hook independently even if the implementation
       // regresses to a passive hook and removes its own layout-hook import.
       source = "import { useLayoutEffect as traceLayoutEffect } from 'react';\n" + source;
       source = source.replace("  useLayoutEffect(() => window.__ideasTrace('commit'", "  traceLayoutEffect(() => window.__ideasTrace('commit'");
-      source = replaceOnce(source, 'onClick={() => setIdeasOpen((open) => !open)}', `onClick={() => {
+      source = replaceOnce(source, 'onClick={toggleIdeas}', `onClick={() => {
         window.__ideasTrace('click.handler', { reactMessages: messages.length, ideasOpen });
-        setIdeasOpen((open) => !open);
+        toggleIdeas();
         window.__ideasTrace('click.queued', { reactMessages: messages.length, ideasOpen });
       }}`);
       return { contents: source, loader: 'tsx' };
     });
     builder.onLoad({ filter: /\/useAssistantChat\.ts$/ }, ({ path }) => ({
-      contents: replaceOnce(readFileSync(path, 'utf8'), 'const answer = answerLocally(clean, context);', `const answer = answerLocally(clean, context);
+      contents: replaceOnce(readFileSync(path, 'utf8'), 'const answer = answerLocally(clean, context, memory.current);', `const answer = answerLocally(clean, context, memory.current);
         window.__ideasTrace('answer.computed', {
           answerHasPrice: answer.text.includes('۲۰۰٬۰۰۰ تومان'),
           recipeSuggested: answer.suggestions?.some(item => item.label.includes('طرز تهیه ژله')) === true,
