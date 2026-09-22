@@ -1,0 +1,19 @@
+{
+  "cli_version": "2.117.0",
+  "required_baseline": [
+    "20260912000000_initial_schema.sql",
+    "20260912000001_seed_catalog.sql"
+  ],
+  "target": "20260922000000_product_images_reliable_bootstrap.sql",
+  "migrations": {
+    "20260912000000_initial_schema.sql": "353a6a4ae2ccc66e738975851b1b6d8fae89f165e1989108f0d5613a6135d9ec",
+    "20260912000001_seed_catalog.sql": "0f6dfd36cc2c5ca84438b66b5444d2e9a31cb9469faeeee7e3230e595323f74d",
+    "20260919000000_product_images.sql": "2497a18cbe6d236cf013bbbdedd9a5caf84910eab8c014ac0e189c4a6afb11eb",
+    "20260920000000_product_image_safety.sql": "dc372b82145033114db5e30d80cfa9eae4531f21fcb47b03ea6f89525fe8081c",
+    "20260922000000_product_images_reliable_bootstrap.sql": "49c5bd2ca57fc863e651c670c7b2c319885d203488144b4e2e6ffa9ce3749d68"
+  },
+  "excluded_predecessors": [
+    "20260919000000_product_images.sql",
+    "20260920000000_product_image_safety.sql"
+  ]
+}

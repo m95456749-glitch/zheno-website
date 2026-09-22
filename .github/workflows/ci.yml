@@ -12,7 +12,7 @@
 #   committed-secret scan).
 #
 # Production migrations remain MANUAL ONLY via the separate
-# "Supabase migrate (manual)" workflow (workflow_dispatch).
+# "Supabase product images (manual)" workflow (workflow_dispatch).
 
 name: CI
 
@@ -50,6 +50,12 @@ jobs:
 
       - name: Validate Supabase structure (offline — no DB connection)
         run: npm run verify:supabase
+
+      - name: Image migration and automation security tests (offline, no secrets)
+        run: |
+          npm run test:images
+          npm run test:images:migration
+          npm run test:images:automation
 
       - name: Verify catalog data consistency
         run: npm run verify:data

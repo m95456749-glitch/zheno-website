@@ -3,7 +3,7 @@
 // کاراکتر زنده: idle, thinking, speaking, greeting
 // ============================================================
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { formatPrice, toPersianDigits } from '../../utils/format';
@@ -171,7 +171,9 @@ export default function AssistantChat({ chat, className }: Props) {
     speak(last.text);
   }, [messages, thinking, voiceOn, voiceSite.autoVoice, voiceSite.voiceEnabled, speak]);
 
-  useEffect(() => {
+  // Close with the new message commit, before a post-commit user click can
+  // reopen the row. A deferred effect could otherwise erase that newer click.
+  useLayoutEffect(() => {
     setIdeasOpen(false);
   }, [messages.length]);
 

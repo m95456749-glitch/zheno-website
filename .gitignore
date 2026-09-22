@@ -34,3 +34,7 @@ supabase/**/*.local
 .DS_Store
 Thumbs.db
 .qa/
+
+# Python automation test/import caches
+__pycache__/
+*.py[cod]

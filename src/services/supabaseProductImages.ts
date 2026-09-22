@@ -10,24 +10,24 @@
 //   - any other account → refused by the policies
 // No service key is ever used here.
 //
-// Schema: supabase/migrations/20260919000000_product_images.sql
+// Schema: supabase/migrations/20260922000000_product_images_reliable_bootstrap.sql
 //   public.product_images  — gallery rows (one primary per product)
 //   storage bucket 'product-images' — public read, admin-only write
 //
 // The storefront itself keeps reading the ONE field it has always
 // read (products.image_url): promoting an image mirrors its
 // storefront_url into that column inside the database's
-// set_primary_product_image() RPC, so the shop, the cart and the
+// manage_product_image() RPC, so the shop, the cart and the
 // checkout need no change at all.
 //
-// Deletion order is deliberate (see removeProductImage in
-// productImages.ts): the row goes first, the Storage object second.
+// Deletion is transactional in PostgreSQL; Storage cleanup follows
+// only after its path is retired and all live references are gone.
 // A failure in the second step leaves an unreachable file, never a
 // storefront pointing at a missing one.
 // ============================================================
 
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { getSupabase } from './supabaseClient';
+import { getSupabase, getSupabaseUrl } from './supabaseClient';
 import type { PreparedImage } from '../utils/imageFile';
 
 /** Storage bucket created by the migration (uploaded photos). */
@@ -70,11 +70,12 @@ export interface ProductImage {
 export class ProductImageError extends Error {
   readonly detail: string;
 
-  constructor(message: string, detail = '') {
-    super(detail ? `${message}: ${detail}` : message);
+  constructor(message: string, _detail = '') {
+    // Backend text is classified transiently, never retained in Error/log/JSON.
+    super(message);
     this.name = 'ProductImageError';
-    this.detail = detail;
-    // The sentence the panel shows; `message` keeps the detail for logs.
+    this.detail = '';
+    // Both message and userMessage are safe; no raw cause or response is retained.
     this.userMessage = message;
   }
 
@@ -97,23 +98,22 @@ function rawText(error: SupabaseLikeError): string {
 
 /**
  * Translate a Supabase/Storage/network failure into one honest Persian
- * sentence. Unknown failures keep their technical detail so the admin
- * (or a developer reading the panel) can act on it.
+ * sentence. Unknown failures use a generic message; backend details never leave this classifier.
  */
 export function describeImageError(context: string, error: unknown): ProductImageError {
   const text =
     error && typeof error === 'object' ? rawText(error as SupabaseLikeError) : String(error ?? '');
   const lower = text.toLowerCase();
 
-  if (/relation .* does not exist|could not find the table|\b42p01\b/.test(lower)) {
+  if (/relation .* does not exist|could not find the table|could not find the function|\b42p01\b|pgrst202/.test(lower)) {
     return new ProductImageError(
-      'جدول تصاویر در دیتابیس ساخته نشده است؛ مهاجرت ۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql را اعمال کنید.',
+      'سرویس ایمن تصاویر آماده نیست؛ نصب نسخهٔ ۳ را طبق راهنمای بازبینی‌شدهٔ migration بررسی کنید.',
       text,
     );
   }
   if (/bucket not found|does not have a bucket/i.test(lower)) {
     return new ProductImageError(
-      'فضای ذخیره‌سازی «product-images» در Supabase ساخته نشده است؛ مهاجرت ۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql را در Supabase اعمال کنید (اجرا مجدد آن بدون خطا و بدون تغییر در داده‌هاست).',
+      'فضای ذخیره‌سازی «product-images» در Supabase ساخته نشده است؛ نصب نسخهٔ ۳ را طبق راهنمای بازبینی‌شدهٔ migration بررسی کنید.',
       text,
     );
   }
@@ -141,9 +141,17 @@ export function describeImageError(context: string, error: unknown): ProductImag
   if (/foreign key|\b23503\b/.test(lower)) {
     return new ProductImageError('محصول انتخابی در دیتابیس وجود ندارد.', text);
   }
-  if (/failed to fetch|networkerror|fetch failed|timeout|econn|\b50[0-9]\b/.test(lower)) {
+  if (/failed to fetch|networkerror|fetch failed|timeout|timed out|abort|econn|\b50[0-9]\b/.test(lower)) {
     return new ProductImageError('اتصال به Supabase برقرار نشد؛ اینترنت و وضعیت پروژه را بررسی کنید.', text);
   }
+  if (/image_conflict|image_retired|image_product_mismatch|image_operation_conflict|\b40p01\b/.test(lower)) {
+    return new ProductImageError('تصاویر این محصول تغییر کرده‌اند؛ گالری را به‌روز کنید و دوباره انتخاب کنید.', text);
+  }
+  if (/last_product_image/.test(lower)) return new ProductImageError('این آخرین تصویر محصول است؛ حذف آن نیاز به تأیید جداگانه دارد.', text);
+  if (/invalid_image_file|invalid_image_url|image_object_missing|replacement_requires_primary|invalid_image_operation|image_api_upgrade_required/.test(lower)) {
+    return new ProductImageError('فایل یا درخواست تصویر معتبر نیست؛ تصویر را دوباره انتخاب کنید.', text);
+  }
+  if (/product_not_found/.test(lower)) return new ProductImageError('محصول انتخابی در دیتابیس پیدا نشد.', text);
   if (/image_not_found/.test(lower)) {
     return new ProductImageError('این تصویر در دیتابیس پیدا نشد (ممکن است قبلاً حذف شده باشد).', text);
   }
@@ -203,147 +211,156 @@ function client(): SupabaseClient {
   return supabase;
 }
 
-/* ── read ──────────────────────────────────────────────────── */
+/** A timeout means unknown outcome, not permission to destroy uploaded bytes. */
+async function bounded<T>(request: PromiseLike<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([Promise.resolve(request), new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new ProductImageError('پاسخ سرور دیر رسید؛ نتیجه ممکن است ثبت شده باشد. به‌روزرسانی کنید یا همان پیش‌نمایش را دوباره ارسال کنید.')), 30_000);
+    })]);
+  } catch (error) {
+    throw error instanceof ProductImageError ? error : describeImageError('ارتباط با سرویس تصاویر', error);
+  } finally { if (timer) clearTimeout(timer); }
+}
 
-/** Every gallery row the current session may see (admin: all of them). */
+/* ── transactional gateway (image safety v3) ────────────────── */
 export async function fetchRemoteProductImages(): Promise<ProductImage[]> {
   const supabase = client();
-  const { data, error } = await supabase
-    .from('product_images')
-    .select(SELECT_COLUMNS)
-    .order('product_id')
-    .order('is_primary', { ascending: false })
-    .order('sort_order')
-    .order('created_at');
-  if (error) throw describeImageError('خواندن تصاویر محصولات', error);
-
-  const rows = (data ?? []) as unknown as ProductImageRow[];
-  return rows.map(toImage).filter((image): image is ProductImage => image !== null);
+  const version = await bounded(supabase.rpc('product_image_api_version'));
+  if (version.error) throw describeImageError('بررسی سرویس تصاویر', version.error);
+  if (version.data !== 3) throw new ProductImageError('سرویس تصاویر نیاز به به‌روزرسانی دارد؛ SQL ایمنی تصاویر را اجرا کنید.');
+  const images: ProductImage[] = [];
+  for (let offset = 0; ; offset += 500) {
+    const { data, error } = await bounded(supabase.from('product_images').select(SELECT_COLUMNS)
+      .order('product_id').order('id').range(offset, offset + 499));
+    if (error) throw describeImageError('خواندن تصاویر محصولات', error);
+    const rows = (data ?? []) as ProductImageRow[];
+    images.push(...rows.map(toImage).filter((image): image is ProductImage => image !== null));
+    if (rows.length < 500) return images;
+  }
 }
 
-/* ── storage ───────────────────────────────────────────────── */
+export async function uploadImageObject(path: string, prepared: PreparedImage, alreadyUploaded = false, retry = false): Promise<{ publicUrl: string }> {
+  const supabase = client();
+  if (alreadyUploaded) return { publicUrl: supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
+  const { error } = await bounded(supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, prepared.blob, {
+    contentType: prepared.mime, cacheControl: '31536000', upsert: false,
+  }));
+  // Only the SAME preview/UUID operation may resume an upload whose response was lost.
+  if (error && !(retry && /already exists|duplicate|409/i.test(rawText(error)))) throw describeImageError('بارگذاری تصویر', error);
+  return { publicUrl: supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
+}
 
-/**
- * Upload one prepared photo. `upsert: false` on purpose: a path is
- * unique per upload (timestamp in the name), so silently overwriting
- * an existing object — and every cache pointing at it — is refused.
+interface ImageOperation {
+  id: string;
+  expectedUrl: string | null;
+}
+
+/** Save before sending. Only IDs/intent are stored, never credentials or errors.
+ * Frozen CAS survives a lost response followed by a refreshed product URL.
+ * Session scope isolates tabs; project/user scope isolates accounts. The server
+ * compares actor + full intent and keeps durable receipts independently.
  */
-export async function uploadImageObject(
-  path: string,
-  prepared: PreparedImage,
-): Promise<{ publicUrl: string; path: string }> {
-  const supabase = client();
-  const { error } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, prepared.blob, {
-    contentType: prepared.mime,
-    cacheControl: '31536000',
-    upsert: false,
-  });
-  if (error) throw describeImageError('بارگذاری تصویر در فضای ذخیره‌سازی', error);
-
-  const { data } = supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path);
-  return { publicUrl: data.publicUrl, path };
+async function imageOperation(action: string, productId: string, imageId: string,
+  expectedUrl: string | null, payload: Record<string, unknown>): Promise<{ key: string; operation: ImageOperation }> {
+  const { data, error } = await bounded(client().auth.getSession());
+  if (error) throw describeImageError('بررسی نشست', error);
+  const key = 'zhino_image_operation_v3:' + JSON.stringify([
+    getSupabaseUrl(), data.session?.user.id ?? 'no-session', action, productId, imageId, payload,
+  ]);
+  try {
+    const raw = window.sessionStorage.getItem(key);
+    const saved = raw ? JSON.parse(raw) as ImageOperation : null;
+    if (saved && /^[0-9a-f-]{36}$/.test(saved.id)
+      && (saved.expectedUrl === null || typeof saved.expectedUrl === 'string')) return { key, operation: saved };
+    const operation = { id: crypto.randomUUID(), expectedUrl };
+    window.sessionStorage.setItem(key, JSON.stringify(operation));
+    return { key, operation };
+  } catch {
+    // Refuse BEFORE sending when durable retry intent cannot be saved.
+    throw new ProductImageError('ثبت ایمن درخواست در مرورگر ممکن نشد؛ اجازهٔ ذخیره‌سازی نشست را بررسی کنید.');
+  }
 }
 
-/** Remove one object from the bucket (admin-only under the storage policy). */
-export async function removeImageObject(path: string): Promise<void> {
-  const supabase = client();
-  const { error } = await supabase.storage.from(PRODUCT_IMAGE_BUCKET).remove([path]);
-  if (error) throw describeImageError('حذف فایل از فضای ذخیره‌سازی', error);
+export async function mutateImage(
+  action: 'register' | 'primary' | 'delete' | 'alt', productId: string,
+  imageId: string, expectedUrl: string | null, payload: Record<string, unknown> = {},
+): Promise<ProductImage | null> {
+  const { key, operation } = await imageOperation(action, productId, imageId, expectedUrl, payload);
+  const { data, error } = await bounded(client().rpc('manage_product_image', {
+    p_action: action, p_product_id: productId, p_image_id: imageId,
+    p_expected_url: operation.expectedUrl, p_payload: { ...payload, operation_id: operation.id },
+  }));
+  if (error) {
+    // These SQL errors prove rollback. A genuinely fresh retry after refresh
+    // may use a new CAS; ambiguous transport/proxy errors retain the old intent.
+    if (/^(P0001|42501|22...|23...|40...)$/.test(error.code ?? '')) {
+      try { window.sessionStorage.removeItem(key); } catch { /* fail closed */ }
+    }
+    throw describeImageError('ذخیرهٔ تغییرات تصویر', error);
+  }
+  if (action === 'delete') {
+    if (data?.deleted !== true || data.id !== imageId) throw new ProductImageError('حذف تصویر تأیید نشد؛ گالری را به‌روز کنید.');
+    return null;
+  }
+  const image = toImage(data as ProductImageRow);
+  if (!image || image.productId !== productId || image.id !== imageId) {
+    throw new ProductImageError('پاسخ ثبت تصویر تأیید نشد؛ پیش از تلاش دوباره گالری را به‌روز کنید.');
+  }
+  // DELETE receipts remain replayable for this immutable image ID. Other
+  // successful actions must allow a later, genuinely new choice of primary/alt.
+  try { window.sessionStorage.removeItem(key); } catch { /* receipt stays safe */ }
+  return image;
 }
 
-/* ── rows ──────────────────────────────────────────────────── */
-
-export interface NewProductImage {
-  productId: string;
-  bucket: string;
-  storagePath: string;
-  storefrontUrl: string;
-  altText: string;
-  width: number | null;
-  height: number | null;
-  mimeType: string;
-  sizeBytes: number;
-  source: 'legacy' | 'upload';
+/** Read-back resolves a response lost AFTER the registration committed. */
+export async function findRegisteredImage(id: string, productId: string): Promise<ProductImage | null> {
+  const { data, error } = await bounded(client().from('product_images').select(SELECT_COLUMNS)
+    .eq('id', id).eq('product_id', productId).maybeSingle());
+  if (error) throw describeImageError('بررسی نتیجهٔ ثبت تصویر', error);
+  if (!data) return null;
+  const image = toImage(data as ProductImageRow);
+  if (!image || image.id !== id || image.productId !== productId) throw new ProductImageError('نتیجهٔ ثبت تصویر تأیید نشد.');
+  return image;
 }
 
-/**
- * Insert one gallery row.
- *
- * Always inserted as NON-primary: the database keeps a partial unique
- * index that allows exactly one primary per product, and promotion goes
- * through setPrimaryImage() so the storefront URL is mirrored in the
- * same transaction.
- */
-export async function insertImageRow(image: NewProductImage): Promise<ProductImage> {
-  const supabase = client();
-  const { data, error } = await supabase
-    .from('product_images')
-    .insert({
-      product_id: image.productId,
-      storage_bucket: image.bucket,
-      storage_path: image.storagePath,
-      storefront_url: image.storefrontUrl,
-      alt_text: image.altText,
-      is_primary: false,
-      width: image.width,
-      height: image.height,
-      mime_type: image.mimeType,
-      size_bytes: image.sizeBytes,
-      source: image.source,
-    })
-    .select(SELECT_COLUMNS)
-    .single();
-  if (error) throw describeImageError('ثبت تصویر در دیتابیس', error);
-
-  const mapped = toImage(data as unknown as ProductImageRow);
-  if (!mapped) throw new ProductImageError('ثبت تصویر در دیتابیس', 'پاسخ دیتابیس خوانده نشد');
-  return mapped;
+/** Never delete on a network error alone. The DB retires only unreferenced paths. */
+export async function retireUpload(path: string): Promise<boolean> {
+  const { data, error } = await bounded(client().rpc('retire_product_image_upload', { p_path: path }));
+  if (error) throw describeImageError('بررسی فایل باقی‌مانده', error);
+  return data === true;
 }
 
-/** Edit the descriptive fields of a row (alt text / order). */
-export async function updateImageRow(
-  id: string,
-  patch: { altText?: string; sortOrder?: number },
-): Promise<void> {
-  const supabase = client();
-  const payload: Record<string, unknown> = {};
-  if (typeof patch.altText === 'string') payload.alt_text = patch.altText;
-  if (typeof patch.sortOrder === 'number') payload.sort_order = patch.sortOrder;
-  if (Object.keys(payload).length === 0) return;
-
-  const { error } = await supabase.from('product_images').update(payload).eq('id', id);
-  if (error) throw describeImageError('ویرایش اطلاعات تصویر', error);
+/** A 404 only confirms absence when it is an object error, not auth/bucket failure. */
+function objectNotFound(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  const e = error as SupabaseLikeError & { status?: number };
+  return (String(e.statusCode ?? e.status) === '404') && !/bucket|jwt|token|permission|unauthor/i.test(rawText(e));
 }
 
-/** Delete one gallery row (the Storage object is removed separately). */
-export async function deleteImageRow(id: string): Promise<void> {
+export async function cleanupImageFiles(): Promise<number> {
   const supabase = client();
-  const { error } = await supabase.from('product_images').delete().eq('id', id);
-  if (error) throw describeImageError('حذف تصویر از دیتابیس', error);
-}
-
-/**
- * Promote one image to «تصویر اصلی» — atomically, in the database:
- * clears the previous primary, raises this row and mirrors its
- * storefront_url into products.image_url (the field the storefront
- * reads). Admin-only, enforced inside the function.
- */
-export async function setPrimaryImage(id: string): Promise<void> {
-  const supabase = client();
-  const { error } = await supabase.rpc('set_primary_product_image', { p_image_id: id });
-  if (error) throw describeImageError('انتخاب تصویر اصلی', error);
-}
-
-/**
- * Point products.image_url at another value (or clear it). Used when an
- * image is removed and no gallery row is left to promote: the storefront
- * then falls back to the flavour artwork it already renders today.
- */
-export async function pushProductImageUrl(productId: string, storefrontUrl: string | null): Promise<void> {
-  const supabase = client();
-  const { error } = await supabase
-    .from('products')
-    .update({ image_url: storefrontUrl })
-    .eq('id', productId);
-  if (error) throw describeImageError('به‌روزرسانی تصویر محصول در فروشگاه', error);
+  const { data, error } = await bounded(supabase.rpc('claim_product_image_cleanup', { p_limit: 20 }));
+  if (error) throw describeImageError('خواندن صف پاک‌سازی', error);
+  const jobs = (data ?? []) as { storage_path: string; claim_id: string }[];
+  const outcomes = await Promise.all(jobs.map(async row => {
+    let confirmed = false;
+    try {
+      // Storage RLS independently guards retirement and absence of references.
+      const removed = await bounded(supabase.storage.from(PRODUCT_IMAGE_BUCKET).remove([row.storage_path]));
+      confirmed = !removed.error || objectNotFound(removed.error);
+    } catch { /* Unknown HTTP outcome: schedule retry, never assume success. */ }
+    try {
+      // Called EVEN on remove error: releases the lease with durable backoff.
+      // The RPC also checks metadata absence and live references before completion.
+      const completed = await bounded(supabase.rpc('complete_product_image_cleanup', {
+        p_path: row.storage_path, p_claim_id: row.claim_id, p_storage_confirmed: confirmed,
+      }));
+      return !completed.error && completed.data === true;
+    } catch { return false; } // Lease expiration recovers a lost completion request.
+  }));
+  const pending = await bounded(supabase.from('product_image_cleanup').select('storage_path')
+    .is('completed_at', null).limit(1));
+  if (pending.error) throw describeImageError('بررسی صف پاک‌سازی', pending.error);
+  return outcomes.filter(done => !done).length + (pending.data?.length ? 1 : 0);
 }

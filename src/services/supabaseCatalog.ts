@@ -92,13 +92,16 @@ export async function fetchRemoteCatalog(): Promise<RemoteCatalog> {
   const supabase = getSupabase();
   if (!supabase) throw new CatalogRemoteError('Supabase is not configured', 'no client');
 
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
   const [productsRes, variantsRes, inventoryRes] = await Promise.all([
     supabase
       .from('products')
       .select('id,category,flavor_id,name,short_name,category_label,image_url,active,featured,special')
-      .order('id'),
-    supabase.from('product_variants').select('id,product_id,weight,weight_grams,price,sku').order('id'),
-    supabase.from('inventory').select('variant_id,current_stock,active'),
+      .order('id').abortSignal(controller.signal),
+    supabase.from('product_variants').select('id,product_id,weight,weight_grams,price,sku').order('id').abortSignal(controller.signal),
+    supabase.from('inventory').select('variant_id,current_stock,active').abortSignal(controller.signal),
   ]);
 
   if (productsRes.error) throw new CatalogRemoteError('خواندن محصولات ناموفق بود', describe(productsRes.error));
@@ -140,7 +143,7 @@ export async function fetchRemoteCatalog(): Promise<RemoteCatalog> {
     const variants = variantsByProduct.get(row.id);
     // A product without a variant cannot be sold; the storefront's
     // cart guards already handle an unknown variant.
-    if (!variants || variants.length === 0) continue;
+    // Keep unsellable products visible to the image manager too.
     products.push({
       id: row.id,
       category: row.category,
@@ -149,7 +152,7 @@ export async function fetchRemoteCatalog(): Promise<RemoteCatalog> {
       shortName: row.short_name,
       categoryLabel: row.category_label,
       imageUrl: row.image_url ?? undefined,
-      variants: variants.sort((a, b) => a.weightGrams - b.weightGrams),
+      variants: (variants ?? []).sort((a, b) => a.weightGrams - b.weightGrams),
       featured: row.featured,
       special: row.special,
     });
@@ -157,6 +160,7 @@ export async function fetchRemoteCatalog(): Promise<RemoteCatalog> {
   }
 
   return { products, active, loadedAt: new Date().toISOString() };
+  } finally { clearTimeout(timeout); }
 }
 
 /* ── write (admin only — RLS enforces it) ──────────────────── */

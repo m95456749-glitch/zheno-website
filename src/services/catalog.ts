@@ -175,7 +175,7 @@ export function getEffectiveCatalog(): Product[] {
  */
 export function getVisibleProducts(): Product[] {
   const remote = getRemoteCatalog();
-  if (remote) return remote.products.filter((p) => remote.active[p.id] !== false);
+  if (remote) return remote.products.filter((p) => remote.active[p.id] !== false && p.variants.length > 0);
   const overlay = store.get();
   return mergedList(overlay).filter((p) => overlay.meta[p.id]?.active !== false);
 }
@@ -197,7 +197,7 @@ export function getVisibleProducts(): Product[] {
  */
 export function getProductById(id: string): Product | undefined {
   const remote = getRemoteCatalog();
-  if (remote) return remote.products.find((p) => p.id === id);
+  if (remote) return remote.products.find((p) => p.id === id && p.variants.length > 0);
 
   const overlay = store.get();
   if (overlay.removed.includes(id)) return undefined;
@@ -377,4 +377,11 @@ export function useCatalog(): Product[] {
   const overlay = useLocalStore(store);
   const remote = useRemoteCatalog();
   return remote ? remote.products : mergedList(overlay);
+}
+
+/** Image demo writes must never report success on a failed localStorage save. */
+export function setLocalProductImage(product: Product, imageUrl: string | undefined): void {
+  if (isDatabaseConnected()) throw new Error('ذخیرهٔ محلی در حالت متصل مجاز نیست.');
+  const overlay = store.get();
+  store.setStrict({ ...overlay, upserts: { ...overlay.upserts, [product.id]: { ...product, imageUrl } } });
 }

@@ -33,6 +33,26 @@ function spa404Fallback(): Plugin {
   };
 }
 
+/** Fail BEFORE Vite can substitute a privileged credential into browser code. */
+function browserCredentialGuard(): Plugin {
+  return {
+    name: "browser-credential-guard",
+    configResolved(config) {
+      for (const [name, value] of Object.entries(config.env)) {
+        if (!name.startsWith("VITE_") || typeof value !== "string") continue;
+        let privileged = value.trim().startsWith("sb_secret_");
+        if (value.trim().startsWith("eyJ")) {
+          try {
+            const payload = JSON.parse(Buffer.from(value.trim().split(".")[1] ?? "", "base64url").toString());
+            privileged ||= payload.role === "service_role";
+          } catch { /* not a JWT */ }
+        }
+        if (privileged) throw new Error("Privileged credential refused: browser environment must contain public keys only. No value was logged.");
+      }
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   // Root deployment: the custom domain https://zheno.devs.surf/ serves
@@ -53,6 +73,7 @@ export default defineConfig({
     target: "es2019",
   },
   plugins: [
+    browserCredentialGuard(),
     react(),
     tailwindcss(),
     // Pin the base back to "/" after vite-plugin-singlefile's
