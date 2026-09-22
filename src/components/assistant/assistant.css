@@ -2483,16 +2483,18 @@
 }
 
 /* ============================================================
-   فاز ۱۱ — ربات تمام‌قد خوش‌آمدگویی: هم‌آمیزی کامل با محیط چت +
-   دو حرکت بسیار ظریف. فایل تصویر دست‌نخورده است؛ همه‌چیز CSS است.
-   اگر سیستم کاربر «کاهش حرکت» داشته باشد هر دو حرکت خاموش می‌شوند
-   (بلوک reduced-motion انتهای همین بخش).
+   فاز ۱۴ — انیمیشن طبیعی و Premium ربات تمام‌قد (بارگیری.jpeg)
+   هدف: زنده‌تر و طبیعی‌تر، اما همچنان ظریف و لوکس — بدون حرکت درشت.
+   ساختار لایه‌ای (همه transform/opacity، بدون jank):
+     • body    → تنفس نرم (translateY + scaleY) — دامنه بسیار کم
+     • shoulder→ micro-movement شانه و دست — چرخش و جابجایی جزئی
+     • head    → sway ظریف سر (rotate + translate) — چپ/راست ملایم
+     • eyes    → پلک نامنظم + تغییر جزئی نگاه (gaze offset)
+   هر لایه timing متفاوت دارد تا حس رباتیک همزمان از بین برود.
+   فایل تصویر دست‌نخورده — همه‌چیز CSS + JS سبک.
    ============================================================ */
 
-/* قاب = فقط اندازه و نسبت. بدون خط دور، بدون سایه، بدون گوشهٔ گرد:
-   پس‌زمینه دقیقاً همان رنگِ صفحهٔ چت است و در عمل نامرئی می‌ماند.
-   پنجرهٔ نمایش، کل تصویر اصلی (1024×1536) است تا برای محوشدنِ لبه‌ها
-   حاشیهٔ کافی وجود داشته باشد و ربات تمام‌قد دست‌نخورده بماند. */
+/* قاب = فقط اندازه و نسبت. بدون خط دور، بدون سایه، بدون گوشهٔ گرد */
 .zhino-welcome-photo-wrap {
   position: relative;
   z-index: 2;
@@ -2502,16 +2504,14 @@
   overflow: hidden;
   background: var(--color-cream-page, #faf7f2);
   user-select: none;
+  contain: layout paint;
 }
 
-/* محوِ لبه‌های عکس در پس‌زمینهٔ صفحه — چهار گرادیانِ هم‌رنگِ صفحه روی
-   لبه‌ها. در مرورگرهای دارای mask-support عملاً بی‌اثر است (ماسک بیضیِ
-   img لبه‌ها را پیش‌تر شفاف کرده) و فقط پشتیبانِ مرورگرهای بدون ماسک. */
 .zhino-welcome-photo-wrap::after {
   content: '';
   position: absolute;
   inset: -1px;
-  z-index: 3;
+  z-index: 4;
   pointer-events: none;
   background:
     linear-gradient(to right, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%),
@@ -2520,12 +2520,31 @@
     linear-gradient(to top, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%);
 }
 
-/* لایهٔ حرکت — فقط transform؛ بدون jank و بدون دخالت در چت/API */
+/* لایهٔ تنفس بدن — بسیار کم دامنه، مرکز ثقل پایین */
+.zhino-welcome-photo-body {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 78%;
+  will-change: transform;
+  transition: transform 3.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* لایهٔ micro شانه و دست — فقط حرکت جزئی، بدون بالا رفتن دست */
+.zhino-welcome-photo-shoulder {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 62%;
+  will-change: transform;
+  transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* لایهٔ سر — sway ظریف چپ/راست، بدون جدا شدن از محیط */
 .zhino-welcome-photo-stage {
   position: absolute;
   inset: 0;
-  transform-origin: 50% 72%;
-  animation: zhino-welcome-idle 9.5s ease-in-out infinite;
+  transform-origin: 50% 28%;
+  will-change: transform;
+  transition: transform 1.15s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .zhino-welcome-photo-wrap .zhino-welcome-photo {
@@ -2534,46 +2553,29 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
-  /* فاز ۱۳ — «فقط خودِ ربات»: ماسک بیضیِ نرم روی خود img (نه wrapper،
-     تا لایهٔ پلک تحت‌تأثیر نماند). مرکز و شعاع‌ها از bbox واقعی ربات در
-     تصویر (x ۱۳–۸۵٪ و y ۱۰–۸۸٪): ناحیهٔ مات تا شعاع ~۴۲٪ و محوشدن کامل
-     تا ۵۵٪ — تمام‌قد ربات کامل مات می‌ماند و زمینهٔ بژ عکس بدون هیچ
-     مرزی در صفحه حل می‌شود. */
   -webkit-mask-image: radial-gradient(55% 55% at 49.2% 48.8%, #000 0%, #000 76%, transparent 100%);
   mask-image: radial-gradient(55% 55% at 49.2% 48.8%, #000 0%, #000 76%, transparent 100%);
+  will-change: transform;
 }
 
-/* sway بسیار آرام: چرخش حداکثر ±۰٫۴ درجه و جابه‌جایی عمودی ~۱ پیکسل —
-   در حدِ «نفس کشیدن»؛ هیچ تکان یا جلب‌توجهی ندارد */
-@keyframes zhino-welcome-idle {
-  0%,
-  100% {
-    transform: rotate(0deg) translateY(0%);
-  }
-  24% {
-    transform: rotate(0.4deg) translateY(-0.55%);
-  }
-  52% {
-    transform: rotate(0.05deg) translateY(0.2%);
-  }
-  78% {
-    transform: rotate(-0.4deg) translateY(-0.35%);
-  }
-}
-
-/* پلک طبیعی — بدون تغییر فایل تصویر: دو لکهٔ هم‌رنگِ وایزر (رنگ از
-   نمونه‌برداری خود عکس: ‎#0D0C0A) دقیقاً روی چشم‌های واقعی تصویر
-   می‌نشینند و هر ~۶٫۴ ثانیه یک‌بار مثل چراغِ چشم خاموش/روشن می‌شوند.
-   بسته‌شدن ~۴۵ms، مکث ~۴۵ms، بازشدن ~۷۰ms — در حد یک پلکِ واقعی.
-   لکه‌ها معمولاً نامرئی‌اند (opacity: 0) و فقط transform/opacity
-   انیمیت می‌شود؛ هیچ تداخلی با تعامل‌های صفحه ندارد. */
+/* پلک طبیعی — دو لکهٔ هم‌رنگ وایزر روی چشم‌های واقعی عکس
+   معمولاً نامرئی (opacity 0) — فقط هنگام blink با کلاس is-blinking نمایان
+   gaze offset از طریق transform والد اعمال می‌شود تا جهت نگاه تغییر جزئی کند */
 .zhino-welcome-eyes {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
   opacity: 0;
-  animation: zhino-bot-blink 6.4s linear infinite;
+  will-change: opacity, transform;
+  transition:
+    opacity 0.09s ease,
+    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.zhino-welcome-eyes.is-blinking {
+  opacity: 1;
+  transition: opacity 0.06s ease;
 }
 
 .zhino-welcome-eye {
@@ -2585,8 +2587,6 @@
   background: radial-gradient(circle closest-side, #0d0c0a 0%, #0d0c0a 72%, rgba(13, 12, 10, 0) 100%);
 }
 
-/* مرکز چشم‌ها در تصویر اصلی: چپ (۴۵۸، ۴۲۱) و راست (۶۷۴، ۴۱۷) —
-   اندازه‌گیری‌شده از خود فایل تا لکه‌ها همیشه روی چشم بنشینند */
 .zhino-welcome-eye.is-left {
   left: 44.73%;
   top: 27.41%;
@@ -2595,21 +2595,6 @@
 .zhino-welcome-eye.is-right {
   left: 65.82%;
   top: 27.15%;
-}
-
-@keyframes zhino-bot-blink {
-  0%,
-  91.6% {
-    opacity: 0;
-  }
-  92.3%,
-  93% {
-    opacity: 1;
-  }
-  94.1%,
-  100% {
-    opacity: 0;
-  }
 }
 
 /* پیام‌ها: دو سطح سادهٔ تخت */
@@ -2811,20 +2796,21 @@
 }
 
 /* کاهش حرکت سیستم: sway، تنفس و پلک‌ها کاملاً خاموش — پلک‌ها هرگز
-   ظاهر نمی‌شوند. (عمداً بیرون از بلوک مشترک reduced-motion بالاتر در
-   فایل و در انتهای آن: آن بلوک transform/opacity را بی‌قیدوشرط
-   بازنویسی می‌کند و برای جای‌گذاریِ پایهٔ همین عناصر خطرناک است؛
-   قرارگیری در انتهای فایل تضمین می‌کند بر قوانین انیمیشن برسد.) */
+   ظاهر نمی‌شوند. فاز ۱۴: لایه‌های body/shoulder/head هم transition ندارند */
 @media (prefers-reduced-motion: reduce) {
+  .zhino-welcome-photo-body,
+  .zhino-welcome-photo-shoulder,
   .zhino-welcome-photo-stage,
   .zhino-welcome-eyes,
   .zhino-assistant-medallion,
   .zhino-avatar-eyes {
-    animation: none;
+    animation: none !important;
+    transition: none !important;
+    transform: none !important;
   }
 
   .zhino-welcome-eyes,
   .zhino-avatar-eyes {
-    opacity: 0;
+    opacity: 0 !important;
   }
 }
