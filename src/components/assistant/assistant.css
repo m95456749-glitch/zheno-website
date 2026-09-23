@@ -2409,11 +2409,17 @@
 }
 
 /* تصویر خوش‌آمدگویی صفحهٔ دستیار — همان فایل با نسبت ۲:۳.
-   اندازه، جای‌گذاری و هم‌آمیزی با صفحه در بخش «فاز ۱۱» تعیین می‌شود. */
+   تک‌لایه و ایستا؛ قاب را کاملاً می‌پوشاند (contain، بدون کراپ).
+   تنها انیمیشن ربات، پلک‌زدن (opacity) روی همین تصویر است. */
 .zhino-welcome-photo {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   display: block;
   object-fit: contain;
   user-select: none;
+  pointer-events: none;
 }
 
 /* حباب سلامِ ثابت — فقط ورود، بدون حرکت شناور */
@@ -2483,14 +2489,9 @@
 }
 
 /* ============================================================
-   فاز ۱۴ — انیمیشن طبیعی و Premium ربات تمام‌قد (بارگیری.jpeg)
-   هدف: زنده‌تر و طبیعی‌تر، اما همچنان ظریف و لوکس — بدون حرکت درشت.
-   ساختار لایه‌ای (همه transform/opacity، بدون jank):
-     • body    → تنفس نرم (translateY + scaleY) — دامنه بسیار کم
-     • shoulder→ micro-movement شانه و دست — چرخش و جابجایی جزئی
-     • head    → sway ظریف سر (rotate + translate) — چپ/راست ملایم
-     • eyes    → پلک نامنظم + تغییر جزئی نگاه (gaze offset)
-   هر لایه timing متفاوت دارد تا حس رباتیک همزمان از بین برود.
+   ربات تمام‌قد خوش‌آمدگویی (بارگیری.jpeg) — فقط پلک‌زدن
+   هیچ حرکت دست/بازو، wave، gesture یا حرکت سر/بدن/شانه وجود ندارد.
+   تک‌لایه و ایستا؛ تنها انیمیشن، پلک نامنظم (opacity) است.
    فایل تصویر دست‌نخورده — همه‌چیز CSS + JS سبک.
    ============================================================ */
 
@@ -2502,75 +2503,30 @@
   width: auto;
   aspect-ratio: 1024 / 1536;
   overflow: hidden;
-  background: var(--color-cream-page, #faf7f2);
+  /* رنگ آرام‌شدهٔ خود عکس — فقط تا پایان بارگذاری، تا فضای خالی سفید
+     وسط صحنه پیدا نشود (هیچ تغییری روی فایل اصلی نیست) */
+  background: #ece0cf;
   user-select: none;
   contain: layout paint;
 }
 
-.zhino-welcome-photo-wrap::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  z-index: 4;
-  pointer-events: none;
-  background:
-    linear-gradient(to right, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%),
-    linear-gradient(to left, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%),
-    linear-gradient(to bottom, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 8%),
-    linear-gradient(to top, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%);
-}
-
-/* لایهٔ تنفس بدن — بسیار کم دامنه، مرکز ثقل پایین */
-.zhino-welcome-photo-body {
+/* لایهٔ کمکی هم‌قاب (فقط fade ایستای لبه‌ها) */
+.zw-layer {
   position: absolute;
   inset: 0;
-  transform-origin: 50% 78%;
-  will-change: transform;
-  transition: transform 3.8s cubic-bezier(0.4, 0, 0.2, 1);
-}
-
-/* لایهٔ micro شانه و دست — فقط حرکت جزئی، بدون بالا رفتن دست */
-.zhino-welcome-photo-shoulder {
-  position: absolute;
-  inset: 0;
-  transform-origin: 50% 62%;
-  will-change: transform;
-  transition: transform 1.6s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-/* لایهٔ سر — sway ظریف چپ/راست، بدون جدا شدن از محیط */
-.zhino-welcome-photo-stage {
-  position: absolute;
-  inset: 0;
-  transform-origin: 50% 28%;
-  will-change: transform;
-  transition: transform 1.15s cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.zhino-welcome-photo-wrap .zhino-welcome-photo {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  -webkit-mask-image: radial-gradient(55% 55% at 49.2% 48.8%, #000 0%, #000 76%, transparent 100%);
-  mask-image: radial-gradient(55% 55% at 49.2% 48.8%, #000 0%, #000 76%, transparent 100%);
-  will-change: transform;
 }
 
 /* پلک طبیعی — دو لکهٔ هم‌رنگ وایزر روی چشم‌های واقعی عکس
-   معمولاً نامرئی (opacity 0) — فقط هنگام blink با کلاس is-blinking نمایان
-   gaze offset از طریق transform والد اعمال می‌شود تا جهت نگاه تغییر جزئی کند */
+   معمولاً نامرئی (opacity 0) — فقط هنگام blink با کلاس is-blinking نمایان.
+   تنها انیمیشن ربات؛ بدون هیچ transform. */
 .zhino-welcome-eyes {
   position: absolute;
   inset: 0;
   z-index: 2;
   pointer-events: none;
   opacity: 0;
-  will-change: opacity, transform;
-  transition:
-    opacity 0.09s ease,
-    transform 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity;
+  transition: opacity 0.09s ease;
 }
 
 .zhino-welcome-eyes.is-blinking {
@@ -2795,12 +2751,8 @@
   top: 37.9%;
 }
 
-/* کاهش حرکت سیستم: sway، تنفس و پلک‌ها کاملاً خاموش — پلک‌ها هرگز
-   ظاهر نمی‌شوند. فاز ۱۴: لایه‌های body/shoulder/head هم transition ندارند */
+/* کاهش حرکت سیستم: پلک‌ها کاملاً خاموش — هرگز ظاهر نمی‌شوند */
 @media (prefers-reduced-motion: reduce) {
-  .zhino-welcome-photo-body,
-  .zhino-welcome-photo-shoulder,
-  .zhino-welcome-photo-stage,
   .zhino-welcome-eyes,
   .zhino-assistant-medallion,
   .zhino-avatar-eyes {
@@ -2812,5 +2764,739 @@
   .zhino-welcome-eyes,
   .zhino-avatar-eyes {
     opacity: 0 !important;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   REFRESH — «سادگی لوکس» پوست کامل /assistant
+   یک سطح، یک پس‌زمینهٔ زنده، رباتِ مرکزِ صحنه و میکرو-انیمیشن ظریف.
+   این بلوک آخرِ فایل است و پس از همهٔ فازهای قبلی اعمال می‌شود.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── پس‌زمینه: حسِ «نور داریم»، نه گرادیان نمایشی ─────────────── */
+.zhino-assistant-page {
+  position: relative;
+  background-color: var(--color-cream-page, #faf7f2);
+  background-image:
+    radial-gradient(115% 70% at 50% 108%, rgba(184, 154, 98, 0.08) 0%, rgba(184, 154, 98, 0) 58%),
+    radial-gradient(115% 70% at 50% -8%, rgba(113, 49, 59, 0.05) 0%, rgba(113, 49, 59, 0) 60%),
+    linear-gradient(180deg, #fdfbf7 0%, var(--color-cream-page, #faf7f2) 100%);
+}
+
+/* خطوطِ champagne بی‌نهایت کم‌رنگ — فضا را زنده می‌کنند بی‌آنکه دیده شوند */
+.zhino-assistant-page::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(184, 154, 98, 0.05) 1px, transparent 1px) 0 0 / 33.333% 100%,
+    linear-gradient(180deg, rgba(184, 154, 98, 0.04) 1px, transparent 1px) 0 0 / 100% 50%;
+  -webkit-mask-image: radial-gradient(120% 90% at 50% 40%, #000 0%, transparent 70%);
+  mask-image: radial-gradient(120% 90% at 50% 40%, #000 0%, transparent 70%);
+  opacity: 0.55;
+}
+
+@media (height <= 560px) {
+  .zhino-assistant-page::before {
+    opacity: 0.25;
+  }
+}
+
+/* ── سربرگ: باریک، هم‌سطح، با جداکنندهٔ مویی ─────────────────── */
+.zhino-assistant-topbar {
+  position: relative;
+  z-index: 5;
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.9rem clamp(0.9rem, 4vw, 1.75rem) 0.85rem;
+  padding-top: calc(0.9rem + env(safe-area-inset-top, 0px));
+  background: transparent;
+  border-bottom: 1px solid rgba(41, 35, 33, 0.07);
+}
+
+.zhino-assistant-brand {
+  min-width: 0;
+}
+
+.zhino-assistant-brand-name {
+  display: none;
+}
+
+.zhino-assistant-brand-title {
+  margin-top: 0;
+}
+
+/* آواتار سربرگ — هم‌خانواده با هویت ربات (برش سر/بالاتنه) */
+.zhino-assistant-brand-mark {
+  position: relative;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 34%;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.06);
+}
+
+/* برشِ سر و بالاتنه — همان پنجرهٔ شناخته‌شدهٔ دکمهٔ شناور (x 147–877 / y 140–870) */
+.zhino-assistant-brand-mark .zhino-bot-photo {
+  position: absolute;
+  left: -20.14%;
+  top: -19.18%;
+  width: 140.27%;
+  height: auto;
+  max-width: none;
+  object-fit: cover;
+}
+
+/* ── دکمه‌های سربرگ: ظریف و بی‌قابِ درشت ─────────────────────── */
+.zhino-assistant-topbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  flex: none;
+}
+
+.zhino-assistant-ghost {
+  gap: 0.45rem;
+  height: 2.3rem;
+  padding-inline: 0.85rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(41, 35, 33, 0.12);
+  background: transparent;
+  color: var(--color-mocha, #6e5f57);
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 0.24s ease,
+    border-color 0.24s ease,
+    color 0.24s ease,
+    transform 0.24s ease;
+}
+
+.zhino-assistant-ghost svg {
+  flex: none;
+}
+
+.zhino-assistant-ghost.is-icon {
+  width: 2.3rem;
+  padding-inline: 0;
+  margin-inline-start: 0;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-ghost:hover {
+    background: rgba(255, 255, 255, 0.9);
+    border-color: rgba(113, 49, 59, 0.32);
+    color: var(--color-wine-800, #71313b);
+    transform: translateY(-1px);
+  }
+}
+
+.zhino-assistant-ghost:active {
+  transform: translateY(0) scale(0.96);
+}
+
+.zhino-assistant-ghost:focus-visible {
+  outline: 2px solid rgba(113, 49, 59, 0.5);
+  outline-offset: 2px;
+}
+
+/* ── محیط گفتگو: ستونِ میانی با عرضِ نه‌چندان کشیده ───────────── */
+.zhino-assistant-console {
+  animation: zhino-assistant-console-in 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.zhino-assistant-feed {
+  width: min(100%, 46rem);
+  margin-inline: auto;
+  gap: 1.15rem;
+  padding: 1.25rem clamp(0.9rem, 4vw, 1.5rem)
+    calc(clamp(0.9rem, 4vw, 1.5rem) + 3rem);
+}
+
+/* ── خوش‌آمد: ربات قهرمان، متن مکمل، ریتمِ تنفس‌دار ───────────── */
+.zhino-assistant-welcome {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: clamp(0.3rem, 2vh, 1.25rem) clamp(0.25rem, 3vw, 1rem)
+    clamp(0.25rem, 2vh, 1rem);
+}
+
+/* پیکر ربات — بزرگ‌تر از قبل، بدون هیچ قاب */
+.zhino-assistant-welcome-figure {
+  position: relative;
+  flex: none;
+  display: grid;
+  place-items: center;
+  margin-bottom: clamp(0.4rem, 1.6vh, 0.8rem);
+}
+
+/* هالهٔ محیطی دورِ ربات — روی لفافِ غیرماسک‌شده تا از خودِ ربات بیرون بزند */
+.zhino-assistant-welcome-figure::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  z-index: 0;
+  width: clamp(15rem, 60vw, 24rem);
+  aspect-ratio: 1;
+  transform: translate(-50%, -47%);
+  border-radius: 50%;
+  background: radial-gradient(
+    circle closest-side,
+    rgba(224, 208, 171, 0.18) 0%,
+    rgba(224, 208, 171, 0.06) 45%,
+    rgba(113, 49, 59, 0.02) 60%,
+    transparent 72%
+  );
+  pointer-events: none;
+}
+
+.zhino-welcome-photo-wrap {
+  height: clamp(10.5rem, 32vh, 15.5rem);
+  aspect-ratio: 1024 / 1536;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+  outline: none;
+  overflow: visible;
+  contain: layout style;
+}
+
+/* هیچ ماسکی روی تصویر نیست — ربات کامل و بدون برش دیده می‌شود */
+.zhino-welcome-photo-wrap {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+
+.zhino-welcome-photo-wrap::after {
+  content: none;
+}
+
+/* هالهٔ محیطی دور پیکر (نسخهٔ داخل لفاف) — غیرفعال؛ هاله روی figure است */
+.zhino-welcome-photo-wrap::before {
+  content: none;
+}
+
+/* هم‌آمیزی لبه‌های عکس با صفحه — لایهٔ ایستای zw-fade روی تصویر
+   می‌نشیند و لبهٔ مستطیلیِ عکس را محو می‌کند. حس «عکسِ داخل قاب»
+   تولید نمی‌کند — فقط کناره‌ها را با صفحه یکی می‌کند. */
+.zhino-welcome-photo-wrap .zw-fade {
+  position: absolute;
+  inset: -3px;
+  z-index: 4;
+  pointer-events: none;
+  will-change: auto;
+  transition: none;
+  background:
+    linear-gradient(to right, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 15%),
+    linear-gradient(to left, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 15%),
+    linear-gradient(to bottom, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 8%),
+    linear-gradient(to top, var(--color-cream-page, #faf7f2) 0%, rgba(250, 247, 242, 0) 10%);
+}
+
+/* ── متن خوش‌آمد: تایپوگرافی لوکس و خلوت ────────────────────── */
+.zhino-assistant-welcome-kicker {
+  margin: 0 0 0.85rem;
+  font-size: 0.66rem;
+  font-weight: 500;
+  /* بدون letter-spacing: در خط فارسی حروف پیوسته را از هم جدا می‌کند */
+  color: var(--color-gold-700, #6f5c34);
+  opacity: 0.85;
+}
+
+.zhino-assistant-welcome-title {
+  margin: 0;
+  font-family: var(--font-vazirmatn, inherit);
+  font-size: clamp(1.45rem, 5.4vw, 2.1rem);
+  font-weight: 650;
+  line-height: 1.65;
+  color: var(--color-wine-950, #2a0b12);
+  text-wrap: balance;
+}
+
+.zhino-assistant-welcome-subtitle {
+  margin: 0.7rem auto 0;
+  max-width: 26rem;
+  font-size: clamp(0.88rem, 2.9vw, 1rem);
+  font-weight: 400;
+  line-height: 2;
+  color: var(--color-mocha, #6e5f57);
+  text-wrap: balance;
+}
+
+.zhino-assistant-welcome-rule {
+  margin: 1.35rem auto 0;
+}
+
+/* ── کنش‌های سریع: چیپ‌های compact با آیکونِ ظریف ────────────── */
+.zhino-assistant-welcome-chips {
+  margin-top: clamp(1.4rem, 3.4vh, 2rem);
+  width: min(100%, 31rem);
+}
+
+.zhino-assistant-chip {
+  gap: 0.5rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(113, 49, 59, 0.14);
+  background: #ffffff;
+  box-shadow: 0 1px 1px rgba(42, 11, 18, 0.03);
+  padding: 0.5rem 0.95rem 0.5rem 0.85rem;
+  font-size: 0.74rem;
+  font-weight: 500;
+  line-height: 1.6;
+  color: var(--color-wine-800, #71313b);
+  transition:
+    background-color 0.22s ease,
+    border-color 0.22s ease,
+    box-shadow 0.22s ease,
+    color 0.22s ease,
+    transform 0.22s ease;
+}
+
+.zhino-assistant-chip-spark {
+  color: var(--color-gold-500, #c9ae7c);
+  opacity: 0.85;
+  display: inline-flex;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-chip:hover {
+    border-color: rgba(184, 154, 98, 0.6);
+    background: #fffdf9;
+    color: var(--color-wine-900, #5a1725);
+    transform: translateY(-1px);
+    box-shadow: 0 6px 16px -12px rgba(42, 11, 18, 0.28);
+  }
+}
+
+.zhino-assistant-chip:active {
+  transform: translateY(0) scale(0.97);
+}
+
+.zhino-assistant-chip:focus-visible {
+  outline: 2px solid rgba(113, 49, 59, 0.45);
+  outline-offset: 2px;
+}
+
+.zhino-assistant-chip:disabled {
+  opacity: 0.45;
+  cursor: default;
+  transform: none;
+}
+
+/* ورود پلکانی پیشنهادها — کوتاه و فقط یک بار */
+.zhino-assistant-welcome-chips .zhino-assistant-chip {
+  animation: zhino-chip-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.zhino-assistant-welcome-chips .zhino-assistant-chip:nth-child(1) { animation-delay: 0.04s; }
+.zhino-assistant-welcome-chips .zhino-assistant-chip:nth-child(2) { animation-delay: 0.1s; }
+.zhino-assistant-welcome-chips .zhino-assistant-chip:nth-child(3) { animation-delay: 0.16s; }
+.zhino-assistant-welcome-chips .zhino-assistant-chip:nth-child(4) { animation-delay: 0.22s; }
+
+@keyframes zhino-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(7px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── حباب‌های پیام: هویت ژینو در گفتگوی واقعی ───────────────── */
+.zhino-assistant-bubble {
+  position: relative;
+  border-radius: 1.2rem;
+  font-size: 0.875rem;
+  line-height: 2.05;
+}
+
+.zhino-assistant-bubble.is-bot {
+  background: #ffffff;
+  border: 1px solid rgba(41, 35, 33, 0.07);
+  border-start-start-radius: 0.45rem;
+  color: var(--color-espresso, #292321);
+  box-shadow: 0 1px 2px rgba(42, 11, 18, 0.04);
+}
+
+.zhino-assistant-bubble.is-user {
+  background-color: var(--color-wine-800, #71313b);
+  background-image: none;
+  border: 1px solid rgba(42, 11, 18, 0.2);
+  border-start-end-radius: 0.45rem;
+  color: var(--color-cream-50, #faf7f2);
+  box-shadow: 0 8px 18px -16px rgba(42, 11, 18, 0.6);
+}
+
+.zhino-assistant-avatar {
+  position: relative;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 30%;
+  background: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.07);
+  overflow: hidden;
+}
+
+/* آواتار پیام فقط با crop سر — همان پنجرهٔ شناخته‌شده، بدون قاب اضافه */
+.zhino-assistant-avatar .zhino-avatar-wrap {
+  position: relative;
+  display: block;
+  width: 100% !important;
+  height: 100% !important;
+  border-radius: inherit;
+}
+
+.zhino-assistant-avatar .zhino-bot-photo {
+  position: absolute;
+  left: -20.14%;
+  top: -19.18%;
+  width: 140.27%;
+  height: auto;
+  max-width: none;
+  object-fit: cover;
+}
+
+/* سرخطِ طلایی داخل حباب‌های محصول («از قفسهٔ ژینو») — هویت ژینو در
+   حالت گفتگوی واقعی هم زنده می‌ماند (نسخهٔ قدیمی فقط در یک فایل
+   استایلِ استفاده‌نشده بود و در production هیچ استایلی نداشت). */
+.zhino-assistant-bubble-kicker {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: -0.1rem 0 0.55rem;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--color-gold-700, #6f5c34);
+}
+
+.zhino-assistant-bubble-kicker svg {
+  width: 0.85rem;
+  height: 0.85rem;
+  flex: none;
+  color: var(--color-gold-500, #b89a62);
+}
+
+.zhino-assistant-bubble-kicker::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, rgba(184, 154, 98, 0.45), transparent);
+}
+
+/* دنبالهٔ حباب بوت — نرم و هم‌خانواده با ivory */
+.zhino-assistant-bubble.is-bot::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: -0.3rem;
+  bottom: 0.65rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  background: #ffffff;
+  border-inline-start: 1px solid rgba(41, 35, 33, 0.07);
+  border-bottom: 1px solid rgba(41, 35, 33, 0.07);
+  transform: skewY(26deg);
+  z-index: -1;
+}
+
+/* دنبالهٔ حباب کاربر — هم‌خوان با بدنهٔ burgundy */
+.zhino-assistant-bubble.is-user::before {
+  content: "";
+  position: absolute;
+  inset-inline-end: -0.3rem;
+  bottom: 0.65rem;
+  width: 0.65rem;
+  height: 0.65rem;
+  background: var(--color-wine-800, #71313b);
+  border-inline-end: 1px solid rgba(42, 11, 18, 0.2);
+  border-bottom: 1px solid rgba(42, 11, 18, 0.2);
+  transform: skewY(-26deg);
+  z-index: -1;
+}
+
+/* ── Composer: کاراکترِ اصلی این بخش ────────────────────────── */
+.zhino-assistant-composer {
+  position: relative;
+  flex: none;
+  z-index: 4;
+  width: min(100%, 46rem);
+  margin-inline: auto;
+  padding: 0.45rem clamp(0.9rem, 4vw, 1.5rem)
+    calc(clamp(0.7rem, 2.6vh, 1rem) + env(safe-area-inset-bottom, 0px));
+}
+
+/* محوِ نرمِ پیام‌ها به‌سمت composer — بدون هم‌پوشانی */
+.zhino-assistant-composer::before {
+  content: "";
+  position: absolute;
+  inset-inline: 0;
+  top: -3.25rem;
+  height: 3.25rem;
+  pointer-events: none;
+  background: linear-gradient(
+    180deg,
+    rgba(250, 247, 242, 0) 0%,
+    rgba(250, 247, 242, 0.88) 55%,
+    var(--color-cream-page, #faf7f2) 100%
+  );
+}
+
+.zhino-assistant-composer-form {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-block: 0.42rem;
+  padding-inline: 0.9rem 0.5rem;
+  border-radius: 1.4rem;
+  border: 1px solid rgba(41, 35, 33, 0.12);
+  background: #ffffff;
+  box-shadow:
+    0 12px 34px -28px rgba(42, 11, 18, 0.4),
+    0 1px 2px rgba(42, 11, 18, 0.04);
+  transition:
+    border-color 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+.zhino-assistant-composer-form:focus-within {
+  border-color: rgba(113, 49, 59, 0.38);
+  box-shadow:
+    0 12px 34px -28px rgba(42, 11, 18, 0.42),
+    0 0 0 3px rgba(113, 49, 59, 0.07);
+}
+
+.zhino-assistant-input {
+  font-size: 0.88rem;
+  line-height: 1.9;
+  color: var(--color-espresso, #292321);
+}
+
+.zhino-assistant-input::placeholder {
+  color: var(--color-mocha-light, #7e6b61);
+}
+
+.zhino-assistant-send {
+  width: 2.6rem;
+  height: 2.6rem;
+  border-radius: 9999px;
+  border: 1px solid rgba(42, 11, 18, 0.1);
+  background-color: var(--color-wine-900, #5a1725);
+  background-image: none;
+  color: var(--color-cream-50, #faf7f2);
+  box-shadow: 0 10px 20px -14px rgba(42, 11, 18, 0.7);
+  transition:
+    background-color 0.22s ease,
+    transform 0.22s ease,
+    opacity 0.22s ease,
+    box-shadow 0.22s ease;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-send:not(:disabled):hover {
+    background-color: var(--color-wine-800, #71313b);
+    transform: translateY(-1px);
+    box-shadow: 0 14px 24px -14px rgba(42, 11, 18, 0.8);
+  }
+}
+
+.zhino-assistant-send:not(:disabled):active {
+  transform: translateY(0) scale(0.94);
+}
+
+.zhino-assistant-send:disabled {
+  opacity: 0.34;
+  box-shadow: none;
+  cursor: default;
+}
+
+/* ردیف پیشنهادها بعد از شروع گفتگو — هم‌خانواده با کنش‌های سریع */
+.zhino-assistant-ideas {
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.zhino-assistant-ideas-toggle {
+  border: 1px solid rgba(41, 35, 33, 0.12);
+  background: transparent;
+  color: var(--color-mocha, #6e5f57);
+  border-radius: 9999px;
+}
+
+@media (hover: hover) {
+  .zhino-assistant-ideas-toggle:hover {
+    background: #ffffff;
+    border-color: rgba(113, 49, 59, 0.3);
+    color: var(--color-wine-800, #71313b);
+  }
+}
+
+.zhino-assistant-ideas-body {
+  border: 1px solid rgba(41, 35, 33, 0.08);
+  background: rgba(255, 255, 255, 0.92);
+  box-shadow: 0 18px 30px -30px rgba(29, 7, 12, 0.5);
+  border-radius: 1.1rem;
+}
+
+/* کارت محصول و تأیید سبد: هم‌سطح با حباب بوت */
+.zhino-assistant-product {
+  background: #ffffff;
+  border-color: rgba(41, 35, 33, 0.07);
+  box-shadow: 0 1px 2px rgba(42, 11, 18, 0.04);
+}
+
+.zhino-assistant-product-swatch {
+  background: #faf7f2;
+  box-shadow: inset 0 0 0 1px rgba(41, 35, 33, 0.09);
+}
+
+.zhino-assistant-cart-confirm {
+  background: #ffffff;
+  border-color: rgba(184, 154, 98, 0.35);
+  box-shadow: 0 8px 20px -22px rgba(42, 11, 18, 0.6);
+}
+
+.zhino-assistant-send:focus-visible,
+.zhino-assistant-add:focus-visible,
+.zhino-assistant-cart-yes:focus-visible {
+  outline: 2px solid rgba(184, 154, 98, 0.7);
+  outline-offset: 2px;
+}
+
+/* امضا — مانند قبل، آرام و بی‌مزاحمت */
+.zhino-assistant-signature {
+  margin-top: 0.45rem;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   واکنش‌گرایی REFRESH
+   ══════════════════════════════════════════════════════════════ */
+
+/* لوح — محتوای اصلی در وسط؛ ربات فضای کافی دارد */
+@media (min-width: 640px) {
+  .zhino-assistant-welcome {
+    padding-top: clamp(0.4rem, 3.5vh, 2.25rem);
+  }
+}
+
+/* موبایل — ربات، کنش‌ها، composer و عرضِ حباب */
+@media (max-width: 639px) {
+  .zhino-assistant-topbar {
+    gap: 0.6rem;
+    padding-top: calc(0.8rem + env(safe-area-inset-top, 0px));
+  }
+
+  .zhino-assistant-brand-mark {
+    width: 2.4rem;
+    height: 2.4rem;
+  }
+
+  .zhino-assistant-brand-title {
+    font-size: 1.02rem;
+  }
+
+  .zhino-assistant-ghost {
+    height: 2.25rem;
+    padding-inline: 0.7rem;
+    font-size: 0.7rem;
+  }
+
+  .zhino-assistant-ghost.is-icon {
+    width: 2.25rem;
+    padding-inline: 0;
+  }
+
+  .zhino-welcome-photo-wrap {
+    height: min(29vh, 11.5rem);
+  }
+
+  .zhino-assistant-welcome-title {
+    font-size: 1.42rem;
+  }
+
+  .zhino-assistant-welcome-chips {
+    margin-top: 1.2rem;
+  }
+
+  .zhino-assistant-chip {
+    font-size: 0.72rem;
+    padding: 0.45rem 0.8rem 0.45rem 0.72rem;
+  }
+
+  .zhino-assistant-input {
+    font-size: 1rem;
+  }
+
+  /* حباب‌های گفتگو کمی عریض‌تر می‌نشینند */
+  .zhino-assistant-stack {
+    max-width: 92%;
+  }
+}
+
+@media (max-width: 380px) {
+  .zhino-assistant-brand-mark {
+    width: 2.2rem;
+    height: 2.2rem;
+  }
+
+  .zhino-assistant-brand-title {
+    font-size: 0.95rem;
+  }
+
+  .zhino-assistant-back-text {
+    display: none;
+  }
+
+  .zhino-assistant-ghost.is-back {
+    width: 2.25rem;
+    padding-inline: 0;
+  }
+
+  .zhino-welcome-photo-wrap {
+    height: min(26vh, 10.5rem);
+  }
+}
+
+/* ارتفاع‌های کوتاه (موبایل افقی) */
+@media (height <= 560px) {
+  .zhino-assistant-welcome {
+    justify-content: flex-start;
+    padding-top: 0.4rem;
+  }
+
+  .zhino-assistant-welcome-figure {
+    margin-bottom: 0.25rem;
+  }
+
+  .zhino-welcome-photo-wrap {
+    height: clamp(8.5rem, 34vh, 12rem);
+  }
+
+  .zhino-assistant-welcome-kicker {
+    margin-bottom: 0.45rem;
+  }
+
+  .zhino-assistant-welcome-rule {
+    margin-top: 0.9rem;
+  }
+
+  .zhino-assistant-welcome-chips {
+    margin-top: 0.9rem;
+  }
+}
+
+/* کاهش حرکت — فقط انیمیشن ورود چیپ‌ها خاموش؛ بقیه مثل قبل است */
+@media (prefers-reduced-motion: reduce) {
+  .zhino-assistant-welcome-chips .zhino-assistant-chip {
+    animation: none !important;
   }
 }

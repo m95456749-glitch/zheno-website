@@ -1,14 +1,11 @@
 // ============================================================
-// ZHINO — «دستیار ژینو» — محیط چت یکپارچه و خلوت
+// ZHINO — «دستیار ژینو» — محیط اختصاصی، لوکس و مینیمال
 //
-// بازطراحی کامل پوسته (فاز ۹): صفحه یک سطح و یک پس‌زمینهٔ هماهنگ
-// دارد؛ صحنهٔ چندلایهٔ استودیو حذف شده و ربات واقعی فقط به‌صورت یک
-// تصویر کوچک و تمام‌قد در مرکز بخش خوش‌آمدگویی دیده می‌شود.
-//
-//   • سربرگ باریک و هم‌رنگ صفحه: نشان ژینو، «گفتگوی تازه» و
-//     «بازگشت به سایت» — عملکرد بازگشت همان ناوبری به '/' است.
-//   • محیط گفتگو (AssistantChat) بدون هیچ لایهٔ اضافه زیر سربرگ
-//     می‌نشیند و کادر نوشتن همیشه پایین می‌ماند (الگوی ChatGPT).
+// بازطراحی سربرگ (فاز «سادگی لوکس»):
+//   • سمت راست: آواتار کوچک ربات + عنوان «دستیار ژینو» + وضعیت
+//     بسیار ظریف «همراه شما برای انتخاب محصولات ژینو».
+//   • سمت چپ: دکمهٔ «بازگشت به سایت» + «شروع گفتگوی جدید».
+//   • بی‌وزن، بدون قاب اضافه، فقط یک جداکنندهٔ مویی در پایین.
 //
 // منطق چت، API و اتصال‌ها دست‌نخورده‌اند (useAssistantChat +
 // services/assistant) — فقط پوسته عوض شده است.
@@ -18,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 import AssistantAvatar from '../components/assistant/AssistantAvatar';
 import AssistantChat from '../components/assistant/AssistantChat';
 import { useAssistantChat } from '../components/assistant/useAssistantChat';
-import { ASSISTANT_NAME } from '../components/assistant/assistantData';
+import { ASSISTANT_NAME, ASSISTANT_TAGLINE } from '../components/assistant/assistantData';
 
 /** آیکن فروشگاه برای دکمهٔ «بازگشت به سایت» */
 function StoreIcon() {
@@ -35,7 +32,7 @@ function StoreIcon() {
   );
 }
 
-/** آیکن «گفتگوی تازه» */
+/** آیکن «شروع گفتگوی جدید» */
 function RefreshIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" className="h-4 w-4" aria-hidden="true">
@@ -58,38 +55,40 @@ export default function AssistantPage() {
 
   return (
     <div className="zhino-assistant-page">
-      {/* ── سربرگ باریک و هم‌سطح صفحه: نشان، گفتگوی تازه، بازگشت ── */}
+      {/* ── سربرگ باریک و هم‌سطح صفحه ── */}
       <header className="zhino-assistant-topbar">
         <span className="zhino-assistant-brand">
           <span className="zhino-assistant-brand-mark">
             <AssistantAvatar compact={true} />
           </span>
           <span className="zhino-assistant-brand-text">
-            <span className="zhino-assistant-brand-name">Zhino</span>
-            <span className="zhino-assistant-brand-title">{ASSISTANT_NAME}</span>
+            <span className="zhino-assistant-brand-name">{ASSISTANT_NAME}</span>
+            <span className="zhino-assistant-brand-title">{ASSISTANT_TAGLINE}</span>
           </span>
         </span>
 
-        <button
-          type="button"
-          className="zhino-assistant-ghost is-icon"
-          onClick={chat.clear}
-          aria-label="گفتگوی تازه"
-          title="گفتگوی تازه"
-        >
-          <RefreshIcon />
-        </button>
+        <span className="zhino-assistant-topbar-actions">
+          <button
+            type="button"
+            className="zhino-assistant-ghost is-back"
+            onClick={goHome}
+            aria-label="بازگشت به سایت"
+            title="بازگشت به سایت"
+          >
+            <StoreIcon />
+            <span className="zhino-assistant-back-text">بازگشت به سایت</span>
+          </button>
 
-        <button
-          type="button"
-          className="zhino-assistant-ghost is-back"
-          onClick={goHome}
-          aria-label="بازگشت به سایت"
-          title="بازگشت به سایت"
-        >
-          <StoreIcon />
-          <span className="zhino-assistant-back-text">بازگشت به سایت</span>
-        </button>
+          <button
+            type="button"
+            className="zhino-assistant-ghost is-icon"
+            onClick={chat.clear}
+            aria-label="شروع گفتگوی جدید"
+            title="شروع گفتگوی جدید"
+          >
+            <RefreshIcon />
+          </button>
+        </span>
       </header>
 
       {/* ── محیط گفتگو — یک سطح، بدون لایهٔ اضافه ── */}
