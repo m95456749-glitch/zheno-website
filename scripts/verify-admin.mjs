@@ -48,7 +48,7 @@ mustInclude('src/admin/pages/AdminDashboardPage.tsx', '/admin/product-images', '
 
 /* ── «تصاویر محصولات» — the product image gallery contract ── */
 
-const IMAGES_MIGRATION = 'supabase/migrations/20260919000000_product_images.sql';
+const IMAGES_MIGRATION = 'supabase/migrations/20260922000000_product_images_reliable_bootstrap.sql';
 for (const file of [
   IMAGES_MIGRATION,
   'src/services/productImages.ts',
@@ -68,32 +68,95 @@ mustInclude('src/admin/nav.ts', "label: 'تصاویر محصولات'", 'admin n
 // Database side: gallery table, RLS, admin-only writes, Storage bucket
 mustInclude(IMAGES_MIGRATION, 'create table if not exists public.product_images', 'product_images table');
 mustInclude(IMAGES_MIGRATION, 'alter table public.product_images enable row level security', 'product_images RLS enabled');
-mustInclude(IMAGES_MIGRATION, 'create policy product_images_admin_write', 'product_images admin-only write policy');
+mustInclude(IMAGES_MIGRATION, 'create policy image_insert_guard', 'product_images admin-only write policy');
 mustInclude(IMAGES_MIGRATION, 'public.is_admin()', 'product_images policies use is_admin()');
 mustInclude(IMAGES_MIGRATION, "insert into storage.buckets", 'product-images storage bucket');
 mustInclude(IMAGES_MIGRATION, 'create policy product_images_storage_insert', 'storage insert policy');
 mustInclude(IMAGES_MIGRATION, 'create policy product_images_storage_delete', 'storage delete policy');
 mustInclude(IMAGES_MIGRATION, 'set_primary_product_image', 'atomic primary-image RPC');
-mustInclude(IMAGES_MIGRATION, 'image_url = image_row.storefront_url', 'primary image is mirrored into products.image_url');
-mustInclude(IMAGES_MIGRATION, "source = 'legacy'", 'existing site photos are registered as legacy');
-// Re-applying the file must repair a partial apply, NEVER crash: the
+mustInclude(IMAGES_MIGRATION, 'image_url = i.storefront_url', 'primary image is mirrored into products.image_url');
+mustInclude(IMAGES_MIGRATION, "'legacy',true", 'existing site photos are registered as legacy');
+// Partial/unknown installations fail closed. Valid reruns preserve all data: the
 // registration INSERT is guarded so a product that already has gallery
 // rows is skipped (un-guarded re-runs tripped the one-primary-per-product
 // partial unique index and aborted the whole statement).
-mustInclude(IMAGES_MIGRATION, 'and not exists (', 'legacy re-registration is guarded (idempotent re-apply)');
+mustInclude(IMAGES_MIGRATION, 'if p_url is not null and btrim(p_url)', 'legacy re-registration is guarded (idempotent re-apply)');
+
+// PostgreSQL comments are whitespace, not SQL. Preserve quoted strings,
+// identifiers and dollar bodies so comment markers inside them cannot swallow
+// subsequent executable statements. PostgreSQL block comments may be nested.
+function withoutSqlComments(sql) {
+  let result = '', i = 0;
+  while (i < sql.length) {
+    if (sql.startsWith('--', i)) {
+      result += ' '; i += 2;
+      while (i < sql.length && sql[i] !== '\n' && sql[i] !== '\r') i++;
+    } else if (sql.startsWith('/*', i)) {
+      result += ' '; i += 2; let depth = 1;
+      while (i < sql.length && depth) {
+        if (sql.startsWith('/*', i)) { depth++; i += 2; }
+        else if (sql.startsWith('*/', i)) { depth--; i += 2; }
+        else { if (sql[i] === '\n' || sql[i] === '\r') result += sql[i]; i++; }
+      }
+      if (depth) throw new Error('Unterminated SQL block comment in admin contract check');
+    } else if (sql[i] === "'" || sql[i] === '"') {
+      const start = i, quote = sql[i++];
+      const escaped = quote === "'" && /[eE]/.test(sql[start - 1] ?? '')
+        && (start < 2 || !/[A-Za-z0-9_$]/.test(sql[start - 2]));
+      let closed = false;
+      while (i < sql.length) {
+        if (escaped && sql[i] === '\\') { i += 2; continue; }
+        if (sql[i++] !== quote) continue;
+        if (sql[i] === quote) { i++; continue; }
+        closed = true; break;
+      }
+      if (!closed) throw new Error('Unterminated SQL quote in admin contract check');
+      result += sql.slice(start, i);
+    } else if (sql[i] === '$' && /^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/.test(sql.slice(i))) {
+      const tag = sql.slice(i).match(/^\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$/)[0];
+      const end = sql.indexOf(tag, i + tag.length);
+      if (end < 0) throw new Error('Unterminated SQL dollar quote in admin contract check');
+      result += sql.slice(i, end + tag.length); i = end + tag.length;
+    } else result += sql[i++];
+  }
+  return result;
+}
+
+// Keep the existing UPDATE assertion and body treatment unchanged; only add
+// comment-aware preprocessing. Regressions prove real UPDATEs remain visible.
+const hasProductUpdate = sql => /update\s+public\.products(?!\s+set\s+image_url)/i.test(
+  withoutSqlComments(sql).replace(/\$\$[\s\S]*?\$\$/g, ''),
+);
+for (const [label, sql, expected] of [
+  ['documented prohibition is not SQL', '-- Reconciliation ONLY. Never UPDATE public.products during migration.', false],
+  ['block documentation is not SQL', '/* UPDATE public.products SET name=\'x\'; */ select 1;', false],
+  ['nested PostgreSQL comments', '/* outer /* nested */ UPDATE public.products SET name=\'x\'; */ select 1;', false],
+  ['real product UPDATE still rejected', "UPDATE public.products SET name='x';", true],
+  ['inline comment preserves token boundary', "UPDATE/* note */public.products SET name='x';", true],
+  ['UPDATE following a line comment', "-- documentation\nUPDATE public.products SET name='x';", true],
+  ['CR line endings', "-- documentation\rUPDATE public.products SET name='x';", true],
+  ['URL marker cannot hide real SQL', "SELECT 'https://example.invalid/a--b'; UPDATE public.products SET name='x';", true],
+  ['quoted block marker cannot hide real SQL', "SELECT '/*'; UPDATE public.products SET name='x'; -- */", true],
+  ['quoted identifier cannot hide real SQL', 'SELECT "column--name"; UPDATE public.products SET name=\'x\';', true],
+  ['comment dollar markers cannot hide real SQL', "-- $$\nUPDATE public.products SET name='x';\n-- $$", true],
+  ['existing runtime body treatment preserved', "CREATE FUNCTION example() RETURNS void LANGUAGE plpgsql AS $$ BEGIN UPDATE public.products SET name='x'; END $$;", false],
+]) {
+  if (hasProductUpdate(sql) === expected) pass(`SQL comment parser: ${label}`);
+  else fail(`SQL comment parser regression: ${label}`);
+}
 
 // The migration must not rewrite what the storefront already reads
 const imagesMigration = read(IMAGES_MIGRATION);
-if (!/update\s+public\.products(?!\s+set\s+image_url)/i.test(imagesMigration.replace(/\$\$[\s\S]*?\$\$/g, ''))) {
+if (!hasProductUpdate(imagesMigration)) {
   pass('migration body never rewrites products rows outside the RPC');
 } else {
   fail('migration must not update products rows outside set_primary_product_image()');
 }
 
 // Client side: the storefront keeps reading the ONE field it always read
-mustInclude('src/services/supabaseProductImages.ts', 'set_primary_product_image', 'promotion goes through the database RPC');
+mustInclude('src/services/supabaseProductImages.ts', 'manage_product_image', 'promotion goes through the database RPC');
 mustInclude('src/services/productImages.ts', 'products.image_url', 'gallery documents the storefront contract');
-mustInclude('src/services/productImages.ts', "image.source === 'upload'", 'only uploaded Storage objects are ever removed');
+mustInclude('supabase/migrations/20260922000000_product_images_reliable_bootstrap.sql', "i.source = 'upload'", 'only uploaded Storage objects are ever removed');
 mustInclude('src/utils/responsiveImages.ts', 'isAbsoluteUrl', 'absolute (Storage/data) image URLs bypass the site base');
 mustInclude('src/utils/imageFile.ts', 'MAX_IMAGE_BYTES', 'upload size limit is enforced in the browser too');
 mustInclude('src/utils/imageFile.ts', 'ACCEPTED_IMAGE_TYPES', 'upload type allowlist is enforced in the browser too');
@@ -134,6 +197,11 @@ const migration = read('supabase/migrations/20260912000000_initial_schema.sql');
 for (const policy of ['recipes_admin_write', 'content_admin_write', 'settings_admin_write', 'orders_admin_read']) {
   if (migration.includes(`create policy ${policy}`)) pass(`RLS policy present: ${policy}`);
   else fail(`RLS policy missing: ${policy}`);
+}
+
+
+for (const text of ['image_conflict', 'replacement_requires_primary', 'last_product_image', 'as restrictive', 'product_image_cleanup', 'for update']) {
+  mustInclude('supabase/migrations/20260922000000_product_images_reliable_bootstrap.sql', text, `image safety v3: ${text}`);
 }
 
 if (failures > 0) {

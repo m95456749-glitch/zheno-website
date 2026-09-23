@@ -158,6 +158,34 @@ function canvasToBlob(canvas: HTMLCanvasElement, mime: string, quality: number):
   });
 }
 
+/** Check bytes, not the file extension or the browser-provided MIME alone. */
+async function detectImageMime(blob: Blob): Promise<string> {
+  const bytes = await new Promise<Uint8Array>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+    reader.onerror = () => reject(new ImageFileError('خواندن فایل ممکن نشد؛ دوباره انتخاب کنید.'));
+    reader.readAsArrayBuffer(blob.slice(0, 64));
+  });
+  const ascii = (start: number, end: number) => String.fromCharCode(...bytes.slice(start, end));
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
+  if (bytes.length >= 8 && [137,80,78,71,13,10,26,10].every((n,i) => bytes[i] === n)) return 'image/png';
+  if (['GIF87a','GIF89a'].includes(ascii(0,6))) return 'image/gif';
+  if (ascii(0,4) === 'RIFF' && ascii(8,12) === 'WEBP') return 'image/webp';
+  if (ascii(4,8) === 'ftyp' && /avif|avis/.test(ascii(8,64))) return 'image/avif';
+  throw new ImageFileError('محتوای فایل تصویر مجاز نیست؛ تغییر پسوند فایل کافی نیست.');
+}
+
+export async function validatePreparedImage(image: PreparedImage): Promise<void> {
+  if (!image.blob.size || image.blob.size > MAX_IMAGE_BYTES || image.bytes !== image.blob.size) {
+    throw new ImageFileError('فایل خالی است یا حجم نهایی آن از ۸ مگابایت بیشتر است.');
+  }
+  if (await detectImageMime(image.blob) !== image.mime || extensionOf(image.mime, '') !== image.extension) {
+    throw new ImageFileError('فرمت واقعی تصویر با اطلاعات فایل هم‌خوانی ندارد.');
+  }
+  if (!Number.isInteger(image.width) || !Number.isInteger(image.height) || image.width <= 0 || image.height <= 0
+      || image.width * image.height > 40_000_000) throw new ImageFileError('ابعاد تصویر معتبر نیست یا بیش از ۴۰ مگاپیکسل است.');
+}
+
 /**
  * Validate + prepare one photo for the product gallery.
  *
@@ -177,25 +205,10 @@ export async function prepareProductImage(file: File, options: PrepareOptions = 
     );
   }
 
-  const originalMime = file.type || 'image/jpeg';
+  if (file.size === 0) throw new ImageFileError('فایل انتخابی خالی است.');
+  const originalMime = await detectImageMime(file);
+  if (file.type && file.type.toLowerCase() !== originalMime) throw new ImageFileError('نوع اعلام‌شدهٔ فایل با فرمت واقعی آن هم‌خوانی ندارد.');
   const originalName = file.name || 'image';
-
-  // Animated GIF: keep the exact bytes, a canvas round-trip would freeze it.
-  if (originalMime === 'image/gif') {
-    return {
-      blob: file,
-      dataUrl: await readAsDataUrl(file),
-      mime: originalMime,
-      extension: 'gif',
-      width: 0,
-      height: 0,
-      bytes: file.size,
-      originalName,
-      originalBytes: file.size,
-      originalMime,
-      optimized: false,
-    };
-  }
 
   const loaded = await loadBitmap(file);
   let release = loaded.release;
@@ -204,6 +217,12 @@ export async function prepareProductImage(file: File, options: PrepareOptions = 
       throw new ImageFileError('ابعاد تصویر خوانده نشد؛ فایل دیگری انتخاب کنید.');
     }
 
+    if (loaded.width * loaded.height > 40_000_000) throw new ImageFileError('تصویر بیش از ۴۰ مگاپیکسل است؛ نسخهٔ کوچک‌تری انتخاب کنید.');
+    if (originalMime === 'image/gif') {
+      return { blob: file, dataUrl: await readAsDataUrl(file), mime: originalMime,
+        extension: 'gif', width: loaded.width, height: loaded.height, bytes: file.size,
+        originalName, originalBytes: file.size, originalMime, optimized: false };
+    }
     const scale = Math.min(1, maxEdge / Math.max(loaded.width, loaded.height));
     const width = Math.max(1, Math.round(loaded.width * scale));
     const height = Math.max(1, Math.round(loaded.height * scale));
@@ -260,6 +279,7 @@ export async function prepareProductImage(file: File, options: PrepareOptions = 
       };
     }
 
+    if (encoded.size > MAX_IMAGE_BYTES) throw new ImageFileError('حجم تصویر آماده‌شده بیشتر از ۸ مگابایت است.');
     const mime = encoded.type === 'image/webp' ? 'image/webp' : 'image/jpeg';
     // Never upload a "prepared" file that is heavier than the original.
     const useOriginal = encoded.size >= file.size && scale === 1;
@@ -289,15 +309,7 @@ export async function prepareProductImage(file: File, options: PrepareOptions = 
  * Latin, lowercase and short — no spaces, no Persian characters, no
  * characters Storage or a CDN would have to escape.
  */
-export function buildStoragePath(productId: string, prepared: PreparedImage): string {
-  const slug =
-    prepared.originalName
-      .toLowerCase()
-      .replace(/\.[a-z0-9]+$/, '')
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'image';
+export function buildStoragePath(productId: string, prepared: PreparedImage, uploadId = crypto.randomUUID()): string {
   const id = productId.replace(/[^a-zA-Z0-9-]+/g, '-').slice(0, 60) || 'product';
-  const stamp = Date.now().toString(36);
-  return `products/${id}/${stamp}-${slug}.${prepared.extension}`;
+  return `products/${id}/${uploadId}.${prepared.extension}`;
 }

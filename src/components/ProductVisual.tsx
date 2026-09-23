@@ -23,6 +23,8 @@ interface Props {
   sizes?: string;
   /** true for the one immediately-visible image (detail hero): eager + high priority */
   eager?: boolean;
+  /** Admin gallery: explain failed image requests rather than silently hiding them. */
+  reportFailure?: boolean;
 }
 
 export default function ProductVisual({
@@ -35,8 +37,9 @@ export default function ProductVisual({
   imageUrl,
   sizes,
   eager = false,
+  reportFailure = false,
 }: Props) {
-  const [imgFailed, setImgFailed] = useState(false);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
 
   // Real production photo: same frame, resolved against the runtime
   // mount point so it works in dev ("/"), on the custom domain ("/"),
@@ -46,7 +49,7 @@ export default function ProductVisual({
   // fallback, so older browsers render exactly what they render today.
   // If the file ever fails to load, fall through to the plated visual —
   // the page never shows a broken image.
-  if (imageUrl && !imgFailed) {
+  if (imageUrl && failedUrl !== imageUrl) {
     const responsive = getResponsiveSource(imageUrl);
     const img = (
       <img
@@ -55,7 +58,7 @@ export default function ProductVisual({
         loading={eager ? 'eager' : 'lazy'}
         fetchPriority={eager ? 'high' : 'auto'}
         decoding="async"
-        onError={() => setImgFailed(true)}
+        onError={() => setFailedUrl(imageUrl)}
         className="product-visual-img absolute inset-0 h-full w-full object-cover"
       />
     );
@@ -85,7 +88,7 @@ export default function ProductVisual({
   return (
     <div
       role="img"
-      aria-label={name}
+      aria-label={reportFailure && imageUrl ? `دریافت تصویر ${name} ناموفق بود` : name}
       className={`relative overflow-hidden ${className}`}
       style={{
         backgroundColor: 'var(--color-cream-100)',
@@ -96,6 +99,9 @@ export default function ProductVisual({
         `,
       }}
     >
+      {reportFailure && imageUrl && <span className="absolute inset-x-0 bottom-0 z-10 bg-cream-50/95 px-2 py-2 text-center text-[0.65rem] leading-5 text-wine-900">
+        دریافت تصویر ناموفق بود؛ اتصال یا نشانی عکس را بررسی کنید.
+      </span>}
       {/* the plate — a jewel disc of the flavor color */}
       <div className="absolute inset-0 flex items-center justify-center">
         <div

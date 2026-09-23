@@ -95,11 +95,16 @@ const DESTRUCTIVE = [
   /\bdrop\s+table\b/i,
   /\bdrop\s+schema\b/i,
   /\bdrop\s+database\b/i,
-  /\btruncate\b/i,
+  // A privilege-name string (e.g. has_table_privilege(..., 'TRUNCATE,...')) is not a TRUNCATE statement.
+  /\btruncate\s+(?!on\b)[a-z_"]/i,
   /\bdelete\s+from\b/i,
 ];
 for (const f of files) {
-  const sql = stripSql(readFileSync(join(migrationsDir, f), 'utf8'));
+  // DELETE inside a declared runtime RPC is not a migration-time data deletion.
+  // DO blocks remain scanned: they execute during migration.
+  const sql = stripSql(readFileSync(join(migrationsDir, f), 'utf8')).replace(
+    /create\s+or\s+replace\s+function\b[\s\S]*?\bas\s+\$\$[\s\S]*?\$\$\s*;/gi, '',
+  );
   const hits = DESTRUCTIVE.filter((re) => re.test(sql));
   if (hits.length > 0) {
     fail(`migration "${f}" contains destructive statement(s): ${hits.map((r) => r.source).join(', ')}`);
@@ -121,7 +126,7 @@ if (nonSelect.length > 0) {
 }
 
 // ── 6. No committed secret material ───────────────────────────
-// Scans git-TRACKED files only (node_modules/dist are never tracked).
+// Scans tracked AND non-ignored new files (node_modules/dist/.qa excluded).
 // Patterns require realistic token length to avoid false positives on
 // documentation that merely names a prefix.
 const SECRET_PATTERNS = [
@@ -141,7 +146,7 @@ const SECRET_PATTERNS = [
 ];
 let tracked = [];
 try {
-  tracked = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf8' })
+  tracked = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8' })
     .split('\n')
     .filter(Boolean);
 } catch {
@@ -163,7 +168,7 @@ for (const file of tracked) {
   }
 }
 if (secretHits === 0 && tracked.length > 0) {
-  ok(`no committed secret material found in ${tracked.length} tracked files`);
+  ok(`no secret material found in ${tracked.length} tracked/new non-ignored files`);
 }
 
 // ── 7. Assistant Edge Function (offline structure check) ──────

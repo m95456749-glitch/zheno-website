@@ -45,6 +45,7 @@ const configured = isSupabaseConfigured();
 let snapshot: RemoteCatalog | null = null;
 /** writes currently in flight (kept outside React state: it is a counter) */
 let pending = 0;
+let readVersion = 0;
 
 let state: CatalogSyncState = {
   source: configured ? 'remote' : 'local',
@@ -117,6 +118,7 @@ export function makeRemoteCatalog(products: Product[], active: Record<string, bo
  * and never pretends the value was saved.
  */
 export function runRemoteWrite(label: string, write: () => Promise<void>): void {
+  ++readVersion; // invalidate catalog reads started before this mutation
   pending += 1;
   setState({ phase: 'syncing', pending, error: null });
 
@@ -129,7 +131,9 @@ export function runRemoteWrite(label: string, write: () => Promise<void>): void 
     }
 
     try {
-      snapshot = await fetchRemoteCatalog();
+      const version = ++readVersion;
+      const next = await fetchRemoteCatalog();
+      if (version === readVersion) snapshot = next;
     } catch {
       // Keep the previous snapshot: stale data is better than none, and
       // `failure` (if any) already tells the operator what went wrong.
@@ -148,6 +152,7 @@ export function runRemoteWrite(label: string, write: () => Promise<void>): void 
 
 /** Re-read the whole catalog from the database. */
 export async function refreshRemoteCatalog(options: { silent?: boolean } = {}): Promise<void> {
+  const version = ++readVersion;
   const supabase = getSupabase();
   if (!supabase) {
     snapshot = null;
@@ -159,6 +164,7 @@ export async function refreshRemoteCatalog(options: { silent?: boolean } = {}): 
 
   try {
     const next = await fetchRemoteCatalog();
+    if (version !== readVersion) return;
     snapshot = next;
     setState({
       source: 'remote',
@@ -167,6 +173,7 @@ export async function refreshRemoteCatalog(options: { silent?: boolean } = {}): 
       lastSyncedAt: next.loadedAt,
     });
   } catch (err) {
+    if (version !== readVersion) return;
     const message = err instanceof Error ? err.message : String(err);
     // Keep the previous snapshot (stale data beats a blank storefront)
     // but say so in the admin panel.

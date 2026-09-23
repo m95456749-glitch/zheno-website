@@ -31,31 +31,30 @@
 //     here but its FILE is never deleted — the panel can only stop
 //     showing it. Uploaded Storage objects are the only bytes this
 //     module removes, and only after an explicit admin confirmation.
-//   * Deletion order: un-point the storefront → drop the row → remove
-//     the object. A failure in the last step leaves an unreachable
+//   * Deletion: transactionally un-point the storefront + retire the row,
+//     then remove the object through the durable cleanup queue. A failure in the last step leaves an unreachable
 //     file (reported as a warning), never a broken shop image.
 // ============================================================
 
 import { useMemo, useSyncExternalStore } from 'react';
 import type { Product } from '../types';
-import { buildStoragePath, prepareProductImage } from '../utils/imageFile';
+import { buildStoragePath, prepareProductImage, validatePreparedImage } from '../utils/imageFile';
 import type { PreparedImage } from '../utils/imageFile';
-import { getCatalogMeta, getEffectiveCatalog, upsertProduct } from './catalog';
-import { refreshRemoteCatalog } from './catalogSync';
+import { getEffectiveCatalog, setLocalProductImage, useCatalog } from './catalog';
+import { getCatalogSyncState, getRemoteCatalog, refreshRemoteCatalog } from './catalogSync';
 import { createLocalStore, useLocalStore } from './localStore';
 import { getSupabase } from './supabaseClient';
+import { getAuthProvider } from '../admin/auth/authService';
 import {
   PRODUCT_IMAGE_BUCKET,
   ProductImageError,
   SITE_PUBLIC_BUCKET,
-  deleteImageRow,
   describeImageError,
   fetchRemoteProductImages,
-  insertImageRow,
-  pushProductImageUrl,
-  removeImageObject,
-  setPrimaryImage,
-  updateImageRow,
+  mutateImage,
+  findRegisteredImage,
+  retireUpload,
+  cleanupImageFiles,
   uploadImageObject,
 } from './supabaseProductImages';
 import type { ProductImage } from './supabaseProductImages';
@@ -85,6 +84,9 @@ export interface ProductImageSyncState {
 
 let snapshot: ProductImage[] | null = null;
 let pending = 0;
+let readVersion = 0;
+// Retain an operation id while its network outcome is unknown (retry-safe dialog).
+const uploadAttempts = new WeakMap<PreparedImage, { id: string; path: string; uploaded: boolean; tried: boolean; productId: string; intent: string; expectedUrl: string | null; replaceId: string | null }>();
 
 let state: ProductImageSyncState = {
   source: getSupabase() ? 'remote' : 'local',
@@ -140,11 +142,12 @@ interface StoredLocalImage {
 
 interface ProductImageOverlay {
   uploads: StoredLocalImage[];
+  legacy: ProductImage[];
   /** products whose committed photo the admin took off the shop locally */
   clearedProducts: string[];
 }
 
-const EMPTY_OVERLAY: ProductImageOverlay = { uploads: [], clearedProducts: [] };
+const EMPTY_OVERLAY: ProductImageOverlay = { uploads: [], legacy: [], clearedProducts: [] };
 
 /** Demo mode keeps a handful of photos in this browser — not a warehouse. */
 const MAX_DEMO_UPLOADS = 5;
@@ -181,7 +184,14 @@ function sanitizeOverlay(raw: unknown): ProductImageOverlay | null {
   const clearedProducts = Array.isArray(r.clearedProducts)
     ? (r.clearedProducts as unknown[]).filter((id): id is string => typeof id === 'string')
     : [];
-  return { uploads, clearedProducts };
+  const legacy = Array.isArray(r.legacy) ? r.legacy.filter((item): item is ProductImage => {
+    if (!item || typeof item !== 'object') return false;
+    const row = item as ProductImage;
+    return typeof row.id === 'string' && typeof row.productId === 'string'
+      && typeof row.storefrontUrl === 'string' && /^(images\/|\/images\/|https:\/\/)/.test(row.storefrontUrl)
+      && row.source === 'legacy';
+  }).map(row => ({ ...row, virtual: true })) : [];
+  return { uploads, legacy, clearedProducts };
 }
 
 const store = createLocalStore<ProductImageOverlay>(LOCAL_STORE_KEY, EMPTY_OVERLAY, sanitizeOverlay);
@@ -192,32 +202,11 @@ const store = createLocalStore<ProductImageOverlay>(LOCAL_STORE_KEY, EMPTY_OVERL
  * photo would look like a working save — so the size is checked here.
  */
 function persistOverlay(next: ProductImageOverlay): void {
-  let serialized = '';
-  try {
-    serialized = JSON.stringify(next);
-  } catch {
-    throw new ProductImageError('ذخیرهٔ تصویر در حافظهٔ مرورگر ممکن نشد.');
-  }
-  if (serialized.length > MAX_DEMO_BYTES * 2) {
-    throw new ProductImageError(
-      `حافظهٔ مرورگر برای ${next.uploads.length} تصویر نمایشی کافی نیست؛ یک تصویر را حذف کنید یا Supabase را متصل کنید.`,
-    );
-  }
-  store.set(next);
+  const serialized = JSON.stringify(next);
+  if (serialized.length > MAX_DEMO_BYTES * 2) throw new ProductImageError('حافظهٔ نمایشی کافی نیست؛ تصویر کوچک‌تری انتخاب کنید.');
+  try { store.setStrict(next); }
+  catch { throw new ProductImageError('ذخیره نشد؛ حافظهٔ مرورگر پر است یا اجازهٔ ذخیره نمی‌دهد. اطلاعات قبلی حفظ شد.'); }
 
-  // Confirm the write really landed (private mode / full quota).
-  try {
-    const raw = window.localStorage.getItem(LOCAL_STORE_KEY);
-    const stored = raw ? sanitizeOverlay(JSON.parse(raw)) : null;
-    if (!stored || stored.uploads.length !== next.uploads.length) {
-      throw new ProductImageError(
-        'تصویر در حافظهٔ مرورگر ذخیره نشد (حافظه پر است یا مرورگر اجازهٔ ذخیره نمی‌دهد).',
-      );
-    }
-  } catch (error) {
-    if (error instanceof ProductImageError) throw error;
-    throw new ProductImageError('ذخیرهٔ تصویر در حافظهٔ مرورگر ممکن نشد.');
-  }
 }
 
 /* ── merging: gallery rows + what the shop actually shows ───── */
@@ -253,8 +242,8 @@ function withCatalogMirror(rows: ProductImage[], products: Product[]): ProductIm
   const mirrored = rows.slice();
 
   for (const product of products) {
-    const url = (product.imageUrl ?? '').trim();
-    if (!url || known.has(`${product.id}|${url}`)) continue;
+    const url = (product.imageUrl ?? '');
+    if (!url.trim() || known.has(`${product.id}|${url}`)) continue;
     mirrored.push({
       id: `catalog:${product.id}`,
       productId: product.id,
@@ -278,12 +267,12 @@ function withCatalogMirror(rows: ProductImage[], products: Product[]): ProductIm
 
 /** Primary first (the shop's own image_url wins), then manual order, then age. */
 function sortImages(rows: ProductImage[], products: Product[]): ProductImage[] {
-  const shopUrl = new Map(products.map((product) => [product.id, (product.imageUrl ?? '').trim()]));
+  const shopUrl = new Map(products.map((product) => [product.id, (product.imageUrl ?? '')]));
   const sorted = rows.slice().sort((a, b) => {
     if (a.productId !== b.productId) return a.productId < b.productId ? -1 : 1;
     const url = shopUrl.get(a.productId) ?? '';
-    const aShown = url !== '' && a.storefrontUrl === url ? 1 : 0;
-    const bShown = url !== '' && b.storefrontUrl === url ? 1 : 0;
+    const aShown = url.trim() !== '' && a.storefrontUrl === url ? 1 : 0;
+    const bShown = url.trim() !== '' && b.storefrontUrl === url ? 1 : 0;
     if (aShown !== bShown) return bShown - aShown;
     if (a.isPrimary !== b.isPrimary) return a.isPrimary ? -1 : 1;
     if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
@@ -295,8 +284,8 @@ function sortImages(rows: ProductImage[], products: Product[]): ProductImage[] {
   const flagged = new Set<string>();
   return sorted.map((row) => {
     const url = shopUrl.get(row.productId) ?? '';
-    const shown = url !== '' && row.storefrontUrl === url;
-    const isPrimary = flagged.has(row.productId) ? false : shown || row.isPrimary;
+    const shown = url.trim() !== '' && row.storefrontUrl === url;
+    const isPrimary = !flagged.has(row.productId) && shown;
     if (isPrimary) flagged.add(row.productId);
     return isPrimary === row.isPrimary ? row : { ...row, isPrimary };
   });
@@ -309,13 +298,13 @@ function remoteImages(): ProductImage[] {
 
 function localImages(overlay: ProductImageOverlay): ProductImage[] {
   const products = getEffectiveCatalog();
-  const rows: ProductImage[] = [];
+  const rows: ProductImage[] = overlay.legacy.map(row => ({ ...row, isPrimary: false }));
 
   for (const product of products) {
-    const url = (product.imageUrl ?? '').trim();
+    const url = (product.imageUrl ?? '');
     const uploads = overlay.uploads.filter((upload) => upload.productId === product.id);
 
-    if (url && !uploads.some((upload) => upload.storefrontUrl === url) && !overlay.clearedProducts.includes(product.id)) {
+    if (url && !rows.some(row => row.productId === product.id && row.storefrontUrl === url) && !uploads.some((upload) => upload.storefrontUrl === url) && !overlay.clearedProducts.includes(product.id)) {
       rows.push({
         id: `catalog:${product.id}`,
         productId: product.id,
@@ -343,7 +332,7 @@ function localImages(overlay: ProductImageOverlay): ProductImage[] {
         storagePath: upload.id,
         storefrontUrl: upload.storefrontUrl,
         altText: upload.altText,
-        isPrimary: url !== '' && url === upload.storefrontUrl,
+        isPrimary: url.trim() !== '' && url === upload.storefrontUrl,
         sortOrder: 1,
         width: upload.width,
         height: upload.height,
@@ -386,19 +375,20 @@ export function isImagesConnected(): boolean {
 /** React binding — gallery + status for the admin page. */
 export function useProductImages(): { images: ProductImage[]; state: ProductImageSyncState } {
   const overlay = useLocalStore(store);
+  const products = useCatalog();
   const rows = useSyncExternalStore(subscribe, getSnapshotRows);
   const syncState = useSyncExternalStore(subscribe, getState);
   // The catalog is read during the merge, so the component must also
   // subscribe to it (the page does: it needs names and flavours anyway).
   const images = useMemo(() => {
     if (syncState.source !== 'remote') return localImages(overlay);
-    const products = getEffectiveCatalog();
     return sortImages(withCatalogMirror(rows ?? [], products), products);
-  }, [syncState.source, rows, overlay]);
+  }, [syncState.source, rows, overlay, products]);
   return { images, state: syncState };
 }
 
 export async function refreshProductImages(options: { silent?: boolean } = {}): Promise<void> {
+  const version = ++readVersion;
   const supabase = getSupabase();
   if (!supabase) {
     snapshot = null;
@@ -417,6 +407,7 @@ export async function refreshProductImages(options: { silent?: boolean } = {}): 
 
   try {
     const rows = await fetchRemoteProductImages();
+    if (version !== readVersion) return;
     snapshot = rows;
     setState({
       source: 'remote',
@@ -426,6 +417,7 @@ export async function refreshProductImages(options: { silent?: boolean } = {}): 
       activity: pending > 0 ? state.activity : null,
     });
   } catch (error) {
+    if (version !== readVersion) return;
     // Keep the previous rows (stale beats blank) and report honestly.
     setState({
       source: 'remote',
@@ -463,45 +455,57 @@ function toImageError(error: unknown, context: string): ProductImageError {
  * pretends a refused write succeeded.
  */
 async function runWrite<T>(activity: string, work: () => Promise<T>): Promise<T> {
+  if (pending) throw new ProductImageError('عملیات قبلی هنوز تمام نشده است؛ کمی صبر کنید.');
   const remote = state.source === 'remote';
-  pending += 1;
-  setState({ activity, error: null, warning: null, phase: remote ? 'syncing' : state.phase });
-
-  let failure: ProductImageError | null = null;
+  if (remote && (getAuthProvider().mode !== 'supabase' || !snapshot || !getRemoteCatalog() || getCatalogSyncState().phase === 'error')) {
+    const message = 'ابتدا با حساب مدیر Supabase وارد شوید و گالری را به‌روز کنید.';
+    setState({ error: message, phase: 'error' });
+    throw new ProductImageError(message);
+  }
+  pending = 1;
+  setState({ pending, activity, error: null, warning: null, phase: 'syncing' });
   let result: T | undefined;
+  let failure: ProductImageError | null = null;
+  try { result = await work(); }
+  catch (error) { failure = toImageError(error, activity); }
   try {
-    result = await work();
-  } catch (error) {
-    failure = toImageError(error, activity);
+    if (remote) {
+      await Promise.all([refreshRemoteCatalog({ silent: true }), refreshProductImages({ silent: true })]);
+      if (getCatalogSyncState().error || state.error) {
+        setState({ warning: 'بازخوانی آخرین وضعیت کامل نشد؛ پیش از تغییر بعدی، به‌روزرسانی را بزنید.' });
+      }
+    } else await refreshProductImages({ silent: true });
+  } finally {
+    pending = 0;
+    setState({ pending: 0, activity: null,
+      phase: failure || state.error ? 'error' : remote ? 'ready' : 'offline',
+      error: failure?.userMessage ?? state.error });
   }
-
-  await refreshProductImages({ silent: true });
-
-  pending = Math.max(0, pending - 1);
-  if (failure) {
-    setState({ phase: 'error', error: failure.userMessage, activity: pending > 0 ? activity : null });
-    throw failure;
-  }
-  setState({
-    phase: remote ? (pending > 0 ? 'syncing' : 'ready') : 'offline',
-    activity: pending > 0 ? activity : null,
-  });
+  if (failure) throw failure;
   return result as T;
 }
 
-/** Re-read the shop's catalog so a new primary shows up immediately. */
-async function refreshShopCatalog(): Promise<void> {
-  if (state.source === 'remote') {
-    try {
-      await refreshRemoteCatalog({ silent: true });
-    } catch {
-      // The catalog layer keeps its own snapshot + error banner.
-    }
+function saveDemo(product: Product, overlay: ProductImageOverlay, url: string | undefined): void {
+  const previous = store.get();
+  persistOverlay(overlay);
+  try { setLocalProductImage(product, url); }
+  catch {
+    persistOverlay(previous);
+    throw new ProductImageError('ذخیرهٔ تصویر در مرورگر انجام نشد؛ تصویر قبلی حفظ شد.');
   }
 }
 
-function writeShopImageLocal(product: Product, storefrontUrl: string | null | undefined): void {
-  upsertProduct({ ...product, imageUrl: storefrontUrl ?? undefined }, getCatalogMeta(product.id).active);
+async function cleanFiles(): Promise<void> {
+  try {
+    const failed = await cleanupImageFiles();
+    if (failed) setState({ warning: 'تغییرات ثبت شد؛ پاک‌سازی بعضی فایل‌های بلااستفاده کامل نشد. «تلاش مجدد پاک‌سازی» را بزنید.' });
+  } catch {
+    setState({ warning: 'تغییرات گالری محفوظ است؛ پاک‌سازی فایل‌ها اکنون ممکن نیست. بعداً دوباره تلاش کنید.' });
+  }
+}
+
+export async function retryImageCleanup(): Promise<void> {
+  await runWrite('پاک‌سازی فایل‌های بلااستفاده', cleanFiles);
 }
 
 function findProduct(productId: string): Product | undefined {
@@ -525,6 +529,8 @@ export interface UploadRequest {
   makePrimary: boolean;
   /** the previous primary photo is removed after a successful upload */
   replacePrevious: boolean;
+  expectedUrl?: string | null;
+  replaceImageId?: string;
 }
 
 /**
@@ -532,8 +538,8 @@ export interface UploadRequest {
  *
  * Connected: prepared locally (validated + downscaled), uploaded to
  * Storage, registered as a row, optionally promoted — and only then is
- * the photo it replaces removed. A failure at any step leaves the shop
- * showing what it showed before.
+ * the photo it replaces removed. A refused metadata transaction preserves the previous primary. A lost
+ * response is resolved by read-back; it is never treated as permission to delete.
  *
  * Demo: the prepared data URL is stored in this browser and written
  * through the existing catalog overlay.
@@ -545,6 +551,8 @@ export async function uploadProductImage(request: UploadRequest): Promise<Produc
 
   // Captured before anything changes: «replace» means exactly this photo.
   const previousPrimary = getPrimaryImage(request.productId);
+  if (request.replacePrevious && !request.makePrimary) throw new ProductImageError('برای جایگزینی، تصویر جدید باید اصلی شود.');
+  const expectedUrl = request.expectedUrl === undefined ? product.imageUrl ?? null : request.expectedUrl;
   const demo = state.source !== 'remote';
   const altText = request.altText.trim().slice(0, 200) || product.shortName || product.name;
 
@@ -558,9 +566,10 @@ export async function uploadProductImage(request: UploadRequest): Promise<Produc
       );
     }
 
+    await validatePreparedImage(prepared);
     if (demo) {
       const overlay = store.get();
-      if (overlay.uploads.length >= MAX_DEMO_UPLOADS) {
+      if (overlay.uploads.length - (request.replacePrevious && previousPrimary?.id.startsWith('local-') ? 1 : 0) >= MAX_DEMO_UPLOADS) {
         throw new ProductImageError(
           `در حالت نمایشی حداکثر ${MAX_DEMO_UPLOADS} تصویر در همین مرورگر ذخیره می‌شود؛ برای مدیریت کامل تصاویر، Supabase را متصل کنید.`,
         );
@@ -578,93 +587,67 @@ export async function uploadProductImage(request: UploadRequest): Promise<Produc
       };
 
       let uploads = [...overlay.uploads, record];
-      const bytes = uploads.reduce((sum, upload) => sum + upload.sizeBytes, 0);
-      if (bytes > MAX_DEMO_BYTES) {
-        throw new ProductImageError(
-          'حافظهٔ مرورگر برای این تصویر نمایشی کافی نیست؛ تصویر کوچک‌تری انتخاب کنید.',
-        );
-      }
-      if (request.replacePrevious && previousPrimary && previousPrimary.id.startsWith('local-')) {
+      if (request.replacePrevious && previousPrimary?.id.startsWith('local-')) {
         uploads = uploads.filter((upload) => upload.id !== previousPrimary.id);
       }
-      setState({ activity: `ذخیرهٔ تصویر «${product.shortName}»` });
-      persistOverlay({ ...overlay, uploads });
-
-      if (request.makePrimary) writeShopImageLocal(product, record.storefrontUrl);
+      const bytes = uploads.reduce((sum, upload) => sum + upload.sizeBytes, 0);
+      if (bytes > MAX_DEMO_BYTES) throw new ProductImageError('حافظهٔ نمایشی کافی نیست؛ تصویر کوچک‌تری انتخاب کنید.');
+      const legacy = previousPrimary?.source === 'legacy' && !overlay.legacy.some(row => row.storefrontUrl === previousPrimary.storefrontUrl && row.productId === product.id)
+        ? [...overlay.legacy, { ...previousPrimary, id: `legacy:${crypto.randomUUID()}`, isPrimary: false }] : overlay.legacy;
+      saveDemo(product, { ...overlay, uploads, legacy, clearedProducts: overlay.clearedProducts.filter(id => id !== product.id) },
+        request.makePrimary || !product.imageUrl ? record.storefrontUrl : product.imageUrl);
       return toLocalImage(record, request.makePrimary);
     }
 
-    /* ── connected: Storage + product_images ── */
-    setState({ activity: `بارگذاری تصویر «${product.shortName}» در فضای ذخیره‌سازی` });
-    const path = buildStoragePath(product.id, prepared);
-    const { publicUrl } = await uploadImageObject(path, prepared);
-
-    let row: ProductImage;
+    /* ── connected: upload bytes, then ONE metadata transaction ── */
+    let attempt = uploadAttempts.get(prepared);
+    if (attempt && attempt.productId !== product.id) throw new ProductImageError('این پیش‌نمایش به محصول دیگری تعلق دارد؛ فایل را دوباره انتخاب کنید.');
+    const intent = JSON.stringify([altText, request.makePrimary, request.replacePrevious,
+      request.replaceImageId ?? null, prepared.width, prepared.height, prepared.mime, prepared.bytes]);
+    if (attempt && attempt.intent !== intent) throw new ProductImageError('نتیجهٔ درخواست قبلی نامعلوم است؛ همان گزینه‌های قبلی را دوباره ارسال کنید یا گالری را به‌روز کنید.');
+    if (!attempt) {
+      const id = crypto.randomUUID();
+      attempt = { id, path: buildStoragePath(product.id, prepared, id), uploaded: false, tried: false, productId: product.id, intent, expectedUrl,
+        replaceId: request.replacePrevious && previousPrimary?.source === 'upload' ? request.replaceImageId ?? previousPrimary.id : null };
+      uploadAttempts.set(prepared, attempt);
+    }
+    const { id, path } = attempt;
+    let row: ProductImage | null = null;
     try {
-      row = await insertImageRow({
-        productId: product.id,
-        bucket: PRODUCT_IMAGE_BUCKET,
-        storagePath: path,
-        storefrontUrl: publicUrl,
-        altText,
-        width: prepared.width || null,
-        height: prepared.height || null,
-        mimeType: prepared.mime,
-        sizeBytes: prepared.bytes,
-        source: 'upload',
-      });
-    } catch (error) {
-      // The row was refused → do not leave an orphan object behind.
-      try {
-        await removeImageObject(path);
-      } catch {
-        setState({ warning: 'فایل بارگذاری‌شده در فضای ذخیره‌سازی باقی ماند و از گالری حذف نشد.' });
+      // A previous unknown result may already be committed. Do not duplicate it.
+      if (attempt.uploaded) row = await findRegisteredImage(id, product.id);
+      if (!row) {
+        const retry = attempt.tried;
+        attempt.tried = true;
+        const { publicUrl } = await uploadImageObject(path, prepared, attempt.uploaded, retry);
+        attempt.uploaded = true;
+        row = await mutateImage('register', product.id, id, attempt.expectedUrl, {
+          storage_path: path, storefront_url: publicUrl, alt_text: altText,
+          width: prepared.width, height: prepared.height, mime_type: prepared.mime,
+          size_bytes: prepared.bytes, make_primary: request.makePrimary,
+          replace_id: attempt.replaceId,
+        });
       }
-      throw error;
+    } catch (error) {
+      try { row = await findRegisteredImage(id, product.id); }
+      catch { /* unknown outcome: keep bytes, never guess */ }
+      if (!row) {
+        try {
+          if (!attempt.uploaded) throw error;
+          const retired = await retireUpload(path);
+          if (retired) { uploadAttempts.delete(prepared); await cleanFiles(); }
+          else row = await findRegisteredImage(id, product.id);
+        } catch {
+          setState({ warning: 'نتیجهٔ شبکه مشخص نیست؛ هیچ فایل تأییدنشده‌ای حذف نشد. پیش‌نمایش را نگه دارید و دوباره تلاش کنید.' });
+        }
+        if (!row) throw error;
+      }
     }
-
-    // Promote FIRST, so the shop is never left without its photo.
-    if (request.makePrimary) {
-      setState({ activity: `انتخاب تصویر اصلی «${product.shortName}»` });
-      await setPrimaryImage(row.id);
-    }
-
-    // Only now remove what the admin asked to replace — and only ever an
-    // object this panel uploaded. A committed public/images photo keeps
-    // its file AND its gallery row: it simply stops being the primary.
-    if (
-      request.replacePrevious &&
-      previousPrimary &&
-      previousPrimary.id !== row.id &&
-      previousPrimary.source === 'upload'
-    ) {
-      setState({ activity: `حذف تصویر قبلی «${product.shortName}»` });
-      await dropUploadedImage(previousPrimary);
-    }
-
-    await refreshShopCatalog();
+    if (!row) throw new ProductImageError('ثبت تصویر تأیید نشد؛ گالری را به‌روز کنید.');
+    uploadAttempts.delete(prepared);
+    await cleanFiles();
     return row;
   });
-}
-
-/**
- * Remove an uploaded photo's row + object WITHOUT re-pointing the
- * storefront: used by «جایگزینی», where the new primary was just set
- * deliberately. Committed site files are never touched — neither the
- * repository file nor its gallery row.
- */
-async function dropUploadedImage(image: ProductImage): Promise<void> {
-  if (image.virtual || image.source !== 'upload') return;
-  await deleteImageRow(image.id);
-  if (image.bucket === PRODUCT_IMAGE_BUCKET && image.source === 'upload') {
-    try {
-      await removeImageObject(image.storagePath);
-    } catch (error) {
-      setState({
-        warning: `تصویر قبلی از گالری حذف شد، اما فایل آن در فضای ذخیره‌سازی باقی ماند — ${toUserMessage(error, 'حذف فایل')}`,
-      });
-    }
-  }
 }
 
 function toLocalImage(record: StoredLocalImage, isPrimary: boolean): ProductImage {
@@ -696,124 +679,47 @@ function toLocalImage(record: StoredLocalImage, isPrimary: boolean): ProductImag
 export async function setPrimaryProductImage(image: ProductImage): Promise<void> {
   const product = findProduct(image.productId);
   if (!product) throw new ProductImageError('محصول این تصویر پیدا نشد.');
-
-  await runWrite(`انتخاب تصویر اصلی «${product.shortName}»`, async () => {
-    if (state.source === 'remote' && !image.virtual) {
-      await setPrimaryImage(image.id);
-    } else if (state.source === 'remote') {
-      // A catalog-mirrored row has no database row yet: mirror its URL.
-      await pushProductImageUrl(image.productId, image.storefrontUrl);
-    } else {
-      writeShopImageLocal(product, image.storefrontUrl);
-      const overlay = store.get();
-      if (overlay.clearedProducts.includes(product.id)) {
-        persistOverlay({
-          ...overlay,
-          clearedProducts: overlay.clearedProducts.filter((id) => id !== product.id),
-        });
-      }
-    }
-    await refreshShopCatalog();
+  await runWrite('انتخاب تصویر اصلی', async () => {
+    if (state.source === 'remote') {
+      if (image.virtual) throw new ProductImageError('تصویر هنوز از دیتابیس خوانده نشده است؛ به‌روزرسانی را بزنید.');
+      await mutateImage('primary', product.id, image.id, product.imageUrl ?? null);
+    } else saveDemo(product, store.get(), image.storefrontUrl);
   });
 }
 
-/* ── edit ──────────────────────────────────────────────────── */
-
-/** Update a photo's alt text (what screen readers and the shop announce). */
 export async function updateProductImageAlt(image: ProductImage, altText: string): Promise<void> {
+  const product = findProduct(image.productId);
+  if (!product) throw new ProductImageError('محصول پیدا نشد.');
   const next = altText.trim().slice(0, 200);
-
   await runWrite('ویرایش توضیح تصویر', async () => {
     if (state.source === 'remote') {
-      if (image.virtual) {
-        throw new ProductImageError(
-          'توضیح این تصویر از نام محصول گرفته می‌شود؛ برای ویرایش، آن را به گالری اضافه کنید.',
-        );
-      }
-      await updateImageRow(image.id, { altText: next });
-      return;
+      if (image.virtual) throw new ProductImageError('ابتدا گالری را به‌روز کنید.');
+      await mutateImage('alt', product.id, image.id, product.imageUrl ?? null, { alt_text: next });
+    } else {
+      const overlay = store.get();
+      if (!overlay.uploads.some(row => row.id === image.id) && !overlay.legacy.some(row => row.id === image.id)) throw new ProductImageError('توضیح تصویر فایل سایت از نام محصول گرفته می‌شود.');
+      persistOverlay({ ...overlay, uploads: overlay.uploads.map(row => row.id === image.id ? { ...row, altText: next } : row), legacy: overlay.legacy.map(row => row.id === image.id ? { ...row, altText: next } : row) });
     }
-
-    const overlay = store.get();
-    if (!image.id.startsWith('local-')) {
-      throw new ProductImageError(
-        'توضیح این تصویر از نام محصول گرفته می‌شود؛ برای ویرایش، تصویر جدیدی بارگذاری کنید.',
-      );
-    }
-    persistOverlay({
-      ...overlay,
-      uploads: overlay.uploads.map((upload) => (upload.id === image.id ? { ...upload, altText: next } : upload)),
-    });
   });
 }
 
-/* ── delete ────────────────────────────────────────────────── */
-
-/**
- * Remove one photo AFTER the admin confirmed it.
- *
- * Order matters: first the storefront stops pointing at it, then the
- * gallery row goes, and only then the Storage object. A committed
- * public/images file (source 'legacy') is never deleted from the
- * repository — the row/registration is removed and the shop falls back
- * to the flavour artwork it already renders.
- */
-export async function deleteProductImage(image: ProductImage): Promise<void> {
-  await removeImage(image, { silentStorefront: false });
-}
-
-async function removeImage(image: ProductImage, options: { silentStorefront: boolean }): Promise<void> {
+export async function deleteProductImage(image: ProductImage, allowEmpty = false): Promise<void> {
   const product = findProduct(image.productId);
-  const label = options.silentStorefront ? 'جایگزینی تصویر قبلی' : 'حذف تصویر';
-
-  await runWrite(label, async () => {
-    const others = getImagesForProduct(image.productId).filter((row) => row.id !== image.id);
-    const wasShown = product ? (product.imageUrl ?? '').trim() === image.storefrontUrl : image.isPrimary;
-
+  if (!product) throw new ProductImageError('محصول پیدا نشد.');
+  await runWrite('حذف تصویر', async () => {
     if (state.source === 'remote') {
-      // 1. the storefront must never point at a photo being removed
-      if (wasShown || image.isPrimary) {
-        const next = others[0];
-        if (next && !next.virtual) await setPrimaryImage(next.id);
-        else if (next) await pushProductImageUrl(image.productId, next.storefrontUrl);
-        else await pushProductImageUrl(image.productId, null);
-      }
-
-      // 2. the gallery row
-      if (!image.virtual) await deleteImageRow(image.id);
-
-      // 3. the bytes — only ever for objects this panel uploaded
-      if (image.bucket === PRODUCT_IMAGE_BUCKET && image.source === 'upload' && !image.virtual) {
-        try {
-          await removeImageObject(image.storagePath);
-        } catch (error) {
-          setState({
-            warning: `تصویر از گالری حذف شد، اما فایل آن در فضای ذخیره‌سازی باقی ماند — ${toUserMessage(error, 'حذف فایل')}`,
-          });
-        }
-      }
-
-      await refreshShopCatalog();
-      return;
-    }
-
-    /* ── demo mode ── */
-    const overlay = store.get();
-    if (image.id.startsWith('local-')) {
-      persistOverlay({ ...overlay, uploads: overlay.uploads.filter((upload) => upload.id !== image.id) });
-    } else if (product) {
-      // The committed photo stays in the repository; the shop stops showing it.
-      persistOverlay({
-        ...overlay,
-        clearedProducts: overlay.clearedProducts.includes(product.id)
-          ? overlay.clearedProducts
-          : [...overlay.clearedProducts, product.id],
-      });
-    }
-
-    if (wasShown && product) {
-      const remaining = others.find((row) => row.id.startsWith('local-')) ?? others[0];
-      writeShopImageLocal(product, remaining ? remaining.storefrontUrl : undefined);
+      if (image.virtual) throw new ProductImageError('ابتدا گالری را به‌روز کنید.');
+      await mutateImage('delete', product.id, image.id, product.imageUrl ?? null, { allow_empty: allowEmpty });
+      await cleanFiles();
+    } else {
+      const overlay = store.get();
+      const others = getImagesForProduct(product.id).filter(row => row.id !== image.id);
+      if (!others.length && !allowEmpty) throw new ProductImageError('حذف آخرین تصویر نیاز به تأیید جداگانه دارد.');
+      saveDemo(product, {
+        ...overlay, uploads: overlay.uploads.filter(row => row.id !== image.id),
+        legacy: overlay.legacy.filter(row => row.id !== image.id),
+        clearedProducts: !image.id.startsWith('local-') ? [...new Set([...overlay.clearedProducts, product.id])] : overlay.clearedProducts,
+      }, product.imageUrl === image.storefrontUrl ? others[0]?.storefrontUrl : product.imageUrl);
     }
   });
 }
@@ -846,12 +752,15 @@ export function startProductImageSync(): () => void {
 
   const { data } = supabase.auth.onAuthStateChange((event) => {
     if (event === 'SIGNED_IN' || event === 'USER_UPDATED') {
-      void refreshProductImages({ silent: true });
+      setTimeout(() => void refreshProductImages({ silent: true }), 0);
     } else if (event === 'SIGNED_OUT') {
+      ++readVersion;
       snapshot = null;
       setState({ phase: 'loading', error: null, activity: null });
     }
   });
 
-  return () => data.subscription.unsubscribe();
+  const onFocus = () => { if (!pending) void refreshProductImages({ silent: true }); };
+  window.addEventListener('focus', onFocus);
+  return () => { ++readVersion; data.subscription.unsubscribe(); window.removeEventListener('focus', onFocus); };
 }

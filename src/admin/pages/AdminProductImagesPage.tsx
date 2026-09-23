@@ -24,13 +24,14 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ChangeEvent, DragEvent } from 'react';
 import { getFlavor } from '../../data/products';
 import type { Product, ProductCategory } from '../../types';
-import { useCatalog } from '../../services/catalog';
+import { reloadCatalogFromDatabase, useCatalog } from '../../services/catalog';
 import {
   deleteProductImage,
   dismissImageError,
   dismissImageWarning,
   isImagesConnected,
   refreshProductImages,
+  retryImageCleanup,
   setPrimaryProductImage,
   startProductImageSync,
   toUserMessage,
@@ -129,7 +130,14 @@ export default function AdminProductImagesPage() {
   const busy = state.pending > 0 || state.phase === 'loading';
 
   return (
-    <div>
+    <div className="adm-images-page" dir="rtl">
+      <header className="adm-gallery-intro">
+        <div><span className="adm-gallery-eyebrow">گالری محصولات · ژینو</span>
+          <h2>تصویر خوب، انتخاب دل‌چسب</h2>
+          <p>عکس‌های هر محصول را یک‌جا ببینید؛ با خیال آسوده بارگذاری، انتخاب و جایگزین کنید.</p>
+        </div>
+        <span className="adm-gallery-seal" aria-hidden="true"><IconImage className="h-7 w-7" /></span>
+      </header>
       {/* ── status: where the photos live, and what is happening ── */}
       <div className="adm-images-status panel-lux rounded-2xl p-4 sm:p-5">
         <div className="adm-images-status-head">
@@ -153,7 +161,7 @@ export default function AdminProductImagesPage() {
           </div>
           <button
             type="button"
-            onClick={() => void refreshProductImages()}
+            onClick={() => void Promise.all([reloadCatalogFromDatabase(), refreshProductImages()])}
             disabled={busy}
             className="adm-images-refresh"
             title="خواندن دوبارهٔ تصویرها از دیتابیس"
@@ -215,10 +223,14 @@ export default function AdminProductImagesPage() {
         </div>
       )}
 
+      {connected && <button type="button" className="adm-cleanup-button" disabled={busy}
+        onClick={() => void retryImageCleanup().catch(() => undefined)}>
+        <IconRefresh className="h-4 w-4" /> تلاش مجدد پاک‌سازی فایل‌های بلااستفاده
+      </button>}
       <SavedFlash show={saved} />
 
       {/* ── toolbar ───────────────────────────────────────────── */}
-      <div className="mb-5 mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+      <div className="adm-image-toolbar mb-5 mt-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
         <div className="relative flex-1 sm:min-w-44">
           <IconSearch className="pointer-events-none absolute start-3 top-1/2 h-4 w-4 -translate-y-1/2 text-mocha-light" />
           <input
@@ -271,7 +283,7 @@ export default function AdminProductImagesPage() {
               key={product.id}
               product={product}
               images={byProduct.get(product.id) ?? []}
-              busy={state.pending > 0}
+              busy={busy || state.phase === 'error'}
               onUpload={(mode) => setDialog({ product, mode })}
               onDelete={setDeleting}
               onEdit={setEditing}
@@ -402,6 +414,7 @@ function ProductImageCard({
           aria-label={primary ? `پیش‌نمایش بزرگ تصویر ${product.name}` : 'تصویری بارگذاری نشده است'}
         >
           <ProductVisual
+            reportFailure
             color={flavor.color}
             emoji={flavor.emoji}
             name={product.name}
@@ -420,7 +433,7 @@ function ProductImageCard({
           )}
         </button>
 
-        <div className="min-w-0 flex-1">
+        <div className="adm-image-details min-w-0 flex-1">
           <p className="truncate text-[0.9rem] font-extrabold text-wine-950" title={product.name}>
             {product.name}
           </p>
@@ -448,7 +461,12 @@ function ProductImageCard({
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
+          <p className="adm-image-meta" dir="ltr">{product.id}</p>
+          {primary && <p className="adm-image-meta">
+            {primary.width ? `${toPersianDigits(primary.width)} × ${toPersianDigits(primary.height ?? 0)} پیکسل` : 'تصویر فعلی محصول'}
+            {primary.sizeBytes > 0 ? ` · ${formatBytes(primary.sizeBytes)}` : ''}
+          </p>}
+          <div className="adm-image-main-actions mt-3 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => onUpload('add')}
@@ -484,6 +502,7 @@ function ProductImageCard({
                   aria-label={thumbLabel(product, image, index, 'پیش‌نمایش')}
                 >
                   <ProductVisual
+            reportFailure
                     color={flavor.color}
                     emoji={flavor.emoji}
                     name={image.altText || product.name}
@@ -504,31 +523,33 @@ function ProductImageCard({
                     <button
                       type="button"
                       onClick={() => void promote(image)}
-                      disabled={promoting === image.id}
+                      disabled={busy || promoting !== null || Boolean(image.virtual && isImagesConnected())}
                       className="adm-thumb-action"
                       title="انتخاب به‌عنوان تصویر اصلی محصول"
                       aria-label={thumbLabel(product, image, index, 'انتخاب به‌عنوان تصویر اصلی')}
                     >
-                      {promoting === image.id ? <IconRefresh className="h-3.5 w-3.5 adm-spin" /> : <IconStar className="h-3.5 w-3.5" />}
+                      {promoting === image.id ? <IconRefresh className="h-3.5 w-3.5 adm-spin" /> : <IconStar className="h-3.5 w-3.5" />}<span>اصلی شود</span>
                     </button>
                   )}
                   <button
                     type="button"
                     onClick={() => onEdit(image)}
+                    disabled={busy || Boolean(image.virtual && !image.id.startsWith('local-') && !image.id.startsWith('legacy:'))}
                     className="adm-thumb-action"
                     title="ویرایش توضیح تصویر"
                     aria-label={thumbLabel(product, image, index, 'ویرایش توضیح')}
                   >
-                    <IconPencil className="h-3.5 w-3.5" />
+                    <IconPencil className="h-3.5 w-3.5" /><span>توضیح</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => onDelete(image)}
+                    disabled={busy || Boolean(image.virtual && isImagesConnected())}
                     className="adm-thumb-action adm-thumb-action-danger"
                     title="حذف تصویر"
                     aria-label={thumbLabel(product, image, index, 'حذف تصویر')}
                   >
-                    <IconTrash className="h-3.5 w-3.5" />
+                    <IconTrash className="h-3.5 w-3.5" /><span>حذف</span>
                   </button>
                 </div>
               </li>
@@ -568,19 +589,26 @@ function UploadDialog({
   const [altText, setAltText] = useState(primary?.altText || product.shortName || product.name);
   const [makePrimary, setMakePrimary] = useState(mode === 'replace' || !primary);
   const [replacePrevious, setReplacePrevious] = useState(mode === 'replace' && Boolean(primary));
+  const preparation = useRef(0);
+  const submitting = useRef(false);
+  useEffect(() => () => { preparation.current++; }, []);
   const acceptedTypes = ACCEPTED_IMAGE_TYPES.join(', ');
 
   /** validate + prepare, so the preview shows the exact bytes to be sent */
   const accept = async (file: File | undefined | null) => {
-    if (!file) return;
+    if (!file || submitting.current) return;
+    const version = ++preparation.current;
+    setPrepared(null);
     setStep('preparing');
     setError(null);
     try {
       const next = await prepareProductImage(file, connected ? undefined : { maxEdge: 900 });
+      if (version !== preparation.current) return;
       setPrepared(next);
       if (!altText.trim()) setAltText(product.shortName || product.name);
       setStep('ready');
     } catch (err) {
+      if (version !== preparation.current) return;
       setPrepared(null);
       setError(toUserMessage(err, 'آماده‌سازی تصویر'));
       setStep('error');
@@ -600,11 +628,13 @@ function UploadDialog({
   };
 
   const submit = async () => {
+    if (submitting.current || step === 'preparing') return;
     if (!prepared) {
       setError('ابتدا یک تصویر انتخاب کنید تا پیش‌نمایش آن را ببینید.');
       setStep('error');
       return;
     }
+    submitting.current = true;
     setStep('sending');
     setError(null);
     try {
@@ -613,15 +643,17 @@ function UploadDialog({
         prepared,
         altText,
         makePrimary,
+        expectedUrl: product.imageUrl ?? null,
+        replaceImageId: primary?.id,
         // Only an uploaded Storage object can really be removed; a
         // committed public/images file always stays in the gallery.
-        replacePrevious: replacePrevious && Boolean(primary) && primary?.source === 'upload',
+        replacePrevious: makePrimary && replacePrevious && Boolean(primary) && primary?.source === 'upload',
       });
       onSaved();
     } catch (err) {
       setError(toUserMessage(err, 'بارگذاری تصویر'));
       setStep('error');
-    }
+    } finally { submitting.current = false; }
   };
 
   const legacyPrimary = Boolean(primary && primary.source !== 'upload');
@@ -631,10 +663,11 @@ function UploadDialog({
       title={mode === 'replace' ? `جایگزینی تصویر «${product.shortName}»` : `بارگذاری تصویر «${product.shortName}»`}
       onClose={step === 'sending' ? () => undefined : onClose}
     >
-      <div className="space-y-4">
+      <fieldset className="min-w-0 space-y-4" disabled={step === 'sending'}>
         {/* product context — the manager always sees what they are editing */}
         <div className="adm-upload-context">
           <ProductVisual
+            reportFailure
             color={flavor.color}
             emoji={flavor.emoji}
             name={product.name}
@@ -757,7 +790,7 @@ function UploadDialog({
         {/* alt text */}
         <Field
           label="توضیح تصویر (متن جایگزین)"
-          hint="این متن را صفحه‌خوان‌ها و موتورهای جست‌وجو می‌بینند؛ کوتاه و فارسی بنویسید."
+          hint="توضیح عکس در گالری و پیش‌نمایش؛ کوتاه و فارسی بنویسید."
         >
           <input
             className="adm-input"
@@ -780,7 +813,7 @@ function UploadDialog({
               checked={makePrimary}
               onChange={(value) => {
                 setMakePrimary(value);
-                if (value) setReplacePrevious(mode === 'replace');
+                setReplacePrevious(value && mode === 'replace');
               }}
               label="تصویر اصلی محصول شود"
             />
@@ -847,7 +880,7 @@ function UploadDialog({
             انصراف
           </button>
         </div>
-      </div>
+      </fieldset>
     </Modal>
   );
 }
@@ -869,6 +902,7 @@ function DeleteDialog({
 }) {
   const flavor = product ? getFlavor(product.flavorId) : null;
   const [confirmed, setConfirmed] = useState(false);
+  const [allowEmpty, setAllowEmpty] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -880,7 +914,7 @@ function DeleteDialog({
     setBusy(true);
     setError(null);
     try {
-      await deleteProductImage(image);
+      await deleteProductImage(image, allowEmpty);
       onDeleted();
     } catch (err) {
       setError(toUserMessage(err, 'حذف تصویر'));
@@ -893,6 +927,7 @@ function DeleteDialog({
       <div className="space-y-4">
         <div className="adm-upload-context">
           <ProductVisual
+            reportFailure
             color={flavor?.color ?? 'var(--color-wine-800)'}
             emoji={flavor?.emoji ?? '🍮'}
             name={image.altText || product?.name || 'تصویر'}
@@ -928,6 +963,10 @@ function DeleteDialog({
           <li>سفارش‌ها، سبد خرید و قیمت‌ها دست‌نخورده می‌مانند.</li>
         </ul>
 
+        {!nextPrimary && <label className="adm-confirm-row">
+          <input type="checkbox" checked={allowEmpty} onChange={e => setAllowEmpty(e.target.checked)} disabled={busy} />
+          <span>این آخرین تصویر است؛ تأیید می‌کنم محصول موقتاً بدون عکس نمایش داده شود.</span>
+        </label>}
         <label className="adm-confirm-row">
           <input
             type="checkbox"
@@ -960,7 +999,7 @@ function DeleteDialog({
           <button
             type="button"
             onClick={() => void remove()}
-            disabled={!confirmed || busy}
+            disabled={!confirmed || busy || (!nextPrimary && !allowEmpty)}
             className="btn-lux btn-danger flex-1 rounded-xl"
           >
             {busy ? 'در حال حذف…' : 'حذف قطعی تصویر'}
@@ -1006,7 +1045,7 @@ function AltDialog({
       <div className="space-y-4">
         <Field
           label="متن جایگزین (فارسی)"
-          hint="برای صفحه‌خوان‌ها و جست‌وجو؛ حداکثر ۲۰۰ نویسه."
+          hint="برای توضیح عکس در گالری و صفحه‌خوان‌ها؛ حداکثر ۲۰۰ نویسه."
           error={error ?? undefined}
         >
           <input
@@ -1057,6 +1096,7 @@ function PreviewDialog({
       <figure className="adm-lightbox-body">
         <div className="adm-lightbox-frame">
           <ProductVisual
+            reportFailure
             color={flavor?.color ?? 'var(--color-wine-800)'}
             emoji={flavor?.emoji ?? '🍮'}
             name={image.altText || product?.name || 'تصویر محصول'}
@@ -1077,7 +1117,7 @@ function PreviewDialog({
           <p className="mt-1 text-[0.64rem] leading-5 text-mocha-light">
             {image.width ? `${toPersianDigits(image.width)}×${toPersianDigits(image.height ?? 0)} پیکسل · ` : ''}
             {image.sizeBytes > 0 ? `${formatBytes(image.sizeBytes)} · ` : ''}
-            {image.source === 'upload' ? 'بارگذاری‌شده در فضای ذخیره‌سازی' : 'فایل پوشهٔ public/images سایت'}
+            {image.source === 'upload' ? 'بارگذاری‌شده در فضای ذخیره‌سازی' : image.bucket === 'external' ? 'تصویر با نشانی خارجی' : 'فایل موجود سایت'}
             {image.createdAt ? ` · ${formatDateTime(image.createdAt)}` : ''}
           </p>
         </figcaption>

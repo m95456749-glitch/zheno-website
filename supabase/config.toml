@@ -1,0 +1,7 @@
+# Minimal CLI project config. All remote commands MUST use an explicit --db-url.
+# This does not select a remote project, start services or deploy anything.
+project_id = "zheno-website"
+
+[db.seed]
+enabled = false
+sql_paths = []

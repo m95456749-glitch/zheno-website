@@ -3,7 +3,7 @@
 // کاراکتر زنده: idle, thinking, speaking, greeting
 // ============================================================
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { formatPrice, toPersianDigits } from '../../utils/format';
@@ -281,10 +281,9 @@ export default function AssistantChat({ chat, className }: Props) {
     speak(last.text);
   }, [messages, thinking, voiceOn, voiceSite.autoVoice, voiceSite.voiceEnabled, speak]);
 
-  useEffect(() => {
-    /* ردیفِ پیشنهادها با هر پیامِ تازه جمع می‌شود تا روی گفتگو انباشته
-       نشود — مگر این‌که کاربر خودش آن را برای همین پیام باز کرده باشد
-       (در آن صورت افکتِ دیررسد حقِ بستنش را ندارد). */
+  // Collapse with the message commit, before a post-commit click can reopen
+  // the row. Also preserve an explicit opening for this exact message count.
+  useLayoutEffect(() => {
     if (ideasOpenedAt.current === messages.length) return;
     setIdeasOpen(false);
   }, [messages.length]);

@@ -1,6 +1,7 @@
 -- ZHINO Supabase verification queries
--- Run this in Supabase Dashboard -> SQL Editor after applying the two
--- migrations in filename order. This file is read-only and contains no secrets.
+-- Optional read-only diagnostics after the final image safety migration.
+-- Do NOT replay old migrations or seed data to repair an existing project.
+-- The final migration already includes its mandatory assertions and receipt.
 
 -- 1. Tables and RLS
 select
@@ -11,7 +12,7 @@ where t.schemaname = 'public'
   and t.tablename in (
     'flavors', 'products', 'product_variants', 'inventory',
     'recipes', 'site_content', 'site_settings', 'orders', 'order_items',
-    'product_images'
+    'product_images', 'product_image_cleanup'
   )
 order by t.tablename;
 
@@ -53,7 +54,8 @@ select
 from pg_proc p
 join pg_namespace n on n.oid = p.pronamespace
 where n.nspname = 'public'
-  and p.proname in ('is_admin', 'set_inventory_stock', 'adjust_inventory', 'create_order', 'set_primary_product_image')
+  and p.proname in ('is_admin', 'set_inventory_stock', 'adjust_inventory', 'create_order', 'set_primary_product_image',
+    'manage_product_image', 'retire_product_image_upload', 'complete_product_image_cleanup', 'product_image_api_version')
 order by p.proname, arguments;
 
 -- 6. Enum values
@@ -80,9 +82,9 @@ select id, name, image_url
 from public.products
 order by id;
 
--- 8. Product image gallery (migration 20260919000000_product_images.sql)
--- Registered legacy photos must equal the number of products that carry
--- an image_url, and no product may have two primary images.
+-- 8. Gallery after the FINAL image safety migration.
+-- Legacy rows may exceed products with image_url: old gallery photos are retained.
+-- Primary rows must equal products with nonblank URLs; no duplicate primaries.
 select
   (select count(*) from public.product_images) as image_rows,
   (select count(*) from public.product_images where source = 'legacy') as legacy_rows,
@@ -120,3 +122,24 @@ from public.product_images i
 join public.products p on p.id = i.product_id
 join public.flavors f on f.id = p.flavor_id
 order by p.id, i.is_primary desc, i.created_at;
+
+-- 11. Actual ID types (do not infer them from TS string types).
+select table_name, column_name, data_type
+from information_schema.columns
+where table_schema = 'public' and
+  ((table_name = 'products' and column_name = 'id') or
+   (table_name = 'product_images' and column_name in ('id', 'product_id')));
+
+-- 12. Full effective Storage policy inventory, not just ZHINO names.
+select policyname, permissive, cmd, roles, qual, with_check
+from pg_policies where schemaname = 'storage' and tablename = 'objects'
+order by policyname;
+
+-- 13. Version-2 invariants; execute after the image safety migration.
+select p.id, p.image_url, i.id as image_id, i.storefront_url
+from public.products p left join public.product_images i on i.product_id = p.id and i.is_primary
+where (case when p.image_url is null or btrim(p.image_url)='' then null else p.image_url end) is distinct from i.storefront_url
+  or (select count(*) from public.product_images g where g.product_id=p.id and g.is_primary)
+    <> case when p.image_url is null or btrim(p.image_url)='' then 0 else 1 end;
+
+select count(*) as pending_cleanup from public.product_image_cleanup where completed_at is null;

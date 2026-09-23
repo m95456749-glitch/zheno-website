@@ -17,6 +17,8 @@ export interface LocalStore<T> {
   get(): T;
   /** replace the whole value (immutable) + persist + notify */
   set(next: T): void;
+  /** Persist before publishing; errors leave the previous snapshot intact. */
+  setStrict(next: T): void;
   /** back to the defaults (clears the stored entry) */
   reset(): void;
   subscribe(listener: () => void): () => void;
@@ -67,6 +69,11 @@ export function createLocalStore<T>(
     set: (next: T) => {
       data = next;
       persist(next);
+      listeners.forEach((l) => l());
+    },
+    setStrict: (next: T) => {
+      window.localStorage.setItem(key, JSON.stringify(next));
+      data = next;
       listeners.forEach((l) => l());
     },
     reset: () => {

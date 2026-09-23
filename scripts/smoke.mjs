@@ -21,6 +21,7 @@ import { buildSync } from 'esbuild';
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { randomUUID } from 'node:crypto';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -1290,8 +1291,8 @@ function makeSupabaseStub({
   ];
 
   // ── gallery state (public.product_images + the Storage bucket) ──
-  // Seeded the way migration 20260919000000 seeds it: the photo the
-  // site already ships is registered as a 'legacy' primary row.
+  // API v3 fixture: the existing site photo is a preserved legacy primary.
+  // This in-memory stub never executes migrations or seed SQL.
   const shopImageUrl = products[0]?.image_url ?? 'images/products/jelly-strawberry.jpg';
   const gallery = {
     rows:
@@ -1314,7 +1315,19 @@ function makeSupabaseStub({
           created_at: '2026-09-12T08:00:00.000Z',
         },
       ],
-    seq: 0,
+    cleanup: [],
+  };
+  const operationReceipts = new Map();
+  const liveObjects = new Set(gallery.rows.filter(row => row.source === 'upload').map(row => row.storage_path));
+  const pathReferenced = path => gallery.rows.some(row => row.storage_path === path || row.storefront_url?.includes(path))
+    || products.some(product => product.image_url?.includes(path));
+  const retire = path => {
+    if (pathReferenced(path)) return false;
+    if (!gallery.cleanup.some(job => job.storage_path === path)) gallery.cleanup.push({
+      storage_path: path, created_at: Date.now(), next_attempt_at: Date.now(),
+      attempt_count: 0, claim_id: null, lease_until: null, completed_at: null,
+    });
+    return true;
   };
 
   const fetchImpl = async (input, init = {}) => {
@@ -1383,62 +1396,143 @@ function makeSupabaseStub({
       const objectPath = decodeURIComponent(
         url.split('/storage/v1/object/')[1].replace(/^product-images\//, ''),
       );
+      if (!isAdmin || headers.authorization !== `Bearer ${jwt}`) return json({ message: 'admin_required', code: '42501' }, 403);
+      if (gallery.cleanup.some(job => job.storage_path === objectPath)) return json({ message: 'image_retired', code: '42501' }, 403);
+      if (liveObjects.has(objectPath)) return json({ message: 'The resource already exists', statusCode: '409' }, 409);
+      liveObjects.add(objectPath);
       uploadedObjects.push({ path: objectPath, headers, method });
       return json({ Id: `storage-${uploadedObjects.length}`, Key: `product-images/${objectPath}` });
     }
     if (url.includes('/storage/v1/object/product-images') && method === 'DELETE') {
       const payload = JSON.parse(body || '{}');
-      for (const prefix of payload.prefixes ?? []) removedObjects.push(prefix);
+      if (!isAdmin || headers.authorization !== `Bearer ${jwt}`) return json({ message: 'admin_required', code: '42501' }, 403);
+      for (const path of payload.prefixes ?? []) {
+        if (!gallery.cleanup.some(job => job.storage_path === path) || pathReferenced(path)) {
+          return json({ message: 'permission denied', code: '42501' }, 403);
+        }
+      }
+      for (const path of payload.prefixes ?? []) {
+        liveObjects.delete(path);
+        removedObjects.push(path);
+      }
       return json([]);
     }
 
-    // ── public.product_images ──
-    if (url.includes('/rest/v1/rpc/set_primary_product_image')) {
-      const payload = JSON.parse(body || '{}');
-      primaryPromotions.push({ payload, headers });
-      const target = gallery.rows.find((row) => row.id === payload.p_image_id);
-      if (!target) return json({ message: 'image_not_found', details: null, hint: null }, 400);
-      // exactly what the SQL RPC does: one primary, mirrored into the shop
-      for (const row of gallery.rows) {
-        if (row.product_id === target.product_id) row.is_primary = false;
+    // API v3: version gate, operation receipts, leased cleanup and completion
+    // verification. A successful remove alone must NOT consume the queue entry.
+    if (url.includes('/rest/v1/rpc/product_image_api_version')) {
+      return isAdmin ? json(3) : json({ message: 'admin_required', code: 'P0001' }, 403);
+    }
+    if (url.includes('/rest/v1/product_image_cleanup')) {
+      const params = new URL(url).searchParams;
+      return json(gallery.cleanup.filter(job => params.get('completed_at') !== 'is.null' || job.completed_at === null)
+        .slice(0, Number(params.get('limit') ?? gallery.cleanup.length)));
+    }
+    if (url.includes('/rest/v1/rpc/claim_product_image_cleanup')) {
+      if (!isAdmin || headers.authorization !== `Bearer ${jwt}`) return json({ message: 'admin_required', code: 'P0001' }, 403);
+      const args = JSON.parse(body); const now = Date.now();
+      const jobs = gallery.cleanup.filter(job => job.completed_at === null && job.next_attempt_at <= now
+        && (job.lease_until === null || job.lease_until <= now))
+        .sort((a, b) => a.next_attempt_at - b.next_attempt_at || a.created_at - b.created_at)
+        .slice(0, Math.max(1, Math.min(args.p_limit ?? 20, 20)));
+      for (const job of jobs) {
+        job.claim_id = randomUUID(); job.lease_until = now + 120_000;
+        job.next_attempt_at = job.lease_until; job.attempt_count++;
       }
-      target.is_primary = true;
-      const shopRow = products.find((row) => row.id === target.product_id);
-      if (shopRow) shopRow.image_url = target.storefront_url;
-      return json(shopRow ? [shopRow] : []);
+      return json(jobs.map(({ storage_path, claim_id }) => ({ storage_path, claim_id })));
     }
-    if (url.includes('/rest/v1/product_images') && method === 'POST') {
-      const payload = JSON.parse(body || '{}');
-      insertedImages.push({ payload, headers });
-      gallery.seq += 1;
-      const row = {
-        id: `bbbbbbbb-0000-0000-0000-0000000000${gallery.seq}`,
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-        is_primary: false,
-        sort_order: 0,
-        uploaded_by: '00000000-0000-0000-0000-000000000001',
-        ...payload,
+    if (url.includes('/rest/v1/rpc/complete_product_image_cleanup')) {
+      if (!isAdmin || headers.authorization !== `Bearer ${jwt}`) return json({ message: 'admin_required', code: 'P0001' }, 403);
+      const args = JSON.parse(body);
+      const job = gallery.cleanup.find(job => job.storage_path === args.p_path);
+      if (!job || job.claim_id !== args.p_claim_id) return json(false);
+      if (job.completed_at !== null) return json(true);
+      if (job.lease_until === null || job.lease_until <= Date.now()) return json(false);
+      if (args.p_storage_confirmed !== true || liveObjects.has(job.storage_path) || pathReferenced(job.storage_path)) {
+        job.lease_until = null;
+        job.next_attempt_at = Date.now() + Math.min(3600, 5 * 2 ** Math.min(job.attempt_count, 10)) * 1000;
+        return json(false);
+      }
+      job.completed_at = Date.now(); job.lease_until = null;
+      return json(true);
+    }
+    if (url.includes('/rest/v1/rpc/retire_product_image_upload')) {
+      if (!isAdmin || headers.authorization !== `Bearer ${jwt}`) return json({ message: 'admin_required', code: 'P0001' }, 403);
+      return json(retire(JSON.parse(body).p_path));
+    }
+    if (url.includes('/rest/v1/rpc/manage_product_image')) {
+      const args = JSON.parse(body); const payload = args.p_payload ?? {};
+      if (!isAdmin || headers.authorization !== `Bearer ${jwt}`) return json({ message: 'admin_required', code: 'P0001' }, 403);
+      if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(payload.operation_id ?? '')) {
+        return json({ message: 'invalid_image_operation', code: 'P0001' }, 400);
+      }
+      const request = JSON.stringify(args);
+      const receipt = operationReceipts.get(payload.operation_id);
+      if (receipt) return receipt.request === request ? json(receipt.result)
+        : json({ message: 'image_operation_conflict', code: 'P0001' }, 400);
+      const finish = result => {
+        operationReceipts.set(payload.operation_id, { request, result: JSON.parse(JSON.stringify(result)) });
+        return json(result);
       };
-      gallery.rows.push(row);
-      // .select().single() → PostgREST answers with ONE object
-      return json(row);
+      const shop = products.find(p => p.id === args.p_product_id);
+      if (!shop) return json({ message: 'product_not_found' }, 400);
+      let row = gallery.rows.find(r => r.id === args.p_image_id);
+      if (row && row.product_id !== shop.id) return json({ message:'image_product_mismatch' },400);
+      if (args.p_action === 'register' && row) return json({ message: 'image_operation_conflict', code: 'P0001' }, 400);
+      if (shop.image_url !== args.p_expected_url) return json({ message:'image_conflict' },400);
+      const promote = target => {
+        for (const r of gallery.rows) if (r.product_id === shop.id) r.is_primary = r.id === target.id;
+        shop.image_url = target.storefront_url;
+        primaryPromotions.push({ payload: { p_image_id: target.id }, headers });
+      };
+      const remove = target => {
+        deletedImageIds.push(target.id);
+        gallery.rows = gallery.rows.filter(r => r.id !== target.id);
+        if (target.source === 'upload') retire(target.storage_path);
+      };
+      if (args.p_action === 'register') {
+        if (!liveObjects.has(payload.storage_path)) return json({ message: 'image_object_missing', code: 'P0001' }, 400);
+        if (gallery.cleanup.some(job => job.storage_path === payload.storage_path)) return json({ message: 'image_retired', code: 'P0001' }, 400);
+        if (payload.replace_id && !payload.make_primary && shop.image_url) return json({ message: 'replacement_requires_primary', code: 'P0001' }, 400);
+        const previous = payload.replace_id ? gallery.rows.find(r => r.id === payload.replace_id) : null;
+        if (payload.replace_id && (!previous || previous.product_id !== shop.id || previous.storefront_url !== shop.image_url)) {
+          return json({ message: 'image_conflict', code: 'P0001' }, 400);
+        }
+        row = { ...payload, id:args.p_image_id, product_id:shop.id, storage_bucket:'product-images',
+          is_primary:false, source:'upload', sort_order:0, created_at:new Date().toISOString() };
+        insertedImages.push({ payload:{...row}, headers }); gallery.rows.push(row);
+        if (payload.make_primary || !shop.image_url) promote(row);
+        if (payload.replace_id) {
+          const previous = gallery.rows.find(r => r.id === payload.replace_id);
+          if (previous?.source === 'upload') remove(previous);
+        }
+      } else if (!row) return json({message:'image_not_found'},400);
+      else if (args.p_action === 'primary') promote(row);
+      else if (args.p_action === 'alt') row.alt_text = payload.alt_text;
+      else if (args.p_action === 'delete') {
+        if (row.is_primary) {
+          const next = gallery.rows.find(r => r.product_id === shop.id && r.id !== row.id);
+          if (next) promote(next);
+          else if (payload.allow_empty) shop.image_url = null;
+          else return json({message:'last_product_image'},400);
+        }
+        remove(row); return finish({id:row.id,deleted:true});
+      }
+      return finish(row);
     }
-    if (url.includes('/rest/v1/product_images') && method === 'PATCH') {
-      const payload = JSON.parse(body || '{}');
-      const idMatch = url.match(/[?&]id=eq\.([^&]+)/);
-      const row = gallery.rows.find((item) => item.id === (idMatch ? decodeURIComponent(idMatch[1]) : ''));
-      if (row && typeof payload.alt_text === 'string') row.alt_text = payload.alt_text;
-      return new globalThis.Response(null, { status: 204 });
+    // v3 does NOT permit old primary writers or direct gallery DML, even for
+    // admins. Refuse here too, so a client regression cannot pass this smoke.
+    if (url.includes('/rest/v1/rpc/set_primary_product_image')) {
+      return json({ message: 'image_api_upgrade_required', code: 'P0001' }, 400);
     }
-    if (url.includes('/rest/v1/product_images') && method === 'DELETE') {
-      const idMatch = url.match(/[?&]id=eq\.([^&]+)/);
-      const id = idMatch ? decodeURIComponent(idMatch[1]) : '';
-      deletedImageIds.push(id);
-      gallery.rows = gallery.rows.filter((row) => row.id !== id);
-      return json([]);
+    if (url.includes('/rest/v1/product_images') && method !== 'GET') {
+      return json({ message: 'permission denied', code: '42501' }, 403);
     }
-    if (url.includes('/rest/v1/product_images')) return json(gallery.rows);
+    if (url.includes('/rest/v1/product_images')) {
+      const params = new URL(url).searchParams;
+      return json(gallery.rows.filter(row => (!params.get('id') || params.get('id') === `eq.${row.id}`)
+        && (!params.get('product_id') || params.get('product_id') === `eq.${row.product_id}`)));
+    }
 
     if (url.includes('/rest/v1/products') && method === 'PATCH') {
       const payload = JSON.parse(body || '{}');
@@ -1655,7 +1749,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
       if (!fileInput) {
         fail('connected images — no file input in the upload dialog');
       } else {
-        const file = new dom.window.File(['fake-jpeg-bytes-for-the-smoke-test'], 'new-photo.jpg', {
+        const file = new dom.window.File([readFileSync(join(root, 'public/images/products/jelly-strawberry.jpg'))], 'new-photo.jpg', {
           type: 'image/jpeg',
         });
         Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
@@ -1670,7 +1764,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
         else click(saveButton);
 
         const promoted = await waitFor(() => stub.primaryPromotions.length > 0);
-        if (promoted) ok('connected images — promotion went through the set_primary_product_image RPC');
+        if (promoted) ok('connected images — promotion went through the manage_product_image transaction RPC');
         else fail('connected images — the RPC was never called: ' + text().slice(0, 200));
 
         const upload = stub.uploadedObjects[0];
@@ -1760,7 +1854,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
           if (removed) ok('connected images — the uploaded object was removed from Storage');
           else fail('connected images — the Storage object was never removed');
 
-          if (stub.deletedImageIds.length === 1 && stub.deletedImageIds[0].startsWith('bbbbbbbb')) {
+          if (stub.deletedImageIds.length === 1 && stub.deletedImageIds[0] === stub.insertedImages[0]?.payload.id) {
             ok('connected images — only the uploaded gallery row was deleted');
           } else {
             fail(`connected images — unexpected deleted rows: ${JSON.stringify(stub.deletedImageIds)}`);
@@ -1783,6 +1877,13 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
           const settled = await waitFor(() => text().includes('۱ تصویر'));
           if (settled) ok('connected images — the gallery re-read the database after the delete');
           else fail('connected images — the gallery did not refresh after the delete');
+          const cleanupJob = stub.gallery.cleanup.find(job => job.storage_path === upload?.path);
+          if (cleanupJob?.claim_id && cleanupJob.completed_at !== null) {
+            ok('connected images — v3 cleanup was claimed and verified complete; retirement tombstone retained');
+          } else {
+            fail('connected images — cleanup lacks a verified v3 completion receipt');
+          }
+
         }
       }
     }
@@ -1817,7 +1918,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
 // Storage answers «Bucket not found» because the images migration was
 // never (fully) applied on the project. The panel must:
 //   1. show ONE honest Persian banner that names the missing bucket AND
-//      the exact migration file, instead of dying mid-write;
+//      the reviewed v3 migration guidance, instead of dying mid-write;
 //   2. leave zero damage: no uploaded object, no gallery row, no delete,
 //      no rewrite of the shop's image field;
 //   3. recover on the spot once the migration is applied — the same
@@ -1869,7 +1970,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
       if (!fileInput) {
         fail('bucket-missing — no file input in the upload dialog');
       } else {
-        const file = new dom.window.File(['fake-jpeg-bytes-for-the-smoke-test'], 'replacement.jpg', {
+        const file = new dom.window.File([readFileSync(join(root, 'public/images/products/jelly-strawberry.jpg'))], 'replacement.jpg', {
           type: 'image/jpeg',
         });
         Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
@@ -1885,10 +1986,10 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
         if (bannerShown) ok('bucket-missing — the Persian «bucket missing» banner is shown verbatim');
         else fail('bucket-missing — no bucket error banner: ' + text().slice(0, 200));
 
-        if (bannerShown && text().includes('۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql')) {
-          ok('bucket-missing — the banner names the exact migration file to apply');
+        if (bannerShown && text().includes('نصب نسخهٔ ۳ را طبق راهنمای بازبینی‌شدهٔ migration بررسی کنید.')) {
+          ok('bucket-missing — the banner gives the exact reviewed v3 migration guidance');
         } else {
-          fail('bucket-missing — the banner does not name the migration file');
+          fail('bucket-missing — the banner is missing the exact reviewed v3 migration guidance');
         }
 
         // zero damage from the refused write
@@ -1928,7 +2029,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
         } else {
           fail(`bucket-missing — image_url after heal: ${stub.products[0].image_url}`);
         }
-        const healed = await waitFor(() => !text().includes('مهاجرت ۲۰۲۶۰۹۱۹۰۰۰۰۰۰_product_images.sql'));
+        const healed = await waitFor(() => !text().includes('فضای ذخیره‌سازی «product-images» در Supabase ساخته نشده است'));
         if (healed) ok('bucket-missing — the error banner cleared after the successful retry');
         else fail('bucket-missing — the stale error banner never cleared');
       }
@@ -1987,7 +2088,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
     click(findButton('بارگذاری تصویر'));
     await waitFor(() => text().includes('تصویر را اینجا رها کنید'));
     const fileInput = document.querySelector('input[data-testid="product-image-file"]');
-    const file = new dom.window.File(['fake-jpeg-bytes-curation'], 'curation.jpg', { type: 'image/jpeg' });
+    const file = new dom.window.File([readFileSync(join(root, 'public/images/products/jelly-strawberry.jpg'))], 'curation.jpg', { type: 'image/jpeg' });
     Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
     fileInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
     await waitFor(() => text().includes('حجم اصلی'));
@@ -2021,13 +2122,13 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
         click(findButton('ذخیره'));
         const patched = await waitFor(() =>
           stub.calls.some((call) =>
-            call.url.includes('/rest/v1/product_images') &&
-            call.method === 'PATCH' &&
+            call.url.includes('/rest/v1/rpc/manage_product_image') &&
+            JSON.parse(call.body || '{}').p_action === 'alt' &&
             call.body.includes('عکس تازهٔ ژله توت فرنگی'),
           ),
         );
         if (patched && stub.gallery.rows.find((row) => row.id === uploadRow?.id)?.alt_text === 'عکس تازهٔ ژله توت فرنگی') {
-          ok('gallery curation — the alt text is PATCHed into the database row');
+          ok('gallery curation — the alt text is saved through the transaction RPC');
         } else {
           fail('gallery curation — the alt text never reached the database');
         }
@@ -2042,7 +2143,7 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
       click(star);
       const promoted = await waitFor(() => stub.primaryPromotions.length === 1);
       if (promoted && stub.primaryPromotions[0].payload.p_image_id === uploadRow?.id) {
-        ok('gallery curation — the star button promotes through set_primary_product_image');
+        ok('gallery curation — the star button promotes through manage_product_image');
       } else if (!promoted) {
         fail('gallery curation — the star button never called the RPC: ' + text().slice(0, 160));
       }
