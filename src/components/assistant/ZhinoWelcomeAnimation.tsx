@@ -21,8 +21,20 @@
 //   • هیچ re-renderای رخ نمی‌دهد — همه‌چیز ref + style.transform.
 //   • فقط transform/opacity؛ easing با transitionهای CSS.
 //   • هیچ دو دستی هم‌زمان حرکت نمی‌کند؛ بدن فقط همراه gesture می‌چرخد.
-//   • intervalها تصادفی و متنوع‌اند (۵–۱۳ ثانیه) تا حس loop نباشد.
+//   • intervalها تصادفی و متنوع‌اند (۶–۱۵ ثانیه) تا حس loop نباشد.
 //   • prefers-reduced-motion → کل macro خاموش (micro هم مثل قبل خاموش).
+//
+// اصلاح کیفیت حرکات درشت (بدون ویرایش عکس و بدون AI image):
+//   • دست: «بالا آمدن» با translate + scale جزئی؛ rotate حداکثر ۳ درجه —
+//     نمای روبه‌رو حفظ می‌شود و پشت/لبهٔ دستِ سه‌بعدی‌وار ساخته نمی‌شود.
+//   • سر: pivot نزدیک محل اتصال به گردن؛ rotate ≤۳ درجه + کمی translate
+//     و scale — لایهٔ سر همیشه از روی سرِ اصلی می‌پوشاند؛ لبهٔ دوتایی
+//     یا فضای خالی کنار گردن/پشت سر ظاهر نمی‌شود و سر از بدن جدا نمی‌شود.
+//   • شانه/بالاتنه: حرکت ثانویه، کوچک‌تر و با تأخیر از حرکت اصلی.
+//   • رفتن سریع‌تر از برگشت؛ مکث‌ها و دامنه‌ها در هر اجرا اندکی متفاوت —
+//     هیچ A→B→A دقیق و هیچ لوپ تکراری ساخته نمی‌شود.
+//   • لایهٔ underlay (همان تصویر، ایستا و بدون transform) زیر همهٔ لایه‌ها
+//     هر فضای خالی احتمالی را با محتوای اصلی همان ناحیه پر می‌کند.
 // فایل تصویر اصلی دست‌نخورده است.
 // ============================================================
 
@@ -188,7 +200,7 @@ export default function ZhinoWelcomeAnimation({ className }: Props) {
     };
   }, []);
 
-  /* ══════════════ موتور رفتار macro — فاز ۱۵ ══════════════ */
+  /* ══════════════ موتور رفتار macro — اصلاح کیفیت حرکات درشت ══════════════ */
   useEffect(() => {
     let reduced = false;
     try {
@@ -212,25 +224,67 @@ export default function ZhinoWelcomeAnimation({ className }: Props) {
       timers.push(window.setTimeout(() => { if (alive) fn(); }, ms) as unknown as number);
     };
 
-    // نوشتن transform با duration اختصاصی هر گام — easing از CSS
-    const move = (el: HTMLDivElement, tf: string, dur: number) => {
+    /* رفتن: نرم و سریع‌تر — برگشت: بلندتر و آرام‌تر (تقارن نداریم) */
+    const EASE_OUT = 'cubic-bezier(0.22, 1, 0.36, 1)';
+    const EASE_SOFT = 'cubic-bezier(0.4, 0, 0.2, 1)';
+    const ROT_MAX = 3; // سقف چرخش — نمای روبه‌رو هرگز به نمای کنار/پشت تبدیل نمی‌شود
+
+    const clamp = (v: number, a: number, b: number) => (v < a ? a : v > b ? b : v);
+    /** هر اجرا اندکی متفاوت — تا هیچ A→B→A دقیق یا لوپ تکراری ساخته نشود */
+    const vary = (k = 0.14) => 1 + (Math.random() * 2 - 1) * k;
+    /** زمان‌ها هم اندکی تصادفی‌اند تا مکث‌ها طبیعی به‌نظر برسند */
+    const durJ = (ms: number) => Math.round(ms * (0.9 + Math.random() * 0.28));
+
+    const move = (el: HTMLDivElement, tf: string, dur: number, ease: string) => {
       el.style.transitionDuration = `${dur}ms`;
+      el.style.transitionTimingFunction = ease;
       el.style.transform = tf;
     };
-    const setHead = (r: number, x: number, y: number, dur: number) =>
-      move(head, `translate(${x}px, ${y}px) rotate(${r}deg)`, dur);
-    const setArmL = (r: number, y: number, dur: number) =>
-      move(armL, `translateY(${y}px) rotate(${r}deg)`, dur);
-    const setArmR = (r: number, y: number, dur: number) =>
-      move(armR, `translateY(${y}px) rotate(${r}deg)`, dur);
-    const setBody = (r: number, y: number, dur: number) =>
-      move(body, `translateY(${y}px) rotate(${r}deg)`, dur);
-    /** بازگشت نرم به حالت عادی — transition بلندتر برای settle */
+
+    /**
+     * سر — pivot نزدیک محل اتصال سر به گردن (در CSS)؛ چرخش محدود +
+     * کمی translate و scale. scale جزئی طوری محاسبه می‌شود که لایهٔ سر
+     * همیشه از روی سرِ اصلی بپوشاند؛ پس لبهٔ دوتایی، حفرهٔ خالی یا
+     * جدا شدن سر از گردن هرگز دیده نمی‌شود.
+     */
+    const setHead = (r: number, x: number, y: number, dur: number, ease = EASE_OUT) => {
+      const rr = clamp(r, -ROT_MAX, ROT_MAX);
+      const s = Math.abs(rr) < 0.05 ? 1 : 1.01 + Math.abs(rr) * 0.0185;
+      move(
+        head,
+        `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rr.toFixed(2)}deg) scale(${s.toFixed(4)})`,
+        dur,
+        ease,
+      );
+    };
+
+    /**
+     * دست — «بالا آمدن» طبیعی با translate + scale بسیار جزئی؛ چرخش
+     * فقط ≤۳ درجه در همان نمای روبه‌رو. pivot شانه در CSS نزدیک مفصل
+     * واقعی است تا دست شناور یا چرخیدهٔ سه‌بعدی به‌نظر نرسد.
+     */
+    const setArm = (el: HTMLDivElement, x: number, y: number, r: number, dur: number, ease = EASE_OUT) => {
+      const rr = clamp(r, -ROT_MAX, ROT_MAX);
+      const s = y < -0.15 ? 1 + Math.min(0.024, Math.abs(y) * 0.0032 + Math.abs(rr) * 0.003) : 1;
+      move(
+        el,
+        `translate(${x.toFixed(2)}px, ${y.toFixed(2)}px) rotate(${rr.toFixed(2)}deg) scale(${s.toFixed(4)})`,
+        dur,
+        ease,
+      );
+    };
+
+    /** بدن/شانه — ثانویه: دامنه کوچک‌تر از حرکت اصلی و همیشه با تأخیر صدا زده می‌شود */
+    const setBody = (r: number, y: number, dur: number, ease = EASE_OUT) => {
+      move(body, `translateY(${y.toFixed(2)}px) rotate(${clamp(r, -1.6, 1.6).toFixed(2)}deg)`, dur, ease);
+    };
+
+    /** بازگشت نرم، بلند و آرام‌تر از رفتن — بدون توقف یا پرش ناگهانی */
     const rest = (dur: number) => {
-      setHead(0, 0, 0, dur);
-      setArmL(0, 0, dur);
-      setArmR(0, 0, dur);
-      setBody(0, 0, dur + 160);
+      setHead(0, 0, 0, dur, EASE_SOFT);
+      setArm(armL, 0, 0, 0, Math.round(dur * 0.94), EASE_SOFT);
+      setArm(armR, 0, 0, 0, Math.round(dur * 0.94), EASE_SOFT);
+      setBody(0, 0, dur + 200, EASE_SOFT);
     };
     const setState = (s: Behavior) => {
       wrap.dataset.behavior = s;
@@ -238,69 +292,89 @@ export default function ZhinoWelcomeAnimation({ className }: Props) {
 
     /* ── gestureها: هر کدام طول خودشان را برمی‌گردانند ── */
 
-    // Greeting: بالا آوردن یک دست + wave کوتاه و نرم + کج شدن ملایم سر
+    // Greeting: بالا آوردن یک دست (ترجمهٔ محوری + چرخش خیلی کم) +
+    // تکان ملایم با دامنهٔ کاهشی + کج شدن جزئی سر و بدن با تأخیر
     const greeting = (): number => {
       setState('greeting');
-      at(0, () => { setArmR(-9, -6, 520); setHead(3.5, 1.5, -1, 560); setBody(1.1, 0, 640); });
-      at(620, () => setArmR(-3.5, -6, 260));
-      at(930, () => setArmR(-10, -7, 260));
-      at(1240, () => setArmR(-4, -6, 260));
-      at(1550, () => setArmR(-10, -7, 280));
-      at(1950, () => rest(880));
-      at(2900, () => setState('idle'));
-      return 3100;
+      const k = vary();
+      const R = -1.6 * k; // پایهٔ چرخش ≤ ~۱٫۹° — بقیهٔ «بالا رفتن» از translate
+      const Y = -6.4 * k;
+      const X = 1.3 * k;
+      at(0, () => setArm(armR, X, Y, R, durJ(560)));
+      at(130, () => setHead(1.7 * k, 0.8 * k, -0.7 * k, durJ(640))); // سر کمی عقب‌تر از دست
+      at(240, () => setBody(-0.85 * k, -0.35 * k, durJ(760))); // شانه/بالاتنه ثانویه
+
+      // تکان دست — نوسان کوتاه، دامنهٔ کاهشی و زمان‌های نامنظم (نورَن نیست)
+      at(660, () => setArm(armR, X + 0.2 * k, Y - 1.1 * k, R - 0.85 * k, durJ(300)));
+      at(980, () => setArm(armR, X, Y + 0.2 * k, R + 0.15 * k, durJ(290)));
+      at(1300, () => setArm(armR, X + 0.3 * k, Y - 1.3 * k, R - 0.95 * k, durJ(310)));
+      at(1640, () => setArm(armR, X, Y, R - 0.1 * k, durJ(300)));
+      at(1960, () => setArm(armR, X + 0.2 * k, Y - 0.8 * k, R - 0.6 * k, durJ(330)));
+
+      at(2400, () => rest(durJ(1020))); // توقف کوتاه، بعد برگشتِ بلند و نرم
+      at(3450, () => setState('idle'));
+      return 3600;
     };
 
-    // نگاه به یک طرف: چرخش محسوس سر + همراهی بدن
+    // نگاه به یک طرف: چرخش محدود سر + همراهی کوچک و تأخیری بدن
     const look = (dir: 1 | -1): number => {
       setState('curious');
-      at(0, () => { setHead(dir * 6, dir * 2.5, 0.4, 760); });
-      at(140, () => setBody(dir * 1.6, 0, 860));
-      at(1000, () => setHead(dir * 4.6, dir * 2, 0.9, 460)); // settle کوچک حین نگاه
-      at(2050, () => rest(950));
-      at(3000, () => setState('idle'));
-      return 3100;
-    };
-
-    // Thinking: چرخش کم سر + مکث + جابجایی بسیار جزئی بدن
-    const thinking = (): number => {
-      setState('thinking');
-      at(0, () => { setHead(-4, -1.5, -1.6, 800); setBody(0.9, 0.4, 900); });
-      at(1150, () => setHead(-2.6, -1, -2.1, 560)); // یک جابجایی ریز بعد از مکث
-      at(2350, () => rest(1000));
-      at(3350, () => setState('idle'));
+      const k = vary();
+      at(0, () => setHead(dir * 2.5 * k, dir * 1.5 * k, 0.3 * k, durJ(800)));
+      at(150 + Math.round(Math.random() * 90), () => setBody(dir * 1.25 * k, 0, durJ(900)));
+      at(1080, () => setHead(dir * 2.0 * k, dir * 1.15 * k, 0.55 * k, durJ(520))); // settle کوچک حین نگاه
+      at(2150 + Math.round(Math.random() * 200), () => rest(durJ(1000)));
+      at(3300, () => setState('idle'));
       return 3450;
     };
 
-    // Curious: کج‌کردن سر + چرخش خفیف بدن در جهت مخالف
+    // Thinking: چرخش کم سر + مکث + جابجایی جزئی بدن (ثانویه، با تأخیر)
+    const thinking = (): number => {
+      setState('thinking');
+      const k = vary();
+      at(0, () => setHead(-2.2 * k, -1.0 * k, -1.2 * k, durJ(840)));
+      at(170, () => setBody(0.8 * k, 0.3 * k, durJ(940)));
+      at(1250, () => setHead(-1.6 * k, -0.7 * k, -1.5 * k, durJ(560))); // جابجایی ریز بعد از مکث
+      at(2500, () => rest(durJ(1020)));
+      at(3600, () => setState('idle'));
+      return 3750;
+    };
+
+    // Curious: کج‌کردن کوچک سر + چرخش خفیف بدن در جهت مخالف
     const curious = (): number => {
       setState('curious');
-      at(0, () => { setHead(5.5, 2, 1.6, 700); setBody(-1.3, 0, 820); });
-      at(950, () => setHead(6.6, 2.4, 2.2, 430));
-      at(2050, () => rest(950));
-      at(3000, () => setState('idle'));
-      return 3100;
+      const k = vary();
+      at(0, () => setHead(2.1 * k, 1.3 * k, 1.0 * k, durJ(760)));
+      at(160, () => setBody(-1.05 * k, 0, durJ(880)));
+      at(1020, () => setHead(2.55 * k, 1.6 * k, 1.35 * k, durJ(480)));
+      at(2150, () => rest(durJ(980)));
+      at(3300, () => setState('idle'));
+      return 3450;
     };
 
     // بالا آوردن جزئی دستِ دیگر — هیچ‌وقت هر دو دست با هم نه
     const armLift = (): number => {
       setState('idle');
-      at(0, () => { setArmL(7, -5, 620); setHead(-2, -0.8, 0, 640); setBody(-0.8, 0, 720); });
-      at(1450, () => rest(900));
-      return 2500;
+      const k = vary();
+      at(0, () => setArm(armL, -1.0 * k, -4.8 * k, 1.7 * k, durJ(660)));
+      at(150, () => setHead(-1.1 * k, -0.5 * k, 0.2, durJ(720)));
+      at(260, () => setBody(0.7 * k, -0.3, durJ(840)));
+      at(1580, () => rest(durJ(1000)));
+      return 2750;
     };
 
     // یک تکانِ سرِ کوچک (nod) — تنوع
     const nod = (): number => {
       setState('idle');
-      at(0, () => setHead(0.6, 0, 2.4, 420));
-      at(520, () => setHead(0, 0, 0.4, 380));
-      at(1020, () => setHead(0.6, 0, 2.2, 400));
-      at(1540, () => rest(720));
-      return 2400;
+      const k = vary(0.2);
+      at(0, () => setHead(0.3 * k, 0, 1.9 * k, durJ(450)));
+      at(560, () => setHead(0.1 * k, 0, 0.5, durJ(420)));
+      at(1060, () => setHead(0.3 * k, 0, 1.6 * k, durJ(430)));
+      at(1600, () => rest(durJ(780)));
+      return 2550;
     };
 
-    /* ── زمان‌بندی غیرلوپی: فاصلهٔ تصادفی بین gestureهای بزرگ ── */
+    /* ── زمان‌بندی غیرلوپی: فاصلهٔ تصادفی و متنوع بین gestureهای بزرگ ── */
     const pickGesture = () => {
       const roll = Math.random();
       if (roll < 0.24) return look(1);
@@ -312,17 +386,17 @@ export default function ZhinoWelcomeAnimation({ className }: Props) {
     };
 
     const scheduleNext = () => {
-      const wait = 5200 + Math.random() * 7800; // ۵٫۲ تا ۱۳ ثانیه
+      const wait = 6000 + Math.random() * 9000; // ۶ تا ۱۵ ثانیه — فاصله متنوع
       at(wait, () => {
         const len = pickGesture();
-        at(len + 400, scheduleNext);
+        at(len + 400 + Math.round(Math.random() * 900), scheduleNext);
       });
     };
 
     // ورود: یک greeting کوتاه، بعد چرخهٔ idle
     at(650, () => {
       const len = greeting();
-      at(len + 3600 + Math.random() * 2400, scheduleNext);
+      at(len + 4200 + Math.random() * 3200, scheduleNext);
     });
 
     return () => {
@@ -334,6 +408,12 @@ export default function ZhinoWelcomeAnimation({ className }: Props) {
 
   return (
     <div ref={wrapRef} className={cn('zhino-welcome-photo-wrap', className)} data-behavior="idle">
+      {/* لایهٔ underlay — همان تصویر، ایستا و بدون transform؛ زیر همهٔ
+          لایه‌ها هر فضای خالیِ احتمالی هنگام جدا شدن سر/دست را با
+          محتوای اصلی همان ناحیه پر می‌کند (بدون حفره و بدون ویرایش عکس) */}
+      <div className="zw-layer zw-underlay" aria-hidden="true">
+        <img className="zw-img-underlay" src={ASSISTANT_BOT_IMAGE} alt="" draggable={false} />
+      </div>
       {/* لایهٔ macro بالاتنه — فقط همراه gestureها می‌چرخد */}
       <div ref={macroBodyRef} className="zw-layer zw-body-macro">
         {/* لایه‌ micro تنفس (فاز ۱۴) */}
