@@ -3,7 +3,7 @@
 // کاراکتر زنده: idle, thinking, speaking, greeting
 // ============================================================
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { cn } from '../../utils/cn';
 import { formatPrice, toPersianDigits } from '../../utils/format';
@@ -13,7 +13,7 @@ import { cheapestVariant } from '../../services/assistant/knowledge';
 import type { AssistantProductFact } from '../../services/assistant/types';
 import AssistantAvatar from './AssistantAvatar';
 import ZhinoWelcomeAnimation from './ZhinoWelcomeAnimation';
-import { ASSISTANT_NAME } from './assistantData';
+import { ASSISTANT_NAME, ASSISTANT_WELCOME_SUBTITLE } from './assistantData';
 import { useAssistantSpeech } from './useAssistantSpeech';
 import { useVoiceSettings } from '../../services/voiceSettings';
 import {
@@ -117,6 +117,78 @@ function CheckIcon() {
   return (
     <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
       <path d="m4.6 10.4 3.3 3.3 7.5-7.5" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/* ══════════════════════════════════════════════════════════════
+   آیکون‌های پارسیم‌خواهِ «کنش‌های سریع» — خطی، یک‌سبک، سبک (۱٫۴pt)
+   ══════════════════════════════════════════════════════════════ */
+function ProductsIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M10 3.2 4.2 5.9v3.4c0 2.9 2.5 4.9 5.8 6.3 3.3-1.4 5.8-3.4 5.8-6.3V5.9L10 3.2Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="m7.6 9.9 1.7 1.7 3.3-3.5" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function CompassIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <circle cx="10" cy="10" r="7.2" stroke="currentColor" strokeWidth="1.4" />
+      <path d="m13.3 6.7-2.1 4.5-4.5 2.1 2.1-4.5 4.5-2.1Z" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function BowlIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M4 9.5h12c-.3 3.4-2.2 5.7-6 5.7S4.3 12.9 4 9.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 5.6c2.2 1 6.2 1.4 8.4 1.4h5.6M6.5 6.4c.5-1 1.6-1.6 3-1.4s2.4 1.2 2.8 1.9" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function CupIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M13.6 9.4v3.2c0 2-1.7 3.6-3.6 3.6S6.4 14.6 6.4 12.6V9.4m7.2 0c.9 0 1.6.7 1.6 1.6s-.7 1.6-1.6 1.6m-7.2-3.2L10 3l1.8 6.4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function FloralIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <circle cx="10" cy="10" r="1.7" stroke="currentColor" strokeWidth="1.4" />
+      <g stroke="currentColor" strokeWidth="1.4" strokeLinecap="round">
+        <path d="M10 4.6c0-1.2 1-2.1 2.2-2.1 1.1 1.4 1.1 2.9 0 4.2" />
+        <path d="M10 15.4c0 1.2 1 2.1 2.2 2.1 1.1-1.4 1.1-2.9 0-4.2" />
+        <path d="M15.4 10c1.2 0 2.1-1 2.1-2.2-1.4-1.1-2.9-1.1-4.2 0" />
+        <path d="M4.6 10c-1.2 0-2.1-1-2.1-2.2 1.4-1.1 2.9-1.1 4.2 0" />
+      </g>
+    </svg>
+  );
+}
+function SparkleIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M10 3.4v2.2M10 14.4v2.2M3.4 10h2.2M14.4 10h2.2" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+      <path d="M10 6.8 11 9l2.2 1-2.2 1-1 2.2-1-2.2L6.8 10 9 9l1-2.2Z" fill="currentColor" />
+    </svg>
+  );
+}
+function MixIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M12.6 9.3 14 10.7l-4.7 4.7a2.3 2.3 0 0 1-3.3 0l-.4-.4a2.3 2.3 0 0 1 0-3.3L10.3 7" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 9.2 12.4 2.8a1.4 1.4 0 0 1 2 0l2.8 2.8a1.4 1.4 0 0 1 0 2L10.8 14" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+function TagIcon() {
+  return (
+    <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" aria-hidden="true">
+      <path d="M3.5 10.7V5.3c0-.9.7-1.6 1.6-1.6h5.4c.4 0 .8.2 1.1.5l4.8 4.8c.6.6.6 1.5 0 2.1l-3.9 3.9c-.6.6-1.5.6-2.1 0l-4.8-4.8a1.6 1.6 0 0 1-.5-1.1v-2.4H3.5Z" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="7.1" cy="7.1" r="1.1" stroke="currentColor" strokeWidth="1.4" />
     </svg>
   );
 }
@@ -311,12 +383,34 @@ export default function AssistantChat({ chat, className }: Props) {
     speak(text);
   };
 
+  /**
+   * آیکون‌های هم‌سبکِ «کنش‌های سریع» — بر اساس خودِ نوشتهٔ هر پیشنهاد،
+   * بدون افزودن متن تازه؛ هر آیتم یک آیکونِ خطی ظریف قرض می‌گیرد.
+   */
+  const quickIcons: Record<string, ReactNode> = {
+    'معرفی محصولات': <ProductsIcon />,
+    'راهنمای انتخاب محصول': <CompassIcon />,
+    'طرز تهیه ژله': <BowlIcon />,
+    'طرز تهیه کاستر': <CupIcon />,
+    'طعم‌های موجود': <FloralIcon />,
+    'پیشنهاد دسر': <SparkleIcon />,
+    'ترکیب طعم‌ها': <MixIcon />,
+    'قیمت و موجودی': <TagIcon />,
+  };
+  const quickIconFor = (label: string): ReactNode => quickIcons[label] ?? <IdeaIcon />;
+
   const chips = (
     <div className="zhino-assistant-ideas-list">
       {suggestions.map((item) => (
-        <button key={item.label} type="button" className="zhino-assistant-chip" onClick={() => send(item.prompt)} disabled={thinking}>
+        <button
+          key={item.label}
+          type="button"
+          className="zhino-assistant-chip"
+          onClick={() => send(item.prompt)}
+          disabled={thinking}
+        >
           <span className="zhino-assistant-chip-spark" aria-hidden="true">
-            <IdeaIcon />
+            {quickIconFor(item.label)}
           </span>
           <span className="zhino-assistant-chip-text">{item.label}</span>
         </button>
@@ -329,11 +423,16 @@ export default function AssistantChat({ chat, className }: Props) {
       <div className="zhino-assistant-feed" ref={feedRef} role="log" aria-live="polite" aria-busy={thinking} aria-label="پیام‌های گفتگو" tabIndex={0}>
         {fresh ? (
           <div className="zhino-assistant-welcome">
-            <ZhinoWelcomeAnimation />
+            <div className="zhino-assistant-welcome-figure">
+              <ZhinoWelcomeAnimation />
+            </div>
+            <p className="zhino-assistant-welcome-kicker" aria-hidden="true">
+              دستیار اختصاصی ژینو
+            </p>
             <h2 className="zhino-assistant-welcome-title">{ASSISTANT_WELCOME_TITLE}</h2>
+            <p className="zhino-assistant-welcome-subtitle">{ASSISTANT_WELCOME_SUBTITLE}</p>
             <span className="rule-lux zhino-assistant-welcome-rule" aria-hidden="true" />
             {voiceSite.suggestions && <div className="zhino-assistant-welcome-chips">{chips}</div>}
-            <p className="zhino-assistant-welcome-hint">برای دیدن محصولات ژینو کافی است بپرسید</p>
           </div>
         ) : (
           messages.map((message) => (
