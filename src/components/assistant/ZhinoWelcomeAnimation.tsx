@@ -451,6 +451,9 @@ export default function ZhinoWelcomeAnimation({ className }: Props) {
           </div>
         </div>
       </div>
+      {/* fade لبهٔ پایینی — ایستا و جدا از لایه‌های متحرک: لبهٔ مستطیلی
+          عکس بی‌آنکه با gestureها حرکت کند یا دوبل دیده شود محو می‌شود */}
+      <div className="zw-layer zw-fade" aria-hidden="true" />
     </div>
   );
 }
