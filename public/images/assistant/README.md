@@ -17,7 +17,6 @@
 | ----------------------------------------------- | ----------------------------------------------- |
 | دکمهٔ شناور (همهٔ صفحه‌های فروشگاه)               | `src/components/assistant/ZhinoAssistant.tsx`   |
 | صفحهٔ مستقل `/assistant` (سربرگ + خوش‌آمدگویی)    | `src/pages/AssistantPage.tsx` / `ZhinoWelcomeAnimation.tsx` |
-| صحنهٔ استودیو (ربات قهرمان صحنه)                  | `src/components/assistant/ZhinoLoungeScene.tsx` |
 | آواتار ربات (سربرگ گفتگو و پیام‌ها)               | `src/components/assistant/AssistantAvatar.tsx`  |
 
 - همهٔ این‌ها از یک آدرس مشترک (`ASSISTANT_BOT_IMAGE` در
