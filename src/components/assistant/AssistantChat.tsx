@@ -1,6 +1,6 @@
 // ============================================================
-// ZHINO — محیط گفتگو با کاراکتر سه‌بعدی جدید
-// کاراکتر زنده: idle, thinking, speaking, greeting
+// ZHINO — محیط گفتگو با دستیار ژینو
+// حالت‌های آواتار: idle, thinking, speaking
 // ============================================================
 
 import { useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
