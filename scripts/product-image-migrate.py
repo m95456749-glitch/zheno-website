@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
+import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -97,14 +100,102 @@ def mask(value):
     print("::add-mask::" + value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), flush=True)
 
 
+def psql_failure_category(stderr):
+    text = (stderr or "").lower()
+    checks = [
+        ("dns_failure", ("could not translate host name", "temporary failure in name resolution", "name or service not known")),
+        ("tcp_connection_refused", ("connection refused",)),
+        ("tcp_connection_timeout", ("connection timed out", "timeout expired", "operation timed out", "could not connect to server: connection timed out")),
+        ("tls_certificate_failure", ("certificate verify failed", "server certificate", "could not get server certificate", "root certificate")),
+        ("tls_not_supported", ("does not support ssl",)),
+        ("authentication_failure", ("password authentication failed", "authentication failed", "scram authentication failed", "no password supplied")),
+        ("network_access_denied", ("no pg_hba.conf entry", "network is unreachable")),
+        ("connection_closed_or_reset", ("connection reset", "server closed the connection unexpectedly", "ssl syscall error", "eof detected", "terminating connection")),
+        ("postgresql_query_failure", ("syntax error", "permission denied", "must be owner", "does not exist")),
+    ]
+    for category, needles in checks:
+        if any(needle in text for needle in needles):
+            return category
+    return "unknown_psql_failure"
+
+
+def postgres_network_diagnostic(env):
+    host = env.get("PGHOST", "")
+    port_text = env.get("PGPORT", "5432")
+    ca = env.get("PGSSLROOTCERT", "/etc/ssl/certs/ca-certificates.crt")
+    if not host:
+        return "configuration_failure", "PGHOST was not set for the read-only check."
+    try:
+        port = int(port_text)
+    except (TypeError, ValueError):
+        return "configuration_failure", "PGPORT is not a valid integer."
+    target = f"{host}:{port}"
+    try:
+        socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return "dns_failure", f"DNS lookup failed for {target}."
+
+    sock = None
+    try:
+        sock = socket.create_connection((host, port), timeout=10)
+        sock.settimeout(10)
+        # PostgreSQL TLS is negotiated by an SSLRequest packet before the startup
+        # packet; no username, password or SQL is sent by this diagnostic.
+        sock.sendall(struct.pack("!II", 8, 80877103))
+        response = sock.recv(1)
+        if response == b"S":
+            context = ssl.create_default_context(cafile=ca if Path(ca).is_file() else None)
+            with context.wrap_socket(sock, server_hostname=host) as tls:
+                tls.version()
+            return "network_tls_ok", f"DNS, TCP and PostgreSQL TLS negotiation succeeded for {target}; authentication/query is the next layer."
+        if response == b"N":
+            return "tls_not_supported", f"{target} accepted TCP but rejected PostgreSQL TLS; verify-full cannot be used with this endpoint."
+        if response == b"":
+            return "postgres_protocol_connection_closed", f"{target} accepted TCP but closed before PostgreSQL TLS negotiation; check Supabase network restrictions, pooler endpoint and port."
+        return "postgres_protocol_unexpected_response", f"{target} returned an unexpected PostgreSQL TLS negotiation response; check pooler endpoint and port."
+    except ssl.SSLCertVerificationError:
+        return "tls_certificate_failure", f"TLS certificate verification failed for {target}."
+    except ssl.SSLError:
+        return "tls_failure", f"TLS negotiation failed for {target}."
+    except (ConnectionResetError, BrokenPipeError):
+        return "postgres_protocol_connection_reset", f"{target} accepted TCP but reset the PostgreSQL handshake before authentication; check Supabase network restrictions, pooler endpoint and port."
+    except socket.timeout:
+        return "tcp_or_postgres_protocol_timeout", f"Timed out while connecting or negotiating PostgreSQL TLS with {target}."
+    except OSError:
+        return "tcp_connection_failure", f"TCP connection to {target} failed."
+    finally:
+        try:
+            if sock is not None:
+                sock.close()
+        except OSError:
+            pass
+
+
+def safe_process_failure(label, result, env):
+    if label != "Read-only database check":
+        return (label +
+                " failed; raw output withheld to protect secrets/data. If apply started, SQL may already be committed; inspect history before retrying.")
+    psql_category = psql_failure_category(result.stderr)
+    network_category, network_detail = postgres_network_diagnostic(env)
+    return (
+        f"{label} failed; psql_category={psql_category}; network_diagnostic={network_category}. "
+        f"{network_detail} Raw psql output withheld to protect secrets/data; no migration SQL was executed."
+    )
+
+
 def execute(args, env, label, input_text=None):
     try:
         result = subprocess.run(args, input=input_text, text=True, capture_output=True,
                                 env=env, timeout=180, check=False)
     except (OSError, subprocess.TimeoutExpired):
+        if label == "Read-only database check":
+            network_category, network_detail = postgres_network_diagnostic(env)
+            raise SafetyError(
+                f"{label} failed or timed out; network_diagnostic={network_category}. "
+                f"{network_detail} Raw output withheld; no migration SQL was executed."
+            ) from None
         raise SafetyError(label + " failed or timed out; raw output withheld. Check connectivity/history before retrying.") from None
-    require(result.returncode == 0,
-            label + " failed; raw output withheld to protect secrets/data. If apply started, SQL may already be committed; inspect history before retrying.")
+    require(result.returncode == 0, safe_process_failure(label, result, env))
     return result.stdout
 
 
