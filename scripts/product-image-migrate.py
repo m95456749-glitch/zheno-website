@@ -21,6 +21,8 @@ from urllib.parse import quote, urlencode
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "supabase/product-image-migration-manifest.json"
+SUPABASE_CA = ROOT / "supabase/certs/prod-ca-2021.crt"
+SUPABASE_CA_SHA256_DER = "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
 CONFIRMATION = "APPLY_PRODUCT_IMAGES_V3"
 
 
@@ -31,6 +33,18 @@ class SafetyError(Exception):
 def require(condition, message):
     if not condition:
         raise SafetyError(message)
+
+
+def supabase_ca_path(root=ROOT):
+    ca = root / "supabase/certs/prod-ca-2021.crt"
+    require(ca.is_file(), "Supabase Root 2021 CA certificate is missing from supabase/certs/prod-ca-2021.crt.")
+    try:
+        der = ssl.PEM_cert_to_DER_cert(ca.read_text())
+    except (OSError, ValueError):
+        raise SafetyError("Supabase Root 2021 CA certificate is not a valid PEM certificate.") from None
+    require(hashlib.sha256(der).hexdigest() == SUPABASE_CA_SHA256_DER,
+            "Supabase Root 2021 CA certificate fingerprint changed; review TLS trust before connecting.")
+    return str(ca)
 
 
 def load_manifest(root=ROOT):
@@ -82,8 +96,7 @@ def connection(env):
             "Set SUPABASE_DB_HOST to the exact shared Session pooler host from Dashboard > Connect.")
     require(password and not any(c in password for c in "\x00\r\n"),
             "SUPABASE_DB_PASSWORD is missing or contains a newline/NUL; it is never normalized.")
-    ca = "/etc/ssl/certs/ca-certificates.crt"
-    require(Path(ca).is_file(), "System CA certificate bundle is missing.")
+    ca = supabase_ca_path()
     user = "postgres." + ref
     params = urlencode({"sslmode": "verify-full", "sslrootcert": ca, "connect_timeout": "15"})
     url = f"postgresql://{user}:{quote(password, safe='')}@{host}:5432/postgres?{params}"
@@ -122,7 +135,7 @@ def psql_failure_category(stderr):
 def postgres_network_diagnostic(env):
     host = env.get("PGHOST", "")
     port_text = env.get("PGPORT", "5432")
-    ca = env.get("PGSSLROOTCERT", "/etc/ssl/certs/ca-certificates.crt")
+    ca = env.get("PGSSLROOTCERT", str(SUPABASE_CA))
     if not host:
         return "configuration_failure", "PGHOST was not set for the read-only check."
     try:
