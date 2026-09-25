@@ -9,8 +9,9 @@ export function localImageTestUrl(raw) {
   assert.equal(endpoint.password, '', 'Use isolated local trust authentication, never credentials.');
   assert.ok([...endpoint.searchParams.keys()].every(key => key === 'sslmode'), 'No host overrides or connection options.');
   assert.ok([null, 'disable'].includes(endpoint.searchParams.get('sslmode')), 'This harness requires a TLS-disabled local cluster; never downgrade a TLS connection.');
-  // Native initdb has ssl=off. CLI 2.117.0 requires TLS when this is omitted;
-  // node-postgres does not. Explicit ONLY after all loopback guards pass.
+  // Native initdb has ssl=off. Keep sslmode=disable explicit for the positive
+  // local CLI path; the negative TLS diagnostic uses sslmode=verify-full instead
+  // of relying on omitted-sslmode behaviour, which can vary by CLI/libpq build.
   // Production runner retains mandatory sslmode=verify-full, unchanged.
   endpoint.searchParams.set('sslmode', 'disable');
   return endpoint;
@@ -18,7 +19,7 @@ export function localImageTestUrl(raw) {
 
 export function localCliFailure(result) {
   const text = result.stderr ?? '';
-  if (/server does not support SSL connections/i.test(text)) return 'local TLS mismatch: server ssl=off; explicit sslmode=disable required';
+  if (/ssl/i.test(text)) return 'local TLS mismatch: local server ssl=off; use the explicit sslmode=disable fixture URL for local CLI checks';
   if (/connection refused/i.test(text)) return 'local PostgreSQL is not listening';
   if (/read.only transaction/i.test(text)) return 'server rejected a write on a read-only connection';
   if (result.error?.code === 'ETIMEDOUT') return 'local CLI command timed out';

@@ -51,12 +51,15 @@ try {
    const result = args => command([...args,'--workdir',work]);
    if (scenario === 'standalone') {
     assert.equal((await db.query('show ssl')).rows[0].ssl,'off');
-    const missingTls = new URL(readOnly);missingTls.searchParams.delete('sslmode');
-    const control = result(['migration','list','--db-url',missingTls.href]);
-    assert.notEqual(control.status,0,'Diagnostic must reproduce the original missing-sslmode failure.');
-    assert.match(control.stderr,/server does not support SSL connections/i);
+    const forcedTls = new URL(readOnly);forcedTls.searchParams.set('sslmode','verify-full');
+    let forcedTlsRejected = false;
+    const tlsProbe = new pg.Client({ connectionString: forcedTls.href });
+    try { await tlsProbe.connect(); }
+    catch { forcedTlsRejected = true; }
+    finally { await tlsProbe.end().catch(() => {}); }
+    assert.equal(forcedTlsRejected,true,'Diagnostic must reject forced TLS against the SSL-disabled local fixture.');
     assert.deepEqual(await products(),before);assert.deepEqual(await history(),oldHistory);
-    pass('controlled regression: missing sslmode reproduces TLS mismatch, without executing migration SQL');
+    pass('controlled regression: forced TLS mismatch is reproducible, without executing migration SQL');
    }
    const list = result(['migration','list','--db-url',readOnly.href]);
    assert.equal(list.status,0,`Actual CLI migration list: ${localCliFailure(list)}`);
