@@ -98,13 +98,14 @@ def connection(env):
             "SUPABASE_DB_PASSWORD is missing or contains a newline/NUL; it is never normalized.")
     ca = supabase_ca_path()
     user = "postgres." + ref
-    params = urlencode({"sslmode": "verify-full", "sslrootcert": ca, "connect_timeout": "15"})
+    params = urlencode({"sslmode": "verify-full", "sslrootcert": ca, "channel_binding": "disable", "connect_timeout": "15"})
     url = f"postgresql://{user}:{quote(password, safe='')}@{host}:5432/postgres?{params}"
     # Do not forward arbitrary libpq overrides, PATs, service keys or debugging.
     child = {k: v for k, v in env.items() if not k.startswith(("PG", "SUPABASE_", "DEBUG"))}
     child.update({"PGHOST": host, "PGPORT": "5432", "PGUSER": user, "PGDATABASE": "postgres",
                   "PGPASSWORD": password, "PGSSLMODE": "verify-full", "PGSSLROOTCERT": ca,
-                  "PGCONNECT_TIMEOUT": "15", "PGAPPNAME": "zhino-images-manual-migration"})
+                  "PGCHANNELBINDING": "disable", "PGCONNECT_TIMEOUT": "15",
+                  "PGAPPNAME": "zhino-images-manual-migration"})
     return url, child
 
 
@@ -121,7 +122,7 @@ def psql_failure_category(stderr):
         ("tcp_connection_timeout", ("connection timed out", "timeout expired", "operation timed out", "could not connect to server: connection timed out")),
         ("tls_certificate_failure", ("certificate verify failed", "server certificate", "could not get server certificate", "root certificate")),
         ("tls_not_supported", ("does not support ssl",)),
-        ("authentication_failure", ("password authentication failed", "authentication failed", "scram authentication failed", "no password supplied")),
+        ("authentication_failure", ("password authentication failed", "authentication failed", "failed sasl auth", "invalid scram server-final-message", "scram authentication failed", "no password supplied", "wrong password")),
         ("network_access_denied", ("no pg_hba.conf entry", "network is unreachable")),
         ("connection_closed_or_reset", ("connection reset", "server closed the connection unexpectedly", "ssl syscall error", "eof detected", "terminating connection")),
         ("postgresql_query_failure", ("syntax error", "permission denied", "must be owner", "does not exist")),
@@ -130,6 +131,21 @@ def psql_failure_category(stderr):
         if any(needle in text for needle in needles):
             return category
     return "unknown_psql_failure"
+
+
+def psql_auth_detail(stderr):
+    text = (stderr or "").lower()
+    if "tenant or user not found" in text:
+        return "tenant_or_user_not_found"
+    if "no password supplied" in text:
+        return "password_not_supplied"
+    if "wrong password" in text or "password authentication failed" in text:
+        return "password_rejected"
+    if "failed sasl auth" in text or "invalid scram server-final-message" in text or "scram" in text:
+        return "scram_sasl_rejected"
+    if "authentication failed" in text:
+        return "authentication_rejected"
+    return "not_auth_or_unknown"
 
 
 def postgres_network_diagnostic(env):
@@ -189,10 +205,12 @@ def safe_process_failure(label, result, env):
         return (label +
                 " failed; raw output withheld to protect secrets/data. If apply started, SQL may already be committed; inspect history before retrying.")
     psql_category = psql_failure_category(result.stderr)
+    auth_detail = psql_auth_detail(result.stderr) if psql_category == "authentication_failure" else "n/a"
     network_category, network_detail = postgres_network_diagnostic(env)
     return (
-        f"{label} failed; psql_category={psql_category}; network_diagnostic={network_category}. "
-        f"{network_detail} Raw psql output withheld to protect secrets/data; no migration SQL was executed."
+        f"{label} failed; psql_category={psql_category}; auth_detail={auth_detail}; "
+        f"network_diagnostic={network_category}. {network_detail} Raw psql output withheld to protect secrets/data; "
+        "no migration SQL was executed."
     )
 
 
