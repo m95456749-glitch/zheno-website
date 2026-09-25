@@ -136,6 +136,186 @@ jobs:
             sudo apt-get install -y --no-install-recommends postgresql-client
           fi
           psql --version
+      - name: Read-only product image v3 state (no migration SQL)
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_HOST: ${{ vars.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re, ssl, subprocess, sys
+          from pathlib import Path
+
+          CA = Path('supabase/certs/prod-ca-2021.crt')
+          CA_SHA256_DER = '807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa'
+
+          def fail(message):
+              print('::error::' + message, file=sys.stderr)
+              raise SystemExit(1)
+
+          def mask(value):
+              print('::add-mask::' + value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
+
+          ref = os.environ.get('SUPABASE_PROJECT_REF', '')
+          host = os.environ.get('SUPABASE_DB_HOST', '')
+          password = os.environ.get('SUPABASE_DB_PASSWORD', '')
+          if not re.fullmatch(r'[a-z]{20}', ref):
+              fail('SUPABASE_PROJECT_REF is not the expected 20-letter project ref.')
+          if not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)*\.pooler\.supabase\.com', host):
+              fail('SUPABASE_DB_HOST is not a Supabase pooler hostname.')
+          if not password or any(c in password for c in '\x00\r\n'):
+              fail('SUPABASE_DB_PASSWORD is missing or contains newline/NUL; no connection attempted.')
+          if not CA.is_file():
+              fail('Supabase Root 2021 CA is missing.')
+          try:
+              der = ssl.PEM_cert_to_DER_cert(CA.read_text())
+          except Exception:
+              fail('Supabase Root 2021 CA is not valid PEM.')
+          if hashlib.sha256(der).hexdigest() != CA_SHA256_DER:
+              fail('Supabase Root 2021 CA fingerprint mismatch.')
+          mask(password)
+
+          child = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
+          child.update({
+              'PGHOST': host,
+              'PGPORT': '5432',
+              'PGUSER': 'postgres.' + ref,
+              'PGDATABASE': 'postgres',
+              'PGPASSWORD': password,
+              'PGSSLMODE': 'verify-full',
+              'PGSSLROOTCERT': str(CA),
+              'PGCHANNELBINDING': 'disable',
+              'PGCONNECT_TIMEOUT': '15',
+              'PGAPPNAME': 'zhino-product-image-v3-readonly-check',
+              'PGOPTIONS': '-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=5000',
+          })
+
+          def classify(stderr):
+              text = (stderr or '').lower()
+              if 'password authentication failed' in text or 'failed sasl auth' in text or 'scram' in text:
+                  return 'authentication_failure'
+              if 'certificate' in text or 'root certificate' in text:
+                  return 'tls_certificate_failure'
+              if 'could not translate host name' in text:
+                  return 'dns_failure'
+              if 'timeout' in text:
+                  return 'timeout'
+              if 'permission denied' in text or 'admin_required' in text:
+                  return 'permission_or_admin_check_failed'
+              if 'does not exist' in text or 'pgrst' in text:
+                  return 'missing_object'
+              return 'psql_failed'
+
+          def psql_json(sql, label):
+              args = ['psql', '--no-psqlrc', '--no-password', '--tuples-only', '--no-align', '--quiet', '--set=ON_ERROR_STOP=1']
+              try:
+                  result = subprocess.run(args, input=sql, text=True, capture_output=True, env=child, timeout=90, check=False)
+              except Exception:
+                  fail(label + ' failed before completion; raw output withheld.')
+              if result.returncode != 0:
+                  raise RuntimeError(classify(result.stderr))
+              try:
+                  return json.loads(result.stdout.strip())
+              except Exception:
+                  fail(label + ' returned non-JSON output; raw output withheld.')
+
+          metadata_sql = r"""
+          select json_build_object(
+            'project_ref', current_setting('app.settings.project_ref', true),
+            'product_images_table_exists', to_regclass('public.product_images') is not null,
+            'product_image_cleanup_table_exists', to_regclass('public.product_image_cleanup') is not null,
+            'product_image_operations_table_exists', to_regclass('public.product_image_operations') is not null,
+            'product_image_contract_table_exists', to_regclass('public.product_image_contract') is not null,
+            'product_image_api_version_function_exists', to_regprocedure('public.product_image_api_version()') is not null,
+            'manage_product_image_rpc_exists', to_regprocedure('public.manage_product_image(text,text,uuid,text,jsonb)') is not null,
+            'schema_fingerprint_function_exists', to_regprocedure('public.product_image_schema_fingerprint()') is not null,
+            'product_triggers_present', (
+              select count(*) = 2 from pg_trigger
+              where tgrelid = to_regclass('public.products')
+                and not tgisinternal and tgenabled = 'O'
+                and tgname in ('products_normalize_image_url','products_sync_primary_image')
+            ),
+            'bucket_exists', exists(select 1 from storage.buckets where id = 'product-images'),
+            'bucket_public', (select public from storage.buckets where id = 'product-images'),
+            'bucket_file_size_limit', (select file_size_limit from storage.buckets where id = 'product-images'),
+            'bucket_allowed_mime_types_ok', exists(
+              select 1 from storage.buckets where id = 'product-images'
+                and allowed_mime_types = array['image/jpeg','image/png','image/webp','image/avif','image/gif']
+            )
+          );
+          """
+
+          try:
+              state = psql_json(metadata_sql, 'metadata check')
+          except RuntimeError as error:
+              fail('metadata check failed; category=' + str(error) + '; raw output withheld; no SQL changes were attempted.')
+
+          if state.get('product_image_contract_table_exists'):
+              try:
+                  state.update(psql_json("select json_build_object('contract_v3_present', exists(select 1 from public.product_image_contract where version = 3));", 'contract check'))
+              except RuntimeError as error:
+                  state['contract_v3_present'] = False
+                  state['contract_check_error'] = str(error)
+          else:
+              state['contract_v3_present'] = False
+
+          if state.get('product_image_contract_table_exists') and state.get('schema_fingerprint_function_exists'):
+              try:
+                  state.update(psql_json("select json_build_object('contract_fingerprint_matches', exists(select 1 from public.product_image_contract where version = 3 and fingerprint = public.product_image_schema_fingerprint()));", 'contract fingerprint check'))
+              except RuntimeError as error:
+                  state['contract_fingerprint_matches'] = False
+                  state['contract_fingerprint_error'] = str(error)
+          else:
+              state['contract_fingerprint_matches'] = False
+
+          if state.get('product_image_api_version_function_exists'):
+              version_sql = r"""
+              begin transaction read only;
+              set local role authenticated;
+              set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-000000000000","app_metadata":{"role":"admin"}}';
+              select json_build_object('api_version_returned', public.product_image_api_version());
+              rollback;
+              """
+              try:
+                  state.update(psql_json(version_sql, 'api version check'))
+              except RuntimeError as error:
+                  state['api_version_returned'] = None
+                  state['api_version_error'] = str(error)
+          else:
+              state['api_version_returned'] = None
+
+          required = [
+              'product_images_table_exists', 'product_image_cleanup_table_exists',
+              'product_image_operations_table_exists', 'product_image_contract_table_exists',
+              'product_image_api_version_function_exists', 'manage_product_image_rpc_exists',
+              'schema_fingerprint_function_exists', 'product_triggers_present',
+              'bucket_exists', 'bucket_public', 'bucket_allowed_mime_types_ok',
+              'contract_v3_present', 'contract_fingerprint_matches',
+          ]
+          state['bucket_file_size_limit_ok'] = state.get('bucket_file_size_limit') == 8388608
+          required.append('bucket_file_size_limit_ok')
+          state['v3_applied'] = state.get('api_version_returned') == 3 and all(state.get(k) is True for k in required)
+
+          compact = {
+              'v3_applied': state['v3_applied'],
+              'api_version': state.get('api_version_returned'),
+              'product_images_table': state.get('product_images_table_exists'),
+              'manage_rpc': state.get('manage_product_image_rpc_exists'),
+              'bucket': state.get('bucket_exists'),
+              'bucket_public': state.get('bucket_public'),
+              'contract_v3': state.get('contract_v3_present'),
+              'fingerprint_ok': state.get('contract_fingerprint_matches'),
+          }
+          notice = ' '.join(f'{k}={json.dumps(v, ensure_ascii=False)}' for k, v in compact.items())
+          print('::notice title=product-image-v3-readonly::' + notice)
+          print('::notice title=product-image-v3-json::' + json.dumps(state, sort_keys=True, ensure_ascii=False))
+          summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as fh:
+                  fh.write('### Product image v3 read-only state\n\n')
+                  fh.write('```json\n' + json.dumps(state, indent=2, sort_keys=True, ensure_ascii=False) + '\n```\n')
+          PY
+
       - name: Guarded plan or explicitly authorized apply
         env:
           MIGRATION_MODE: ${{ inputs.mode }}
