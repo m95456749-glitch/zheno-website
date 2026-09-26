@@ -383,9 +383,12 @@ jobs:
               select public.product_image_api_version()
               where to_regprocedure('public.product_image_api_version()') is not null
             ),
-            'contract_rows', coalesce((
+            'contract_table_exists', to_regclass('public.product_image_contract') is not null,
+            'contract_versions', coalesce((
               select json_agg(t) from (
-                select version, created_at from public.product_image_contract order by version
+                select (to_jsonb(c) ->> 'version')          as version,
+                       ((to_jsonb(c) -> 'fingerprint') is not null) as has_fingerprint
+                from public.product_image_contract c
               ) t
             ), '[]'::json),
             'product_images_policy_kind', coalesce((
