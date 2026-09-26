@@ -35,6 +35,9 @@ import AdminLoginPage from './admin/pages/AdminLoginPage';
 import AdminDashboardPage from './admin/pages/AdminDashboardPage';
 import AdminProductsPage from './admin/pages/AdminProductsPage';
 import AdminProductImagesPage from './admin/pages/AdminProductImagesPage';
+// TEMPORARY diagnostic page — remove together with the file once the
+// product-image upload issue is closed.
+import AdminAuthTracePage from './admin/pages/AdminAuthTracePage';
 import AdminOrdersPage from './admin/pages/AdminOrdersPage';
 import AdminInventoryPage from './admin/pages/AdminInventoryPage';
 import AdminRecipesPage from './admin/pages/AdminRecipesPage';
@@ -95,6 +98,8 @@ export default function App() {
           <Route path="recipes" element={<AdminRecipesPage />} />
           <Route path="site-content" element={<AdminSiteContentPage />} />
           <Route path="settings" element={<AdminSettingsPage />} />
+          {/* TEMPORARY: admin access trace — delete with the page file */}
+          <Route path="auth-trace" element={<AdminAuthTracePage />} />
           {/* «ربات ژینو» — همهٔ امکانات دستیار (صدا، رفتار، وضعیت سرویس)
               فقط در این یک صفحهٔ جمع‌شونده مدیریت می‌شود */}
           <Route path="assistant" element={<AdminAssistantPage />} />

@@ -31,7 +31,10 @@ async function setup() {
    const url=new URL(typeof input==='string'?input:input.url); const body=typeof init.body==='string'?JSON.parse(init.body):{};
    const method=init.method??'GET';state.calls.push({path:url.pathname,method,body});
    const path=url.pathname;
-   if(path.endsWith('/rpc/product_image_api_version'))return json(3);
+   if(path.endsWith('/rpc/product_image_api_version')){
+     if(state.flags.apiVersionFail)return json({message:'could not find the function public.product_image_api_version in the schema cache',code:'PGRST202'},404);
+     return json(state.flags.apiVersion ?? 3);
+   }
    if(path.endsWith('/products'))return json([product]);
    if(path.endsWith('/product_variants')||path.endsWith('/inventory'))return json([]); // deliberately variantless
    if(path.endsWith('/product_images')){
@@ -251,6 +254,20 @@ await test('RLS refusal without a session names the missing session and never re
  await assert.rejects(api.images.uploadProductImage(request),/نشست مدیر/);
  const uploads=state.calls.filter(c=>c.path.includes('/storage/v1/object/product-images')&&c.method==='POST');
  assert.equal(uploads.length,1); // healed retry is impossible without a session
+ assert.equal(state.rows.length,1);assert.equal(state.objects.size,0);
+});
+await test('a database whose image contract is not v3 is named before any byte is uploaded',async({api,state,request})=>{
+ state.flags.apiVersion=2;
+ await assert.rejects(api.images.uploadProductImage(request),/هم\u200cخوان نیست/);
+ const uploads=state.calls.filter(c=>c.path.includes('/storage/v1/object/product-images')&&c.method==='POST');
+ assert.equal(uploads.length,0);            // refused before Storage is touched
+ assert.equal(state.rows.length,1);assert.equal(state.objects.size,0);
+});
+await test('a failing version handshake refuses the write instead of blaming the admin role',async({api,state,request})=>{
+ state.flags.apiVersionFail=true;
+ await assert.rejects(api.images.uploadProductImage(request),/نسخه/);
+ const uploads=state.calls.filter(c=>c.path.includes('/storage/v1/object/product-images')&&c.method==='POST');
+ assert.equal(uploads.length,0);
  assert.equal(state.rows.length,1);assert.equal(state.objects.size,0);
 });
 await test('admin_required from the RPC without a session is reported as a session problem',async({api,state,request})=>{
