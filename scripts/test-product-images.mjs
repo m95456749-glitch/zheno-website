@@ -45,12 +45,14 @@ async function setup() {
        for(const key of body.prefixes??[])state.objects.delete(key);if(state.flags.lostStorageDeleteResponse)throw new TypeError('Failed to fetch');return json([]);
      }
      if(state.gate)await state.gate;
+     if(state.flags.uploadRlsDeny)return json({statusCode:'403',error:'Forbidden',message:'new row violates row-level security policy for table "objects"'},403);
      if(state.flags.uploadFail)return json({message:'Bucket not found'},400);
      const key=decodeURIComponent(path.split('/object/product-images/')[1]);
      if(state.objects.has(key))return json({message:'The resource already exists',statusCode:'409'},409);
      state.objects.add(key);if(state.flags.lostUpload)throw new TypeError('Failed to fetch');return json({Key:'ok'});
    }
    if(path.endsWith('/rpc/manage_product_image')){
+     if(state.flags.registerAdminRequired)return json({message:'admin_required',code:'P0001'},403);
      if(state.flags.registerFail)return json({message:'permission denied',code:'42501'},403);
      if(state.flags.zeroResult)return json(null);
      const p=body.p_payload;
@@ -243,5 +245,17 @@ await test('unavailable browser intent persistence stops before metadata write',
  dom.window.Storage.prototype.setItem=()=>{throw new Error('quota');};
  await assert.rejects(api.images.setPrimaryProductImage(image),/ثبت ایمن/);
  assert.equal(state.calls.filter(c=>c.path.endsWith('/rpc/manage_product_image')).length,0);
+});
+await test('RLS refusal without a session names the missing session and never retries blindly',async({api,state,request})=>{
+ state.flags.uploadRlsDeny=true;
+ await assert.rejects(api.images.uploadProductImage(request),/نشست مدیر/);
+ const uploads=state.calls.filter(c=>c.path.includes('/storage/v1/object/product-images')&&c.method==='POST');
+ assert.equal(uploads.length,1); // healed retry is impossible without a session
+ assert.equal(state.rows.length,1);assert.equal(state.objects.size,0);
+});
+await test('admin_required from the RPC without a session is reported as a session problem',async({api,state,request})=>{
+ state.flags.registerAdminRequired=true;
+ await assert.rejects(api.images.uploadProductImage(request),/نشست مدیر/);
+ assert.equal(state.rows.length,1);assert.ok(state.product.image_url.startsWith('images/'));
 });
 console.log(`\n${passed} total image service/regression checks passed (mocked network, NOT hosted Storage).`);

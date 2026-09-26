@@ -5,11 +5,20 @@
 //   1. the operator signs in with a Supabase Auth account
 //      (e-mail + password) — credentials go straight to Supabase
 //      over HTTPS and are never stored by this app;
-//   2. the session is then checked for ADMINISTRATOR rights by
-//      calling the database's own `is_admin()` function, which reads
-//      the `role` claim from the JWT's app_metadata. Set
-//      {"role":"admin"} in app_metadata for the operator account
-//      (Dashboard → Authentication → Users, or the Management API).
+//   2. administrator rights are then verified against Supabase
+//      ITSELF, in three layers (services/supabaseAdminRole.ts):
+//        a. the database's own is_admin() must accept the current
+//           token — the same check every write will face;
+//        b. the LIVE user record (auth.getUser(), i.e. the row in
+//           auth.users) must carry app_metadata.role === 'admin' —
+//           the role must be set in app_metadata, NOT user_metadata;
+//        c. when the record is admin but the session token predates
+//           the grant, the session is refreshed so the re-issued JWT
+//           carries the claim the database reads.
+//      Set {"role":"admin"} in app_metadata for the operator account
+//      (Dashboard → Authentication → Users → App metadata, or the
+//      Management API). If it lands in user_metadata by mistake, the
+//      login page now says exactly that instead of failing later.
 //
 // Step 2 is not decorative: every write in the admin panel is also
 // authorised by Row Level Security, so a signed-in non-admin account
@@ -23,7 +32,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase } from '../../services/supabaseClient';
-import { fetchIsAdmin } from '../../services/supabaseCatalog';
+import { AdminAccessError, checkAdminAccess, describeAdminAccessIssue } from '../../services/supabaseAdminRole';
 import type { AdminAuthProvider, AdminSession } from './authService';
 
 /** Session shape returned by the Supabase provider. */
@@ -69,19 +78,14 @@ export class SupabaseAuthProvider implements AdminAuthProvider {
       throw new Error(loginErrorMessage(error?.message));
     }
 
-    let isAdmin: boolean;
     try {
-      isAdmin = await fetchIsAdmin();
+      await checkAdminAccess(supabase);
     } catch (err) {
       await supabase.auth.signOut();
-      throw new Error(err instanceof Error ? err.message : 'بررسی دسترسی مدیر ناموفق بود.');
-    }
-
-    if (!isAdmin) {
-      await supabase.auth.signOut();
-      throw new Error(
-        'این حساب دسترسی مدیر ندارد. نقش admin باید در app_metadata همین کاربر ثبت شده باشد.',
-      );
+      if (err instanceof AdminAccessError) {
+        throw new Error(describeAdminAccessIssue(err.issue));
+      }
+      throw new Error('بررسی دسترسی مدیر ناموفق بود.');
     }
 
     return sessionFromUser(data.user.email, data.user.last_sign_in_at);
@@ -101,7 +105,7 @@ export class SupabaseAuthProvider implements AdminAuthProvider {
    * Restore a session that the Supabase client kept for this browser
    * (refresh token in localStorage). Returns null when there is no
    * session, when the account is not an administrator, or when the
-   * database could not be reached (fail closed → login page).
+   * checks could not be completed (fail closed → login page).
    */
   async restore(): Promise<AdminSession | null> {
     try {
@@ -112,9 +116,11 @@ export class SupabaseAuthProvider implements AdminAuthProvider {
   }
 
   /**
-   * Read the persisted session and confirm the account is an admin.
-   * Throws when the check itself could not be performed (offline), so
-   * callers can tell "not an admin" apart from "could not ask".
+   * Read the persisted session and confirm the account is an admin —
+   * against the database AND the live Supabase user record, healing a
+   * stale token on the way (supabaseAdminRole.checkAdminAccess).
+   * Throws when the verification itself could not be performed, so
+   * callers can fail closed instead of guessing.
    */
   private async verifySession(): Promise<AdminSession | null> {
     const supabase = getSupabase();
@@ -123,18 +129,22 @@ export class SupabaseAuthProvider implements AdminAuthProvider {
     const { data } = await supabase.auth.getSession();
     if (!data.session?.user) return null;
 
-    const isAdmin = await fetchIsAdmin();
-    if (!isAdmin) return null;
+    try {
+      await checkAdminAccess(supabase);
+    } catch {
+      return null;
+    }
 
     return sessionFromUser(data.session.user.email ?? undefined, data.session.user.last_sign_in_at);
   }
 
   /**
    * Follow sign-in / sign-out / token events (e.g. another tab).
-   * Every emission is re-verified against is_admin(). The verification
-   * is deferred out of the auth callback on purpose: supabase-js holds
-   * its auth lock while the callback runs, so calling back into the
-   * client from inside it can deadlock.
+   * Every emission is re-verified against Supabase (live record +
+   * is_admin()). The verification is deferred out of the auth
+   * callback on purpose: supabase-js holds its auth lock while the
+   * callback runs, so calling back into the client from inside it can
+   * deadlock.
    */
   subscribe(onChange: (session: AdminSession | null) => void): () => void {
     const supabase = getSupabase();

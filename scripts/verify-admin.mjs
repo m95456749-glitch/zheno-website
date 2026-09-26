@@ -153,6 +153,32 @@ if (!hasProductUpdate(imagesMigration)) {
   fail('migration must not update products rows outside set_primary_product_image()');
 }
 
+/* ── admin role: live Supabase verification, no bypass ─────── */
+// The panel gate verifies the role against Supabase itself: the
+// database's is_admin() AND the LIVE user record (auth.getUser() →
+// app_metadata in auth.users), healing a stale pre-grant token by
+// re-issuing it. RLS and the security-definer RPCs remain the sole
+// authorisers of writes; this path grants nothing and must never
+// contain a bypass, a hardcoded admin or a removed role check.
+mustInclude('src/services/supabaseAdminRole.ts', 'auth.getUser()', 'admin check consults the LIVE user record, not just the JWT snapshot');
+mustInclude('src/services/supabaseAdminRole.ts', "app_metadata", 'admin role is read from app_metadata');
+mustInclude('src/services/supabaseAdminRole.ts', 'refreshSession', 'a stale pre-grant token is healed by re-issuing it from GoTrue');
+mustInclude('src/services/supabaseAdminRole.ts', 'user_metadata', 'the wrong-metadata-bucket mistake is diagnosed by name');
+mustInclude('src/services/supabaseAdminRole.ts', 'fetchIsAdmin()', 'the database is_admin() stays a verification layer');
+mustInclude('src/admin/auth/supabaseAuth.ts', 'checkAdminAccess', 'login/restore verify through the live admin check');
+mustInclude('src/services/supabaseProductImages.ts', 'healAdminSession', 'a refused image write is healed once or reported honestly');
+mustInclude('src/services/supabaseProductImages.ts', 'isPermissionRefusal', 'permission refusals are classified before any retry');
+{
+  const gate = [
+    'src/services/supabaseAdminRole.ts',
+    'src/admin/auth/supabaseAuth.ts',
+    'src/services/supabaseProductImages.ts',
+  ].map((file) => read(file)).join('\n');
+  const bypasses = [/isAdmin\s*=\s*true\s*;/i, /hardcoded?\s+admin/i, /skip.{0,20}role.{0,20}check/i, /bypass.{0,20}rls/i];
+  if (bypasses.every((pattern) => !pattern.test(gate))) pass('admin authorization path contains no bypass or hardcoded admin');
+  else fail('admin authorization path matches a bypass/hardcode pattern');
+}
+
 // Client side: the storefront keeps reading the ONE field it always read
 mustInclude('src/services/supabaseProductImages.ts', 'manage_product_image', 'promotion goes through the database RPC');
 mustInclude('src/services/productImages.ts', 'products.image_url', 'gallery documents the storefront contract');
