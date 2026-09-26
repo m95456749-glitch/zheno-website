@@ -321,6 +321,60 @@ jobs:
           except RuntimeError as error:
               report['session_and_cleanup_state'] = {'error': str(error)}
 
+          # ── 3c. GoTrue session + auth event timeline (no payload bodies) ──
+          # Only event NAMES and timestamps are selected: audit payloads can
+          # carry identifiers, so they are never printed here.
+          audit_sql = r"""
+          begin transaction read only;
+          select json_build_object(
+            'sessions_table_exists', to_regclass('auth.sessions') is not null,
+            'sessions', coalesce((
+              select json_agg(t) from (
+                select (to_jsonb(s) ->> 'id')          as id,
+                       (to_jsonb(s) ->> 'user_id')     as user_id,
+                       (to_jsonb(s) ->> 'created_at')  as created_at,
+                       (to_jsonb(s) ->> 'updated_at')  as updated_at,
+                       (to_jsonb(s) ->> 'refreshed_at') as refreshed_at,
+                       (to_jsonb(s) ->> 'not_after')   as not_after,
+                       left(coalesce(to_jsonb(s) ->> 'user_agent', ''), 40) as user_agent_prefix
+                from auth.sessions s
+                order by s.created_at desc limit 15
+              ) t
+            ), '[]'::json),
+            'audit_log_exists', to_regclass('auth.audit_log_entries') is not null,
+            'event_counts', coalesce((
+              select json_agg(t) from (
+                select payload ->> 'action' as action,
+                       count(*)             as n,
+                       min(created_at)      as first_at,
+                       max(created_at)      as last_at
+                from auth.audit_log_entries
+                group by 1 order by 4 desc
+              ) t
+            ), '[]'::json),
+            'recent_events', coalesce((
+              select json_agg(t) from (
+                select created_at, payload ->> 'action' as action
+                from auth.audit_log_entries
+                order by created_at desc limit 40
+              ) t
+            ), '[]'::json),
+            'products_sample_ids', coalesce((
+              select json_agg(id) from (select id from public.products order by id limit 40) x
+            ), '[]'::json),
+            'product_images_by_source', coalesce((
+              select json_agg(t) from (
+                select source, count(*) as n from public.product_images group by 1
+              ) t
+            ), '[]'::json)
+          );
+          commit;
+          """
+          try:
+              report['auth_timeline'] = psql_json(audit_sql, 'auth timeline')
+          except RuntimeError as error:
+              report['auth_timeline'] = {'error': str(error)}
+
           # ── 4. reconstruct what GoTrue WOULD put in a fresh JWT ───────────
           # This is a RECONSTRUCTION, not the operator's live token: it replays
           # auth.users.raw_app_meta_data through the very same expression
