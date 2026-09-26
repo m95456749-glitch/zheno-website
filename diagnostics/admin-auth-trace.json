@@ -1,4 +1,51 @@
 {
+  "auth_timeline": {
+    "audit_log_exists": true,
+    "event_counts": [],
+    "product_images_by_source": [
+      {
+        "n": 22,
+        "source": "legacy"
+      }
+    ],
+    "products_sample_ids": [
+      "custard-banana",
+      "custard-cantaloupe",
+      "custard-chocolate",
+      "custard-mahlab-vanilla",
+      "custard-orange",
+      "custard-seven-fruit",
+      "custard-strawberry",
+      "jelly-blueberry",
+      "jelly-cantaloupe",
+      "jelly-grape",
+      "jelly-kiwi",
+      "jelly-lemon",
+      "jelly-mango",
+      "jelly-mulberry",
+      "jelly-orange",
+      "jelly-peach",
+      "jelly-pineapple",
+      "jelly-pomegranate",
+      "jelly-raspberry",
+      "jelly-sour-cherry",
+      "jelly-strawberry",
+      "jelly-watermelon"
+    ],
+    "recent_events": [],
+    "sessions": [
+      {
+        "created_at": "2026-09-26T18:58:37.046957+00:00",
+        "id": "eaa2f55a-1daa-4dd0-892f-80dd4db4b135",
+        "not_after": null,
+        "refreshed_at": null,
+        "updated_at": "2026-09-26T18:58:37.046957+00:00",
+        "user_agent_prefix": "Mozilla/5.0 (Linux; Android 10; K) Apple",
+        "user_id": "082824ea-5de1-4802-a9b4-388410febfb4"
+      }
+    ],
+    "sessions_table_exists": true
+  },
   "auth_users": {
     "user_count": 1,
     "users": [
