@@ -167,6 +167,7 @@ jobs:
                                                             as app_role_admin_casefold,
                   u.created_at, u.last_sign_in_at,
                   (u.email_confirmed_at is not null)          as email_confirmed,
+                  u.updated_at                                as record_updated_at,
                   ((to_jsonb(u) ->> 'banned_until') is not null
                      and (to_jsonb(u) ->> 'banned_until')::timestamptz > now()) as banned,
                   ((to_jsonb(u) ->> 'deleted_at') is not null) as soft_deleted,
@@ -266,6 +267,59 @@ jobs:
               report['upload_rules'] = psql_json(policy_sql, 'policy trace')
           except RuntimeError as error:
               report['upload_rules'] = {'error': str(error)}
+
+          # ── 3b. session / cleanup / object state (no token values) ────────
+          state_sql = r"""
+          begin transaction read only;
+          select json_build_object(
+            'refresh_token_rows', coalesce((
+              select json_agg(t) from (
+                select r.id,
+                       r.user_id,
+                       r.revoked,
+                       r.created_at,
+                       r.updated_at,
+                       (select count(*) from auth.refresh_tokens c where c.parent = r.token) as children
+                from auth.refresh_tokens r
+                order by r.created_at desc
+                limit 25
+              ) t
+            ), '[]'::json),
+            'refresh_token_count', (select count(*) from auth.refresh_tokens),
+            'product_image_cleanup_count', (select count(*) from public.product_image_cleanup),
+            'product_image_cleanup_paths', coalesce((
+              select json_agg(storage_path) from (
+                select storage_path from public.product_image_cleanup
+                order by created_at desc limit 25
+              ) x
+            ), '[]'::json),
+            'product_images_count', (select count(*) from public.product_images),
+            'product_image_operations_count', (select count(*) from public.product_image_operations),
+            'product_image_operations_recent', coalesce((
+              select json_agg(t) from (
+                select actor_id,
+                       request ->> 'action'      as action,
+                       request ->> 'product_id'  as product_id,
+                       created_at
+                from public.product_image_operations
+                order by created_at desc limit 25
+              ) t
+            ), '[]'::json),
+            'storage_object_count', (select count(*) from storage.objects where bucket_id = 'product-images'),
+            'storage_objects_recent', coalesce((
+              select json_agg(t) from (
+                select name, created_at from storage.objects
+                where bucket_id = 'product-images'
+                order by created_at desc limit 25
+              ) t
+            ), '[]'::json)
+          );
+          commit;
+          """
+          try:
+              report['session_and_cleanup_state'] = psql_json(state_sql, 'session/cleanup state')
+          except RuntimeError as error:
+              report['session_and_cleanup_state'] = {'error': str(error)}
 
           # ── 4. reconstruct what GoTrue WOULD put in a fresh JWT ───────────
           # This is a RECONSTRUCTION, not the operator's live token: it replays
