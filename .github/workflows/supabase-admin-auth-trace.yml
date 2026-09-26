@@ -299,6 +299,15 @@ jobs:
               with open(summary, 'a', encoding='utf-8') as fh:
                   fh.write('### Supabase admin auth trace (read-only)\n\n')
                   fh.write('```json\n' + json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + '\n```\n')
+
+          # Also publish the result as a file on this branch: Actions logs are
+          # not reachable from every environment, a committed file always is.
+          out_dir = Path('diagnostics')
+          out_dir.mkdir(exist_ok=True)
+          (out_dir / 'admin-auth-trace.json').write_text(
+              json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + '\n', encoding='utf-8')
+          print('wrote diagnostics/admin-auth-trace.json',
+                (out_dir / 'admin-auth-trace.json').stat().st_size, 'bytes')
           PY
 
       - name: Publish trace JSON to this branch
