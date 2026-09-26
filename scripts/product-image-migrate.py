@@ -11,6 +11,9 @@ import os
 from pathlib import Path
 import re
 import shutil
+import socket
+import ssl
+import struct
 import subprocess
 import sys
 import tempfile
@@ -18,6 +21,8 @@ from urllib.parse import quote, urlencode
 
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / "supabase/product-image-migration-manifest.json"
+SUPABASE_CA = ROOT / "supabase/certs/prod-ca-2021.crt"
+SUPABASE_CA_SHA256_DER = "807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa"
 CONFIRMATION = "APPLY_PRODUCT_IMAGES_V3"
 
 
@@ -28,6 +33,18 @@ class SafetyError(Exception):
 def require(condition, message):
     if not condition:
         raise SafetyError(message)
+
+
+def supabase_ca_path(root=ROOT):
+    ca = root / "supabase/certs/prod-ca-2021.crt"
+    require(ca.is_file(), "Supabase Root 2021 CA certificate is missing from supabase/certs/prod-ca-2021.crt.")
+    try:
+        der = ssl.PEM_cert_to_DER_cert(ca.read_text())
+    except (OSError, ValueError):
+        raise SafetyError("Supabase Root 2021 CA certificate is not a valid PEM certificate.") from None
+    require(hashlib.sha256(der).hexdigest() == SUPABASE_CA_SHA256_DER,
+            "Supabase Root 2021 CA certificate fingerprint changed; review TLS trust before connecting.")
+    return str(ca)
 
 
 def load_manifest(root=ROOT):
@@ -79,16 +96,16 @@ def connection(env):
             "Set SUPABASE_DB_HOST to the exact shared Session pooler host from Dashboard > Connect.")
     require(password and not any(c in password for c in "\x00\r\n"),
             "SUPABASE_DB_PASSWORD is missing or contains a newline/NUL; it is never normalized.")
-    ca = "/etc/ssl/certs/ca-certificates.crt"
-    require(Path(ca).is_file(), "System CA certificate bundle is missing.")
+    ca = supabase_ca_path()
     user = "postgres." + ref
-    params = urlencode({"sslmode": "verify-full", "sslrootcert": ca, "connect_timeout": "15"})
+    params = urlencode({"sslmode": "verify-full", "sslrootcert": ca, "channel_binding": "disable", "connect_timeout": "15"})
     url = f"postgresql://{user}:{quote(password, safe='')}@{host}:5432/postgres?{params}"
     # Do not forward arbitrary libpq overrides, PATs, service keys or debugging.
     child = {k: v for k, v in env.items() if not k.startswith(("PG", "SUPABASE_", "DEBUG"))}
     child.update({"PGHOST": host, "PGPORT": "5432", "PGUSER": user, "PGDATABASE": "postgres",
                   "PGPASSWORD": password, "PGSSLMODE": "verify-full", "PGSSLROOTCERT": ca,
-                  "PGCONNECT_TIMEOUT": "15", "PGAPPNAME": "zhino-images-manual-migration"})
+                  "PGCHANNELBINDING": "disable", "PGCONNECT_TIMEOUT": "15",
+                  "PGAPPNAME": "zhino-images-manual-migration"})
     return url, child
 
 
@@ -97,14 +114,119 @@ def mask(value):
     print("::add-mask::" + value.replace("%", "%25").replace("\r", "%0D").replace("\n", "%0A"), flush=True)
 
 
+def psql_failure_category(stderr):
+    text = (stderr or "").lower()
+    checks = [
+        ("dns_failure", ("could not translate host name", "temporary failure in name resolution", "name or service not known")),
+        ("tcp_connection_refused", ("connection refused",)),
+        ("tcp_connection_timeout", ("connection timed out", "timeout expired", "operation timed out", "could not connect to server: connection timed out")),
+        ("tls_certificate_failure", ("certificate verify failed", "server certificate", "could not get server certificate", "root certificate")),
+        ("tls_not_supported", ("does not support ssl",)),
+        ("authentication_failure", ("password authentication failed", "authentication failed", "failed sasl auth", "invalid scram server-final-message", "scram authentication failed", "no password supplied", "wrong password")),
+        ("network_access_denied", ("no pg_hba.conf entry", "network is unreachable")),
+        ("connection_closed_or_reset", ("connection reset", "server closed the connection unexpectedly", "ssl syscall error", "eof detected", "terminating connection")),
+        ("postgresql_query_failure", ("syntax error", "permission denied", "must be owner", "does not exist")),
+    ]
+    for category, needles in checks:
+        if any(needle in text for needle in needles):
+            return category
+    return "unknown_psql_failure"
+
+
+def psql_auth_detail(stderr):
+    text = (stderr or "").lower()
+    if "tenant or user not found" in text:
+        return "tenant_or_user_not_found"
+    if "no password supplied" in text:
+        return "password_not_supplied"
+    if "wrong password" in text or "password authentication failed" in text:
+        return "password_rejected"
+    if "failed sasl auth" in text or "invalid scram server-final-message" in text or "scram" in text:
+        return "scram_sasl_rejected"
+    if "authentication failed" in text:
+        return "authentication_rejected"
+    return "not_auth_or_unknown"
+
+
+def postgres_network_diagnostic(env):
+    host = env.get("PGHOST", "")
+    port_text = env.get("PGPORT", "5432")
+    ca = env.get("PGSSLROOTCERT", str(SUPABASE_CA))
+    if not host:
+        return "configuration_failure", "PGHOST was not set for the read-only check."
+    try:
+        port = int(port_text)
+    except (TypeError, ValueError):
+        return "configuration_failure", "PGPORT is not a valid integer."
+    target = f"{host}:{port}"
+    try:
+        socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return "dns_failure", f"DNS lookup failed for {target}."
+
+    sock = None
+    try:
+        sock = socket.create_connection((host, port), timeout=10)
+        sock.settimeout(10)
+        # PostgreSQL TLS is negotiated by an SSLRequest packet before the startup
+        # packet; no username, password or SQL is sent by this diagnostic.
+        sock.sendall(struct.pack("!II", 8, 80877103))
+        response = sock.recv(1)
+        if response == b"S":
+            context = ssl.create_default_context(cafile=ca if Path(ca).is_file() else None)
+            with context.wrap_socket(sock, server_hostname=host) as tls:
+                tls.version()
+            return "network_tls_ok", f"DNS, TCP and PostgreSQL TLS negotiation succeeded for {target}; authentication/query is the next layer."
+        if response == b"N":
+            return "tls_not_supported", f"{target} accepted TCP but rejected PostgreSQL TLS; verify-full cannot be used with this endpoint."
+        if response == b"":
+            return "postgres_protocol_connection_closed", f"{target} accepted TCP but closed before PostgreSQL TLS negotiation; check Supabase network restrictions, pooler endpoint and port."
+        return "postgres_protocol_unexpected_response", f"{target} returned an unexpected PostgreSQL TLS negotiation response; check pooler endpoint and port."
+    except ssl.SSLCertVerificationError:
+        return "tls_certificate_failure", f"TLS certificate verification failed for {target}."
+    except ssl.SSLError:
+        return "tls_failure", f"TLS negotiation failed for {target}."
+    except (ConnectionResetError, BrokenPipeError):
+        return "postgres_protocol_connection_reset", f"{target} accepted TCP but reset the PostgreSQL handshake before authentication; check Supabase network restrictions, pooler endpoint and port."
+    except socket.timeout:
+        return "tcp_or_postgres_protocol_timeout", f"Timed out while connecting or negotiating PostgreSQL TLS with {target}."
+    except OSError:
+        return "tcp_connection_failure", f"TCP connection to {target} failed."
+    finally:
+        try:
+            if sock is not None:
+                sock.close()
+        except OSError:
+            pass
+
+
+def safe_process_failure(label, result, env):
+    if label != "Read-only database check":
+        return (label +
+                " failed; raw output withheld to protect secrets/data. If apply started, SQL may already be committed; inspect history before retrying.")
+    psql_category = psql_failure_category(result.stderr)
+    auth_detail = psql_auth_detail(result.stderr) if psql_category == "authentication_failure" else "n/a"
+    network_category, network_detail = postgres_network_diagnostic(env)
+    return (
+        f"{label} failed; psql_category={psql_category}; auth_detail={auth_detail}; "
+        f"network_diagnostic={network_category}. {network_detail} Raw psql output withheld to protect secrets/data; "
+        "no migration SQL was executed."
+    )
+
+
 def execute(args, env, label, input_text=None):
     try:
         result = subprocess.run(args, input=input_text, text=True, capture_output=True,
                                 env=env, timeout=180, check=False)
     except (OSError, subprocess.TimeoutExpired):
+        if label == "Read-only database check":
+            network_category, network_detail = postgres_network_diagnostic(env)
+            raise SafetyError(
+                f"{label} failed or timed out; network_diagnostic={network_category}. "
+                f"{network_detail} Raw output withheld; no migration SQL was executed."
+            ) from None
         raise SafetyError(label + " failed or timed out; raw output withheld. Check connectivity/history before retrying.") from None
-    require(result.returncode == 0,
-            label + " failed; raw output withheld to protect secrets/data. If apply started, SQL may already be committed; inspect history before retrying.")
+    require(result.returncode == 0, safe_process_failure(label, result, env))
     return result.stdout
 
 
