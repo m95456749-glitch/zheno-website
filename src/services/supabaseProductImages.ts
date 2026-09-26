@@ -10,6 +10,12 @@
 //   - any other account → refused by the policies
 // No service key is ever used here.
 //
+// The role itself is the request JWT's app_metadata.role claim
+// (public.is_admin()); supabaseAdminRole.checkAdminAccess verifies it
+// against the LIVE Supabase user record, and a write refused for a
+// permission reason is healed once (stale/dropped session) or reported
+// with its real cause — never bypassed and never retried blindly.
+//
 // Schema: supabase/migrations/20260922000000_product_images_reliable_bootstrap.sql
 //   public.product_images  — gallery rows (one primary per product)
 //   storage bucket 'product-images' — public read, admin-only write
@@ -28,6 +34,8 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { getSupabase, getSupabaseUrl } from './supabaseClient';
+import { AdminAccessError, checkAdminAccess, describeAdminAccessIssue } from './supabaseAdminRole';
+import type { AdminAccessIssue } from './supabaseAdminRole';
 import type { PreparedImage } from '../utils/imageFile';
 
 /** Storage bucket created by the migration (uploaded photos). */
@@ -223,6 +231,57 @@ async function bounded<T>(request: PromiseLike<T>): Promise<T> {
   } finally { if (timer) clearTimeout(timer); }
 }
 
+/* ── admin-session healing for refused writes ─────────────── */
+//
+// Row Level Security and manage_product_image() read the admin role
+// from the request JWT's app_metadata claim (public.is_admin()). A
+// permission refusal therefore has several honest causes besides
+// "this account is not an admin":
+//   • the session token was issued BEFORE the role was granted, so
+//     the claim is missing although the live record has it;
+//   • the session quietly vanished — supabase-js then presents the
+//     publishable key and the request goes out ANONYMOUS.
+// When a write is refused for a permission reason we verify the role
+// against Supabase itself (live user record + is_admin()), heal the
+// session once, and retry exactly once. Nothing is ever weakened: the
+// database stays the sole authoriser; a genuine non-admin is told the
+// real reason instead of an opaque RLS sentence.
+
+/** A refusal text that means "no admin was attached to this request". */
+function isPermissionRefusal(error: unknown): boolean {
+  const text = rawText(error as SupabaseLikeError).toLowerCase();
+  return /row-level security|row level security|violates row-level|permission denied|\b42501\b|admin_required/.test(text);
+}
+
+/**
+ * Verify — and if possible repair — the admin session before retrying
+ * a refused write. Returns null when the session now satisfies the
+ * database's own checks; otherwise the exact issue to report.
+ */
+async function healAdminSession(): Promise<AdminAccessIssue | null> {
+  const supabase = client();
+  try {
+    const { data } = await supabase.auth.getSession();
+    if (!data.session) return { kind: 'no-session' };
+    await checkAdminAccess(supabase);
+    return null;
+  } catch (error) {
+    if (error instanceof AdminAccessError) return error.issue;
+    return { kind: 'unverifiable' };
+  }
+}
+
+/** The honest sentence for a write refused for a session/role reason. */
+function adminWriteRefusal(issue: AdminAccessIssue, context: string, original: unknown): ProductImageError {
+  if (issue.kind === 'unverifiable') return describeImageError(context, original);
+  if (issue.kind === 'no-session') {
+    // The request would otherwise leave the browser anonymously — say
+    // exactly that, instead of blaming the account's role.
+    return new ProductImageError('نشست مدیر پایان یافته است؛ دوباره وارد پنل شوید.');
+  }
+  return new ProductImageError(describeAdminAccessIssue(issue));
+}
+
 /* ── transactional gateway (image safety v3) ────────────────── */
 export async function fetchRemoteProductImages(): Promise<ProductImage[]> {
   const supabase = client();
@@ -243,9 +302,20 @@ export async function fetchRemoteProductImages(): Promise<ProductImage[]> {
 export async function uploadImageObject(path: string, prepared: PreparedImage, alreadyUploaded = false, retry = false): Promise<{ publicUrl: string }> {
   const supabase = client();
   if (alreadyUploaded) return { publicUrl: supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
-  const { error } = await bounded(supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, prepared.blob, {
-    contentType: prepared.mime, cacheControl: '31536000', upsert: false,
-  }));
+  const options = { contentType: prepared.mime, cacheControl: '31536000', upsert: false };
+  let { error } = await bounded(supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, prepared.blob, options));
+  if (error && isPermissionRefusal(error)) {
+    // Storage RLS said "no admin attached". The refusal stands — but
+    // before reporting it, check the role against Supabase itself: a
+    // stale/missing session can be healed, a genuine non-admin gets
+    // the real reason. One healed retry, same path and same bytes.
+    const issue = await healAdminSession();
+    if (issue === null) {
+      ({ error } = await bounded(supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, prepared.blob, options)));
+    } else {
+      throw adminWriteRefusal(issue, 'بارگذاری تصویر', error);
+    }
+  }
   // Only the SAME preview/UUID operation may resume an upload whose response was lost.
   if (error && !(retry && /already exists|duplicate|409/i.test(rawText(error)))) throw describeImageError('بارگذاری تصویر', error);
   return { publicUrl: supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
@@ -287,10 +357,19 @@ export async function mutateImage(
   imageId: string, expectedUrl: string | null, payload: Record<string, unknown> = {},
 ): Promise<ProductImage | null> {
   const { key, operation } = await imageOperation(action, productId, imageId, expectedUrl, payload);
-  const { data, error } = await bounded(client().rpc('manage_product_image', {
+  const sendRpc = () => bounded(client().rpc('manage_product_image', {
     p_action: action, p_product_id: productId, p_image_id: imageId,
     p_expected_url: operation.expectedUrl, p_payload: { ...payload, operation_id: operation.id },
   }));
+  let { data, error } = await sendRpc();
+  if (error && isPermissionRefusal(error)) {
+    // admin_required / RLS from the RPC: same posture as Storage — the
+    // refusal stands, but a stale or dropped session can be healed.
+    // Replays are safe: the operation id and the frozen CAS are identical.
+    const issue = await healAdminSession();
+    if (issue === null) ({ data, error } = await sendRpc());
+    else throw adminWriteRefusal(issue, 'ذخیرهٔ تغییرات تصویر', error);
+  }
   if (error) {
     // These SQL errors prove rollback. A genuinely fresh retry after refresh
     // may use a new CAS; ambiguous transport/proxy errors retain the old intent.

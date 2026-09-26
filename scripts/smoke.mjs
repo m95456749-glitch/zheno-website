@@ -969,6 +969,17 @@ function expectNoErrors(label, errors) {
         },
       });
     }
+    if (url.includes('/auth/v1/user')) {
+      return json({
+        id: '00000000-0000-0000-0000-000000000001',
+        aud: 'authenticated',
+        role: 'authenticated',
+        email: 'admin@example.com',
+        app_metadata: { role: 'admin' },
+        user_metadata: {},
+        created_at: new Date().toISOString(),
+      });
+    }
     if (url.includes('/rest/v1/rpc/is_admin')) return json(true);
     if (url.includes('/rest/v1/rpc/set_inventory_stock')) {
       const payload = JSON.parse(body || '{}');
@@ -1249,6 +1260,16 @@ function makeSupabaseStub({
   // failure state before the images migration is applied). Flipping
   // stub.flags.bucketMissing to false simulates applying the migration.
   bucketMissing = false,
+  // true ⇒ the LIVE user record carries the admin role only in
+  // user_metadata (the common dashboard mistake). is_admin() and the
+  // app_metadata claim both stay empty; the panel must refuse login
+  // and NAME the wrong bucket.
+  roleInUserMetadata = false,
+  // true ⇒ the persisted session's token was issued BEFORE the admin
+  // role was granted (empty app_metadata claim), while the LIVE user
+  // record IS admin. A token refresh must heal the session: the panel
+  // opens and writes go out with the re-issued (role-carrying) JWT.
+  staleAdmin = false,
 } = {}) {
   const calls = [];
   const flags = { bucketMissing };
@@ -1260,20 +1281,42 @@ function makeSupabaseStub({
   const primaryPromotions = [];
   const uploadedObjects = [];
   const removedObjects = [];
-  const jwt = [
+  const signJwt = (payload) => [
     Buffer.from(JSON.stringify({ alg: 'HS256', typ: 'JWT' })).toString('base64url'),
-    Buffer.from(
-      JSON.stringify({
-        sub: '00000000-0000-0000-0000-000000000001',
-        role: 'authenticated',
-        aud: 'authenticated',
-        email: 'admin@example.com',
-        app_metadata: isAdmin ? { role: 'admin' } : {},
-        exp: Math.floor(Date.now() / 1000) + 3600,
-      }),
-    ).toString('base64url'),
+    Buffer.from(JSON.stringify(payload)).toString('base64url'),
     'signature',
   ].join('.');
+  const jwt = signJwt({
+    sub: '00000000-0000-0000-0000-000000000001',
+    role: 'authenticated',
+    aud: 'authenticated',
+    email: 'admin@example.com',
+    app_metadata: isAdmin ? { role: 'admin' } : {},
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  // The pre-grant token: identical identity, no admin claim. Only the
+  // staleAdmin scenario ever sees it (as the seeded session's token);
+  // after a refresh the stub hands out `jwt` like a real GoTrue would.
+  const staleJwt = signJwt({
+    sub: '00000000-0000-0000-0000-000000000001',
+    role: 'authenticated',
+    aud: 'authenticated',
+    email: 'admin@example.com',
+    app_metadata: {},
+    exp: Math.floor(Date.now() / 1000) + 3600,
+  });
+  // The LIVE auth.users record behind the session — what GoTrue's
+  // /auth/v1/user returns and app_metadata must be read from.
+  const liveUser = {
+    id: '00000000-0000-0000-0000-000000000001',
+    aud: 'authenticated',
+    role: 'authenticated',
+    email: 'admin@example.com',
+    app_metadata: isAdmin || staleAdmin ? { role: 'admin' } : {},
+    user_metadata: roleInUserMetadata ? { role: 'admin' } : {},
+    created_at: new Date().toISOString(),
+  };
+  if (roleInUserMetadata) liveUser.app_metadata = {};
 
   const products = rows ?? [
     {
@@ -1355,18 +1398,20 @@ function makeSupabaseStub({
         expires_in: 3600,
         expires_at: Math.floor(Date.now() / 1000) + 3600,
         refresh_token: 'smoke-refresh-token',
-        user: {
-          id: '00000000-0000-0000-0000-000000000001',
-          aud: 'authenticated',
-          role: 'authenticated',
-          email: 'admin@example.com',
-          app_metadata: isAdmin ? { role: 'admin' } : {},
-          user_metadata: {},
-          created_at: new Date().toISOString(),
-        },
+        user: liveUser,
       });
     }
-    if (url.includes('/rest/v1/rpc/is_admin')) return json(isAdmin);
+    if (url.includes('/auth/v1/user')) {
+      // GoTrue's live view of auth.users — the record is_admin()'s
+      // JWT claim is only a snapshot of.
+      return json(liveUser);
+    }
+    if (url.includes('/rest/v1/rpc/is_admin')) {
+      // With a stale token the database honestly answers false until
+      // the session has been refreshed with the role-carrying JWT.
+      if (staleAdmin) return json(headers.authorization === `Bearer ${jwt}`);
+      return json(isAdmin);
+    }
     if (url.includes('/rest/v1/rpc/set_inventory_stock')) {
       return json([{ variant_id: 'jelly-strawberry-250', current_stock: stock, active: true }]);
     }
@@ -1568,6 +1613,7 @@ function makeSupabaseStub({
     fetchImpl,
     calls,
     jwt,
+    staleJwt,
     flags,
     createdOrderPayloads,
     orderStatusPatches,
@@ -2296,6 +2342,139 @@ async function clickUntil(click, find, predicate, waitFor, { attempts = 4, eachM
   else fail('authz — the product editor rendered for a non-admin session');
   if (errors.length === 0) ok('authz restore flow — no runtime errors');
   else fail('authz restore flow runtime errors:\n    - ' + errors.join('\n    - '));
+  dom.window.close();
+}
+
+// ── 22b. The role in the WRONG metadata bucket is diagnosed ──
+// The live record carries role=admin in user_metadata only — the
+// common dashboard mistake. is_admin() (app_metadata) answers false.
+// Login must be refused, and the message must NAME the wrong bucket
+// instead of surfacing later as an opaque RLS error at upload time.
+{
+  const stub = makeSupabaseStub({ roleInUserMetadata: true });
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/login', { stub });
+
+  const loginReady = await waitFor(() => document.querySelector('input[autocomplete=\"username\"]'));
+  if (!loginReady) fail('authz metadata — login form did not render');
+  else {
+    const setReactValue = (input, value) => {
+      Object.getOwnPropertyDescriptor(dom.window.HTMLInputElement.prototype, 'value').set.call(input, value);
+      input.dispatchEvent(new dom.window.Event('input', { bubbles: true }));
+    };
+    setReactValue(document.querySelector('input[autocomplete=\"username\"]'), 'admin@example.com');
+    setReactValue(document.querySelector('input[type=\"password\"]'), 'correct-horse-battery');
+    document.querySelector('form').dispatchEvent(new dom.window.Event('submit', { bubbles: true, cancelable: true }));
+
+    const refused = await waitFor(() => text().includes('user_metadata'));
+    if (refused && text().includes('app_metadata') && text().includes('دسترسی مدیر ندارد')) {
+      ok('authz metadata — a role in user_metadata is refused and diagnosed by name');
+    } else {
+      fail('authz metadata — wrong-bucket role was not diagnosed: ' + text().slice(0, 240));
+    }
+    if (stub.calls.some((c) => c.url.includes('/auth/v1/user'))) {
+      ok('authz metadata — the live user record (auth.getUser) was consulted, not just the JWT');
+    } else {
+      fail('authz metadata — the live user record was never read');
+    }
+    if (!text().includes('آخرین سفارش‌ها') && !text().includes('افزودن محصول')) {
+      ok('authz metadata — no admin screen rendered for the wrong-bucket role');
+    } else {
+      fail('authz metadata — the panel opened despite the missing app_metadata role');
+    }
+  }
+  if (errors.length === 0) ok('authz metadata flow — no runtime errors');
+  else fail('authz metadata flow runtime errors:\n    - ' + errors.join('\n    - '));
+  dom.window.close();
+}
+
+// ── 22c. A stale pre-grant session is healed, then uploads ───
+// The persisted token was issued BEFORE the admin role was granted
+// (empty app_metadata claim), but the LIVE user record is admin.
+// The panel must open (refresh re-issues the claim from the record)
+// and the upload must leave the browser with the FRESH admin JWT —
+// never anonymously, never with the stale token.
+{
+  const stub = makeSupabaseStub({ staleAdmin: true });
+  // The auth storage key derives from the Supabase project hostname.
+  const ref = 'smoke-test';
+  const seededSession = {
+    access_token: stub.staleJwt,
+    refresh_token: 'stale-refresh-token',
+    expires_at: Math.floor(Date.now() / 1000) + 3600,
+    expires_in: 3600,
+    token_type: 'bearer',
+    user: {
+      id: '00000000-0000-0000-0000-000000000001',
+      aud: 'authenticated',
+      role: 'authenticated',
+      email: 'admin@example.com',
+      app_metadata: {},
+      user_metadata: {},
+      created_at: new Date().toISOString(),
+    },
+  };
+  const { dom, document, text, waitFor, errors } = await renderWithStub('/zheno-website/admin/product-images', {
+    stub,
+    seed: (win) => {
+      win.localStorage.setItem(`sb-${ref}-auth-token`, JSON.stringify(seededSession));
+      win.createImageBitmap = async () => ({ width: 1600, height: 1200, close() {} });
+    },
+  });
+
+  const click = (element) =>
+    element.dispatchEvent(new dom.window.MouseEvent('click', { bubbles: true, cancelable: true }));
+  const findButton = (label) =>
+    Array.from(document.querySelectorAll('button')).find((button) => (button.textContent ?? '').includes(label));
+  // The replace button renders only once the gallery rows (including
+  // the legacy primary) have been read — a safe "rows loaded" signal.
+  const opened = await waitFor(() => findButton('جایگزینی تصویر اصلی') && text().includes('پودر ژله توت فرنگی ژینو'));
+  if (opened) ok('authz stale — a pre-grant session is healed against the live record and opens the panel');
+  else fail('authz stale — the healed session did not open the gallery: ' + text().slice(0, 240));
+
+  if (opened) {
+    const refreshed = stub.calls.some((c) => c.url.includes('/auth/v1/token') && c.url.includes('refresh_token'));
+    if (refreshed) ok('authz stale — healing re-issued the session token from GoTrue');
+    else fail('authz stale — no token refresh was performed before trusting the session');
+
+    // upload one photo through the real dialog flow
+    const addButton = findButton('بارگذاری تصویر');
+    if (!addButton) fail('authz stale — no upload entry button found: ' + text().slice(0, 160));
+    else {
+      click(addButton);
+      const dialogOpen = await waitFor(() => text().includes('تصویر را اینجا رها کنید'));
+      if (!dialogOpen) fail('authz stale — the upload dialog did not open');
+      else {
+        const fileInput = document.querySelector('input[data-testid="product-image-file"]');
+        if (!fileInput) fail('authz stale — no file input in the upload dialog');
+        else {
+          const file = new dom.window.File(
+            [readFileSync(join(root, 'public/images/products/jelly-strawberry.jpg'))],
+            'healed-photo.jpg',
+            { type: 'image/jpeg' },
+          );
+          Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+          fileInput.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+          const previewed = await waitFor(() => text().includes('حجم اصلی'));
+          if (!previewed) fail('authz stale — no preview rendered');
+          else {
+            const saveButton = findButton('ذخیره');
+            if (!saveButton) fail('authz stale — the save button is missing');
+            else click(saveButton);
+            const uploaded = await waitFor(() => stub.uploadedObjects.length > 0);
+            if (uploaded) {
+              const fresh = stub.uploadedObjects.every((u) => u.headers.authorization === `Bearer ${stub.jwt}`);
+              if (fresh) ok('authz stale — the healed upload carries the re-issued admin JWT (never anon, never stale)');
+              else fail(`authz stale — upload authorization was ${JSON.stringify(stub.uploadedObjects.map((u) => u.headers.authorization))}`);
+            } else {
+              fail('authz stale — the upload never reached Storage after healing: ' + text().slice(0, 240));
+            }
+          }
+        }
+      }
+    }
+  }
+  if (errors.length === 0) ok('authz stale flow — no runtime errors');
+  else fail('authz stale flow runtime errors:\n    - ' + errors.join('\n    - '));
   dom.window.close();
 }
 
