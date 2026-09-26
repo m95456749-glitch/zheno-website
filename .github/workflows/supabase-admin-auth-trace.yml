@@ -375,6 +375,41 @@ jobs:
           except RuntimeError as error:
               report['auth_timeline'] = {'error': str(error)}
 
+          # ── 3d. the contract version the database actually enforces ───────
+          version_sql = r"""
+          begin transaction read only;
+          select json_build_object(
+            'product_image_api_version', (
+              select public.product_image_api_version()
+              where to_regprocedure('public.product_image_api_version()') is not null
+            ),
+            'contract_rows', coalesce((
+              select json_agg(t) from (
+                select version, created_at from public.product_image_contract order by version
+              ) t
+            ), '[]'::json),
+            'product_images_policy_kind', coalesce((
+              select json_agg(json_build_object(
+                       'policy', pol.polname,
+                       'permissive', pol.polpermissive,
+                       'cmd', case pol.polcmd when 'r' then 'SELECT' when 'a' then 'INSERT'
+                              when 'w' then 'UPDATE' when 'd' then 'DELETE' else '*' end,
+                       'roles', (select coalesce(json_agg(r::regrole::text), '[]'::json)
+                                   from unnest(pol.polroles) r)
+                     ))
+              from pg_policy pol
+              join pg_class c on c.oid = pol.polrelid
+              join pg_namespace n on n.oid = c.relnamespace
+              where n.nspname = 'public' and c.relname = 'product_images'
+            ), '[]'::json)
+          );
+          commit;
+          """
+          try:
+              report['contract_version'] = psql_json(version_sql, 'contract version')
+          except RuntimeError as error:
+              report['contract_version'] = {'error': str(error)}
+
           # ── 4. reconstruct what GoTrue WOULD put in a fresh JWT ───────────
           # This is a RECONSTRUCTION, not the operator's live token: it replays
           # auth.users.raw_app_meta_data through the very same expression
