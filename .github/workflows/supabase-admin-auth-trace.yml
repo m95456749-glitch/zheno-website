@@ -1,0 +1,324 @@
+name: Supabase admin auth trace (read-only, temporary)
+
+# TEMPORARY DIAGNOSTIC — delete after the upload issue is closed.
+#
+# Purpose: answer, with REAL production data, why /admin/product-images
+# uploads are refused with «دسترسی مدیر تأیید نشد».
+#
+# STRICTLY READ-ONLY. This workflow:
+#   * opens ONE psql session per query group with
+#     default_transaction_read_only=on and `begin transaction read only;`;
+#   * issues SELECT / catalog reads only — no DDL, no DML, no db push,
+#     no migration, no Storage mutation, no deploy;
+#   * masks the DB password and every e-mail address before printing;
+#   * never prints password hashes, tokens or refresh tokens.
+#
+# It does NOT change any security setting: no RLS policy, function, grant
+# or role is touched.
+
+on:
+  push:
+    branches:
+      - arena/01a0df44-zheno-website
+    paths:
+      - ".github/workflows/supabase-admin-auth-trace.yml"
+  workflow_dispatch:
+
+# contents: write is needed for the single step that commits the resulting
+# JSON back to this branch so it can be read without opening Actions logs.
+# Nothing else in this workflow writes anywhere.
+permissions:
+  contents: write
+
+concurrency:
+  group: supabase-admin-auth-trace
+  cancel-in-progress: false
+
+jobs:
+  trace:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: supabase-production
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: Ensure PostgreSQL read-only client is available
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update -qq
+            sudo apt-get install -y --no-install-recommends postgresql-client
+          fi
+          psql --version
+
+      - name: Trace admin role state (SELECT only)
+        env:
+          SUPABASE_PROJECT_REF: ${{ vars.SUPABASE_PROJECT_REF }}
+          SUPABASE_DB_HOST: ${{ vars.SUPABASE_DB_HOST }}
+          SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+        run: |
+          python3 - <<'PY'
+          import hashlib, json, os, re, ssl, subprocess, sys
+          from pathlib import Path
+
+          CA = Path('supabase/certs/prod-ca-2021.crt')
+          CA_SHA256_DER = '807025ad50d4ed219d2c9c7d299c004f824eb00cf7f65afef607d07b72e6cafa'
+
+          def fail(message):
+              print('::error::' + message, file=sys.stderr)
+              raise SystemExit(1)
+
+          def mask(value):
+              print('::add-mask::' + value.replace('%', '%25').replace('\r', '%0D').replace('\n', '%0A'), flush=True)
+
+          ref = os.environ.get('SUPABASE_PROJECT_REF', '')
+          host = os.environ.get('SUPABASE_DB_HOST', '')
+          password = os.environ.get('SUPABASE_DB_PASSWORD', '')
+          if not re.fullmatch(r'[a-z]{20}', ref):
+              fail('SUPABASE_PROJECT_REF is not the expected 20-letter project ref.')
+          if not re.fullmatch(r'[a-z0-9-]+(?:\.[a-z0-9-]+)*\.pooler\.supabase\.com', host):
+              fail('SUPABASE_DB_HOST is not a Supabase pooler hostname.')
+          if not password or any(c in password for c in '\x00\r\n'):
+              fail('SUPABASE_DB_PASSWORD is missing or contains newline/NUL; no connection attempted.')
+          if not CA.is_file():
+              fail('Supabase Root 2021 CA is missing.')
+          try:
+              der = ssl.PEM_cert_to_DER_cert(CA.read_text())
+          except Exception:
+              fail('Supabase Root 2021 CA is not valid PEM.')
+          if hashlib.sha256(der).hexdigest() != CA_SHA256_DER:
+              fail('Supabase Root 2021 CA fingerprint mismatch.')
+          mask(password)
+
+          child = {k: v for k, v in os.environ.items() if not k.startswith('PG')}
+          child.update({
+              'PGHOST': host,
+              'PGPORT': '5432',
+              'PGUSER': 'postgres.' + ref,
+              'PGDATABASE': 'postgres',
+              'PGPASSWORD': password,
+              'PGSSLMODE': 'verify-full',
+              'PGSSLROOTCERT': str(CA),
+              'PGCHANNELBINDING': 'disable',
+              'PGCONNECT_TIMEOUT': '15',
+              'PGAPPNAME': 'zhino-admin-auth-trace',
+              'PGOPTIONS': '-c default_transaction_read_only=on -c statement_timeout=30000 -c lock_timeout=5000',
+          })
+
+          def classify(stderr):
+              text = (stderr or '').lower()
+              if 'password authentication failed' in text or 'failed sasl auth' in text or 'scram' in text:
+                  return 'authentication_failure'
+              if 'certificate' in text or 'root certificate' in text:
+                  return 'tls_certificate_failure'
+              if 'could not translate host name' in text:
+                  return 'dns_failure'
+              if 'timeout' in text:
+                  return 'timeout'
+              if 'permission denied' in text:
+                  return 'permission_denied'
+              if 'does not exist' in text:
+                  return 'missing_object'
+              return 'psql_failed'
+
+          def psql_json(sql, label):
+              args = ['psql', '--no-psqlrc', '--no-password', '--tuples-only', '--no-align', '--quiet', '--set=ON_ERROR_STOP=1']
+              try:
+                  result = subprocess.run(args, input=sql, text=True, capture_output=True, env=child, timeout=90, check=False)
+              except Exception:
+                  fail(label + ' failed before completion; raw output withheld.')
+              if result.returncode != 0:
+                  raise RuntimeError(classify(result.stderr))
+              try:
+                  return json.loads(result.stdout.strip())
+              except Exception:
+                  fail(label + ' returned non-JSON output; raw output withheld.')
+
+          report = {}
+
+          # ── 1. the LIVE auth.users records (emails masked in SQL) ─────────
+          users_sql = r"""
+          begin transaction read only;
+          select json_build_object(
+            'user_count', (select count(*) from auth.users),
+            'users', coalesce((
+              select json_agg(t) from (
+                select
+                  u.id,
+                  case when u.email is null then null
+                       else left(u.email, 1) || '***@' || left(split_part(u.email, '@', 2), 2) || '***'
+                  end                                       as email_masked,
+                  u.raw_app_meta_data  ->> 'role'            as app_role,
+                  (u.raw_app_meta_data  ? 'role')            as app_has_role_key,
+                  (select coalesce(json_agg(k order by k), '[]'::json)
+                     from jsonb_object_keys(coalesce(u.raw_app_meta_data, '{}'::jsonb)) k)
+                                                            as app_meta_keys,
+                  u.raw_user_meta_data ->> 'role'            as user_role,
+                  (u.raw_user_meta_data ? 'role')            as user_has_role_key,
+                  (select coalesce(json_agg(k order by k), '[]'::json)
+                     from jsonb_object_keys(coalesce(u.raw_user_meta_data, '{}'::jsonb)) k)
+                                                            as user_meta_keys,
+                  (u.raw_app_meta_data ->> 'role') = 'admin' as app_role_is_exactly_admin,
+                  lower(btrim(coalesce(u.raw_app_meta_data ->> 'role', ''))) = 'admin'
+                                                            as app_role_admin_casefold,
+                  u.created_at, u.last_sign_in_at,
+                  (u.email_confirmed_at is not null)          as email_confirmed,
+                  ((to_jsonb(u) ->> 'banned_until') is not null
+                     and (to_jsonb(u) ->> 'banned_until')::timestamptz > now()) as banned,
+                  ((to_jsonb(u) ->> 'deleted_at') is not null) as soft_deleted,
+                  (to_jsonb(u) ->> 'is_anonymous')::boolean    as is_anonymous,
+                  (select string_agg(distinct i.provider, ',')
+                     from auth.identities i where i.user_id = u.id) as providers
+                from auth.users u
+                order by u.created_at
+              ) t
+            ), '[]'::json)
+          );
+          commit;
+          """
+          try:
+              report['auth_users'] = psql_json(users_sql, 'auth.users trace')
+          except RuntimeError as error:
+              report['auth_users'] = {'error': str(error)}
+
+          # ── 2. what the database actually evaluates as "admin" ────────────
+          admin_sql = r"""
+          begin transaction read only;
+          select json_build_object(
+            'is_admin_functions', coalesce((
+              select json_agg(json_build_object(
+                       'schema', n.nspname,
+                       'name', p.proname,
+                       'args', pg_get_function_arguments(p.oid),
+                       'security_definer', p.prosecdef,
+                       'volatility', p.provolatile,
+                       'source', p.prosrc
+                     ))
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where p.proname = 'is_admin'
+            ), '[]'::json),
+            'is_admin_grants', coalesce((
+              select json_agg(json_build_object('grantee', grantee, 'privilege', privilege_type))
+              from information_schema.role_routine_grants
+              where routine_name = 'is_admin'
+            ), '[]'::json),
+            'role_like_tables', coalesce((
+              select json_agg(table_name)
+              from information_schema.tables
+              where table_schema = 'public'
+                and (table_name like '%role%' or table_name like '%admin%')
+            ), '[]'::json)
+          );
+          commit;
+          """
+          try:
+              report['is_admin_definition'] = psql_json(admin_sql, 'is_admin() definition')
+          except RuntimeError as error:
+              report['is_admin_definition'] = {'error': str(error)}
+
+          # ── 3. the exact rules the upload faces ───────────────────────────
+          policy_sql = r"""
+          begin transaction read only;
+          select json_build_object(
+            'product_images_policies', coalesce((
+              select json_agg(json_build_object(
+                       'name', policyname, 'cmd', cmd, 'roles', roles,
+                       'using', qual, 'with_check', with_check
+                     ))
+              from pg_policies
+              where schemaname = 'public' and tablename = 'product_images'
+            ), '[]'::json),
+            'storage_object_policies_for_bucket', coalesce((
+              select json_agg(json_build_object(
+                       'name', policyname, 'cmd', cmd, 'roles', roles,
+                       'using', qual, 'with_check', with_check
+                     ))
+              from pg_policies
+              where schemaname = 'storage' and tablename = 'objects'
+                and (coalesce(qual, '') || coalesce(with_check, '')) like '%product-images%'
+            ), '[]'::json),
+            'bucket', (
+              select json_build_object(
+                       'id', id, 'public', public,
+                       'file_size_limit', file_size_limit,
+                       'allowed_mime_types', allowed_mime_types
+                     )
+              from storage.buckets where id = 'product-images'
+            ),
+            'manage_product_image_source', (
+              select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public' and p.proname = 'manage_product_image'
+            ),
+            'upload_allowed_sources', coalesce((
+              select json_agg(json_build_object('name', p.proname, 'source', p.prosrc))
+              from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+              where n.nspname = 'public'
+                and (p.proname like '%upload_allowed%' or p.proname like '%product_image%')
+            ), '[]'::json)
+          );
+          commit;
+          """
+          try:
+              report['upload_rules'] = psql_json(policy_sql, 'policy trace')
+          except RuntimeError as error:
+              report['upload_rules'] = {'error': str(error)}
+
+          # ── 4. reconstruct what GoTrue WOULD put in a fresh JWT ───────────
+          # This is a RECONSTRUCTION, not the operator's live token: it replays
+          # auth.users.raw_app_meta_data through the very same expression
+          # is_admin() evaluates. It proves the DB logic, not the browser.
+          simulate_sql = r"""
+          begin transaction read only;
+          set local role authenticated;
+          set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-000000000000","role":"authenticated","app_metadata":{"role":"admin"}}';
+          select json_build_object('is_admin_with_admin_claim', public.is_admin());
+          rollback;
+          """
+          try:
+              report['simulated_admin_claim'] = psql_json(simulate_sql, 'is_admin() with admin claim')
+          except RuntimeError as error:
+              report['simulated_admin_claim'] = {'error': str(error)}
+
+          simulate_plain_sql = r"""
+          begin transaction read only;
+          set local role authenticated;
+          set local request.jwt.claims = '{"sub":"00000000-0000-4000-8000-000000000000","role":"authenticated","app_metadata":{}}';
+          select json_build_object('is_admin_without_admin_claim', public.is_admin());
+          rollback;
+          """
+          try:
+              report['simulated_plain_claim'] = psql_json(simulate_plain_sql, 'is_admin() without admin claim')
+          except RuntimeError as error:
+              report['simulated_plain_claim'] = {'error': str(error)}
+
+          print('::notice title=admin-auth-trace::' + json.dumps(report, sort_keys=True, ensure_ascii=False))
+          summary = os.environ.get('GITHUB_STEP_SUMMARY')
+          if summary:
+              with open(summary, 'a', encoding='utf-8') as fh:
+                  fh.write('### Supabase admin auth trace (read-only)\n\n')
+                  fh.write('```json\n' + json.dumps(report, indent=2, sort_keys=True, ensure_ascii=False) + '\n```\n')
+          PY
+
+      - name: Publish trace JSON to this branch
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          if [ ! -f diagnostics/admin-auth-trace.json ]; then
+            echo "no trace file produced; nothing to publish"
+            exit 0
+          fi
+          git config user.name  "arena-ai-coding-agent[bot]"
+          git config user.email "298482267+arena-ai-coding-agent[bot]@users.noreply.github.com"
+          git add diagnostics/admin-auth-trace.json
+          if git diff --cached --quiet; then
+            echo "trace unchanged; nothing to commit"
+            exit 0
+          fi
+          git commit -m "diagnostic: read-only Supabase admin auth trace (no migration, no data change)
+
+          Source run: ${RUN_URL}. Temporary - delete together with .github/workflows/supabase-admin-auth-trace.yml once the upload issue is closed."
+          git pull --rebase --autostash origin "${GITHUB_REF_NAME}"
+          git push origin "HEAD:${GITHUB_REF_NAME}"
