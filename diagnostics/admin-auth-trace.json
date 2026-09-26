@@ -1,0 +1,434 @@
+{
+  "auth_timeline": {
+    "audit_log_exists": true,
+    "event_counts": [],
+    "product_images_by_source": [
+      {
+        "n": 22,
+        "source": "legacy"
+      }
+    ],
+    "products_sample_ids": [
+      "custard-banana",
+      "custard-cantaloupe",
+      "custard-chocolate",
+      "custard-mahlab-vanilla",
+      "custard-orange",
+      "custard-seven-fruit",
+      "custard-strawberry",
+      "jelly-blueberry",
+      "jelly-cantaloupe",
+      "jelly-grape",
+      "jelly-kiwi",
+      "jelly-lemon",
+      "jelly-mango",
+      "jelly-mulberry",
+      "jelly-orange",
+      "jelly-peach",
+      "jelly-pineapple",
+      "jelly-pomegranate",
+      "jelly-raspberry",
+      "jelly-sour-cherry",
+      "jelly-strawberry",
+      "jelly-watermelon"
+    ],
+    "recent_events": [],
+    "sessions": [
+      {
+        "created_at": "2026-09-26T18:58:37.046957+00:00",
+        "id": "eaa2f55a-1daa-4dd0-892f-80dd4db4b135",
+        "not_after": null,
+        "refreshed_at": null,
+        "updated_at": "2026-09-26T18:58:37.046957+00:00",
+        "user_agent_prefix": "Mozilla/5.0 (Linux; Android 10; K) Apple",
+        "user_id": "082824ea-5de1-4802-a9b4-388410febfb4"
+      }
+    ],
+    "sessions_table_exists": true
+  },
+  "auth_users": {
+    "user_count": 1,
+    "users": [
+      {
+        "app_has_role_key": true,
+        "app_meta_keys": [
+          "provider",
+          "providers",
+          "role"
+        ],
+        "app_role": "admin",
+        "app_role_admin_casefold": true,
+        "app_role_is_exactly_admin": true,
+        "banned": false,
+        "created_at": "2026-09-26T18:52:05.706512+00:00",
+        "email_confirmed": true,
+        "email_masked": "l***@gm***",
+        "id": "082824ea-5de1-4802-a9b4-388410febfb4",
+        "is_anonymous": false,
+        "last_sign_in_at": "2026-09-26T18:58:37.04621+00:00",
+        "providers": "email",
+        "record_updated_at": "2026-09-26T18:58:37.071756+00:00",
+        "soft_deleted": false,
+        "user_has_role_key": false,
+        "user_meta_keys": [
+          "email_verified"
+        ],
+        "user_role": null
+      }
+    ]
+  },
+  "contract_api_version": {
+    "error": "psql_failed"
+  },
+  "contract_rows": {
+    "contract_table_exists": true,
+    "fingerprint_matches": true
+  },
+  "is_admin_definition": {
+    "is_admin_functions": [
+      {
+        "args": "",
+        "name": "is_admin",
+        "schema": "public",
+        "security_definer": true,
+        "source": "\n  select coalesce((auth.jwt() -> 'app_metadata' ->> 'role') = 'admin', false);\n",
+        "volatility": "s"
+      }
+    ],
+    "is_admin_grants": [
+      {
+        "grantee": "service_role",
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "authenticated",
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "anon",
+        "privilege": "EXECUTE"
+      },
+      {
+        "grantee": "postgres",
+        "privilege": "EXECUTE"
+      }
+    ],
+    "role_like_tables": []
+  },
+  "preflight_handshake": {
+    "api_version_for_admin_claim": 3,
+    "api_version_function_exists": true,
+    "upload_allowed_for_probe_path": true
+  },
+  "product_images_policy_kind": {
+    "policies": [
+      {
+        "cmd": "DELETE",
+        "permissive": false,
+        "policy": "image_delete_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "INSERT",
+        "permissive": false,
+        "policy": "image_insert_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "UPDATE",
+        "permissive": false,
+        "policy": "image_update_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "SELECT",
+        "permissive": true,
+        "policy": "product_images_public_read",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "SELECT",
+        "permissive": false,
+        "policy": "product_images_read_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      }
+    ]
+  },
+  "session_and_cleanup_state": {
+    "product_image_cleanup_count": 0,
+    "product_image_cleanup_paths": [],
+    "product_image_operations_count": 0,
+    "product_image_operations_recent": [],
+    "product_images_count": 22,
+    "refresh_token_count": 1,
+    "refresh_token_rows": [
+      {
+        "children": 0,
+        "created_at": "2026-09-26T18:58:37.069125+00:00",
+        "id": 34,
+        "revoked": false,
+        "updated_at": "2026-09-26T18:58:37.069125+00:00",
+        "user_id": "082824ea-5de1-4802-a9b4-388410febfb4"
+      }
+    ],
+    "storage_object_count": 4,
+    "storage_objects_recent": [
+      {
+        "created_at": "2026-09-26T19:48:44.147598+00:00",
+        "name": "products/custard-banana/muisyqmc-1677.webp"
+      },
+      {
+        "created_at": "2026-09-26T19:48:16.250549+00:00",
+        "name": "products/custard-banana/muisy45u-1677.webp"
+      },
+      {
+        "created_at": "2026-09-26T12:54:50.467501+00:00",
+        "name": "products/custard-cantaloupe/muie6hc1-2600.webp"
+      },
+      {
+        "created_at": "2026-09-26T12:54:37.790065+00:00",
+        "name": "products/custard-cantaloupe/muie67m1-2600.webp"
+      }
+    ]
+  },
+  "simulated_admin_claim": {
+    "is_admin_with_admin_claim": true
+  },
+  "simulated_plain_claim": {
+    "is_admin_without_admin_claim": false
+  },
+  "storage_insert_policy_kind": {
+    "policies": [
+      {
+        "cmd": "DELETE",
+        "permissive": true,
+        "policy": "product_images_storage_delete"
+      },
+      {
+        "cmd": "DELETE",
+        "permissive": false,
+        "policy": "product_images_storage_delete_guard"
+      },
+      {
+        "cmd": "INSERT",
+        "permissive": true,
+        "policy": "product_images_storage_insert"
+      },
+      {
+        "cmd": "INSERT",
+        "permissive": false,
+        "policy": "product_images_storage_insert_guard"
+      },
+      {
+        "cmd": "SELECT",
+        "permissive": true,
+        "policy": "product_images_storage_read"
+      },
+      {
+        "cmd": "UPDATE",
+        "permissive": false,
+        "policy": "product_images_storage_update_guard"
+      }
+    ]
+  },
+  "upload_rules": {
+    "bucket": {
+      "allowed_mime_types": [
+        "image/jpeg",
+        "image/png",
+        "image/webp",
+        "image/avif",
+        "image/gif"
+      ],
+      "file_size_limit": 8388608,
+      "id": "product-images",
+      "public": true
+    },
+    "manage_product_image_source": " declare op uuid; req jsonb; receipt public.product_image_operations; result jsonb; previous jsonb;\nbegin\n  if not public.is_admin() or auth.uid() is null then raise exception 'admin_required'; end if;\n  if p_payload is null or jsonb_typeof(p_payload)<>'object'\n    or coalesce(p_payload->>'operation_id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then\n    raise exception 'invalid_image_operation';\n  end if;\n  op := (p_payload->>'operation_id')::uuid;\n  req := jsonb_build_object('action',p_action,'product_id',p_product_id,'image_id',p_image_id,\n    'expected_url',p_expected_url,'payload',p_payload-'operation_id');\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image-operation:'||op::text,0));\n  select * into receipt from public.product_image_operations where operation_id=op;\n  if found then\n    if receipt.actor_id is distinct from auth.uid() or receipt.request is distinct from req then\n      raise exception 'image_operation_conflict';\n    end if;\n    return receipt.result;\n  end if;\n  perform 1 from public.products where id=p_product_id for update;\n  if not found then raise exception 'product_not_found'; end if;\n  select coalesce(jsonb_agg(to_jsonb(i) order by i.id),'[]'::jsonb) into previous\n    from public.product_images i where product_id=p_product_id;\n  result := public.execute_product_image_operation(p_action,p_product_id,p_image_id,p_expected_url,p_payload);\n  insert into public.product_image_operations(operation_id,actor_id,request,result,before_images)\n    values(op,auth.uid(),req,result,previous);\n  return result;\nend ",
+    "product_images_policies": [
+      {
+        "cmd": "DELETE",
+        "name": "image_delete_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "false",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "name": "image_insert_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": null,
+        "with_check": "false"
+      },
+      {
+        "cmd": "UPDATE",
+        "name": "image_update_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "false",
+        "with_check": "false"
+      },
+      {
+        "cmd": "SELECT",
+        "name": "product_images_public_read",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "(is_admin() OR (EXISTS ( SELECT 1\n   FROM products p\n  WHERE ((p.id = product_images.product_id) AND p.active))))",
+        "with_check": null
+      },
+      {
+        "cmd": "SELECT",
+        "name": "product_images_read_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "(is_admin() OR (EXISTS ( SELECT 1\n   FROM products p\n  WHERE ((p.id = product_images.product_id) AND p.active))))",
+        "with_check": null
+      }
+    ],
+    "storage_object_policies_for_bucket": [
+      {
+        "cmd": "DELETE",
+        "name": "product_images_storage_delete",
+        "roles": [
+          "authenticated"
+        ],
+        "using": "((bucket_id = 'product-images'::text) AND product_image_deletion_allowed(name))",
+        "with_check": null
+      },
+      {
+        "cmd": "DELETE",
+        "name": "product_images_storage_delete_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "((bucket_id <> 'product-images'::text) OR product_image_deletion_allowed(name))",
+        "with_check": null
+      },
+      {
+        "cmd": "INSERT",
+        "name": "product_images_storage_insert",
+        "roles": [
+          "authenticated"
+        ],
+        "using": null,
+        "with_check": "((bucket_id = 'product-images'::text) AND product_image_upload_allowed(name))"
+      },
+      {
+        "cmd": "INSERT",
+        "name": "product_images_storage_insert_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": null,
+        "with_check": "((bucket_id <> 'product-images'::text) OR product_image_upload_allowed(name))"
+      },
+      {
+        "cmd": "SELECT",
+        "name": "product_images_storage_read",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "(bucket_id = 'product-images'::text)",
+        "with_check": null
+      },
+      {
+        "cmd": "UPDATE",
+        "name": "product_images_storage_update_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ],
+        "using": "(bucket_id <> 'product-images'::text)",
+        "with_check": "(bucket_id <> 'product-images'::text)"
+      }
+    ],
+    "upload_allowed_sources": [
+      {
+        "name": "retire_product_image_upload",
+        "source": "\nbegin\n  if not public.is_admin() then raise exception 'admin_required'; end if;\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image-references',0));\n  if p_path is null or p_path !~ '^products/[a-zA-Z0-9-]+/[0-9a-f-]{36}\\.(jpg|png|webp|gif|avif)$' then raise exception 'invalid_image_file'; end if;\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image:' || p_path, 0));\n  if public.product_image_path_referenced(p_path) then return false; end if;\n  insert into public.product_image_cleanup(storage_path) values(p_path) on conflict do nothing;\n  return true;\nend "
+      },
+      {
+        "name": "normalize_product_image_url",
+        "source": " begin\n  -- Defense-in-depth if a broad products policy was added on the server.\n  if current_user in ('anon','authenticated') and not public.is_admin() then raise exception 'admin_required'; end if;\n  -- Preserve nonblank legacy URLs byte-for-byte, including surrounding spaces.\n  if btrim(new.image_url)='' then new.image_url := null; end if; return new;\nend "
+      },
+      {
+        "name": "execute_product_image_operation",
+        "source": "\ndeclare p public.products; i public.product_images; previous public.product_images;\n  next_image public.product_images; v_path text; v_url text; v_primary boolean;\n  v_replace uuid; v_size bigint; v_mime text;\nbegin\n  if not public.is_admin() then raise exception 'admin_required'; end if;\n  select * into p from public.products where id = p_product_id for update;\n  if not found then raise exception 'product_not_found'; end if;\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image-references',0));\n  if p_action is null or p_action not in ('register', 'primary', 'delete', 'alt') then raise exception 'invalid_image_action'; end if;\n\n  if p_image_id is null or p_payload is null or jsonb_typeof(p_payload)<>'object' then raise exception 'invalid_image_file'; end if;\n\n  -- Idempotent retry after a lost registration response: never re-promote or\n  -- re-delete on replay. Verify identity before returning the existing row.\n  select * into i from public.product_images where id = p_image_id;\n  if found and i.product_id <> p_product_id then raise exception 'image_product_mismatch'; end if;\n  if p_action = 'register' and i.id is not null then raise exception 'image_operation_conflict'; end if;\n  if p_action <> 'register' and i.id is null then raise exception 'image_not_found'; end if;\n  if p.image_url is distinct from p_expected_url then raise exception 'image_conflict'; end if;\n\n  if p_action = 'register' then\n    v_path := p_payload->>'storage_path'; v_url := p_payload->>'storefront_url';\n    v_mime := p_payload->>'mime_type'; v_size := (p_payload->>'size_bytes')::bigint;\n    v_primary := coalesce((p_payload->>'make_primary')::boolean, false) or p.image_url is null or btrim(p.image_url)='';\n    v_replace := nullif(p_payload->>'replace_id', '')::uuid;\n    if v_replace is not null and not v_primary then raise exception 'replacement_requires_primary'; end if;\n    if v_path is null or v_path !~ '^products/[a-zA-Z0-9-]+/[0-9a-f-]{36}\\.(jpg|png|webp|gif|avif)$'\n      or v_url is null or v_url !~ '^https://[^/[:space:]]+/'\n      or not (right(v_url, length('/storage/v1/object/public/product-images/' || v_path)) = '/storage/v1/object/public/product-images/' || v_path)\n      or v_mime is null or v_mime not in ('image/jpeg','image/png','image/webp','image/gif','image/avif')\n      or v_size is null or v_size < 1 or v_size > 8388608\n      or coalesce((p_payload->>'width')::integer,0) <= 0\n      or coalesce((p_payload->>'height')::integer,0) <= 0 then raise exception 'invalid_image_file'; end if;\n    perform pg_advisory_xact_lock(hashtextextended('zhino-image:' || v_path, 0));\n    if exists (select 1 from public.product_image_cleanup where storage_path = v_path) then raise exception 'image_retired'; end if;\n    if not exists (select 1 from storage.objects where bucket_id = 'product-images' and name = v_path)\n      then raise exception 'image_object_missing'; end if;\n    if exists (select 1 from storage.objects where bucket_id = 'product-images' and name = v_path\n      and ((metadata->>'size')::bigint is distinct from v_size\n        or metadata->>'mimetype' is distinct from v_mime)) then raise exception 'invalid_image_file'; end if;\n    if v_replace is not null then\n      select * into previous from public.product_images where id = v_replace and product_id = p.id;\n      if not found or previous.storefront_url is distinct from p.image_url then raise exception 'image_conflict'; end if;\n    end if;\n    insert into public.product_images(id, product_id, storage_bucket, storage_path, storefront_url,\n      alt_text, width, height, mime_type, size_bytes, source, is_primary)\n    values(p_image_id, p.id, 'product-images', v_path, v_url,\n      left(coalesce(p_payload->>'alt_text',p.short_name),200),\n      (p_payload->>'width')::integer,(p_payload->>'height')::integer,v_mime,v_size,'upload',false)\n    returning * into i;\n    if v_primary then update public.products set image_url = v_url where id = p.id; end if;\n    if previous.id is not null and previous.source = 'upload' and previous.storage_bucket = 'product-images' then\n      insert into public.product_image_cleanup(storage_path) values(previous.storage_path) on conflict do nothing;\n      delete from public.product_images where id = previous.id;\n    end if;\n  elsif p_action = 'primary' then\n    update public.products set image_url = i.storefront_url where id = p.id and image_url is distinct from i.storefront_url;\n  elsif p_action = 'alt' then\n    update public.product_images set alt_text = left(coalesce(p_payload->>'alt_text',''),200)\n      where id = i.id returning * into i;\n  elsif p_action = 'delete' then\n    if i.storefront_url = p.image_url or i.is_primary then\n      select * into next_image from public.product_images\n        where product_id = p.id and id <> i.id order by sort_order, created_at, id limit 1;\n      -- A manager may still remove the last photo, but only by explicit consent.\n      if next_image.id is null and not coalesce((p_payload->>'allow_empty')::boolean,false)\n        then raise exception 'last_product_image'; end if;\n      update public.products set image_url = next_image.storefront_url where id = p.id;\n    end if;\n    if i.source = 'upload' and i.storage_bucket = 'product-images' then\n      insert into public.product_image_cleanup(storage_path) values(i.storage_path) on conflict do nothing;\n    end if;\n    delete from public.product_images where id = i.id;\n    return jsonb_build_object('id', i.id, 'deleted', true);\n  end if;\n  select * into i from public.product_images where id = p_image_id;\n  return to_jsonb(i);\nend "
+      },
+      {
+        "name": "product_image_url_references",
+        "source": " declare u text := lower(p_url); m text[]; n integer;\nbegin\n  if p_url is null then return false; end if;\n  if p_path is null or p_path='' then return true; end if;\n  loop\n    m := regexp_match(u,'(%[0-9a-f]{2})'); exit when m is null;\n    n := get_byte(decode(substr(m[1],2),'hex'),0);\n    if n=0 then return true; end if;\n    u := replace(u,m[1],chr(n));\n  end loop;\n  return strpos(lower(u),lower(p_path)) > 0;\nend "
+      },
+      {
+        "name": "product_image_path_referenced",
+        "source": "\n  select exists(select 1 from public.product_images where\n      (storage_bucket='product-images' and storage_path=p_path)\n      or public.product_image_url_references(storefront_url,p_path))\n    or exists(select 1 from public.products where public.product_image_url_references(image_url,p_path));\n"
+      },
+      {
+        "name": "reconcile_product_image",
+        "source": " declare v_id uuid; v_bucket text;\nbegin\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image-references',0));\n  if p_url is not null and btrim(p_url)<>'' then\n    if exists(select 1 from public.product_image_cleanup c where public.product_image_url_references(p_url,c.storage_path)) then\n      raise exception 'image_retired';\n    end if;\n    if exists(select 1 from public.product_images where source='upload' and product_id<>p_id\n      and public.product_image_url_references(p_url,storage_path)) then raise exception 'image_product_mismatch'; end if;\n    select id into v_id from public.product_images where product_id=p_id and storefront_url=p_url\n      order by is_primary desc,created_at,id limit 1;\n  end if;\n  update public.product_images set is_primary=false where product_id=p_id and is_primary and id is distinct from v_id;\n  if p_url is not null and btrim(p_url)<>'' and v_id is null then\n    v_bucket := case when p_url ~ '^(images/|/images/)' then 'site-public' else 'external' end;\n    insert into public.product_images(product_id,storage_bucket,storage_path,storefront_url,alt_text,source,is_primary)\n      values(p_id,v_bucket,p_url,p_url,coalesce(p_label,''),'legacy',true);\n  elsif v_id is not null then\n    update public.product_images set is_primary=true where id=v_id and not is_primary;\n  end if;\nend "
+      },
+      {
+        "name": "product_image_upload_allowed",
+        "source": " begin\n  if not public.is_admin() then return false; end if;\n  return not exists(select 1 from public.product_image_cleanup where storage_path=p_path);\nend "
+      },
+      {
+        "name": "product_image_deletion_allowed",
+        "source": " begin\n  if not public.is_admin() then return false; end if;\n  return exists(select 1 from public.product_image_cleanup where storage_path=p_path)\n    and not public.product_image_path_referenced(p_path);\nend "
+      },
+      {
+        "name": "manage_product_image",
+        "source": " declare op uuid; req jsonb; receipt public.product_image_operations; result jsonb; previous jsonb;\nbegin\n  if not public.is_admin() or auth.uid() is null then raise exception 'admin_required'; end if;\n  if p_payload is null or jsonb_typeof(p_payload)<>'object'\n    or coalesce(p_payload->>'operation_id','') !~ '^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$' then\n    raise exception 'invalid_image_operation';\n  end if;\n  op := (p_payload->>'operation_id')::uuid;\n  req := jsonb_build_object('action',p_action,'product_id',p_product_id,'image_id',p_image_id,\n    'expected_url',p_expected_url,'payload',p_payload-'operation_id');\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image-operation:'||op::text,0));\n  select * into receipt from public.product_image_operations where operation_id=op;\n  if found then\n    if receipt.actor_id is distinct from auth.uid() or receipt.request is distinct from req then\n      raise exception 'image_operation_conflict';\n    end if;\n    return receipt.result;\n  end if;\n  perform 1 from public.products where id=p_product_id for update;\n  if not found then raise exception 'product_not_found'; end if;\n  select coalesce(jsonb_agg(to_jsonb(i) order by i.id),'[]'::jsonb) into previous\n    from public.product_images i where product_id=p_product_id;\n  result := public.execute_product_image_operation(p_action,p_product_id,p_image_id,p_expected_url,p_payload);\n  insert into public.product_image_operations(operation_id,actor_id,request,result,before_images)\n    values(op,auth.uid(),req,result,previous);\n  return result;\nend "
+      },
+      {
+        "name": "set_primary_product_image",
+        "source": " begin raise exception 'image_api_upgrade_required'; end "
+      },
+      {
+        "name": "complete_product_image_cleanup",
+        "source": " declare job public.product_image_cleanup; reason text;\nbegin\n  if not public.is_admin() then raise exception 'admin_required'; end if;\n  perform pg_advisory_xact_lock(hashtextextended('zhino-image-references',0));\n  select * into job from public.product_image_cleanup where storage_path=p_path for update;\n  if not found or job.claim_id is distinct from p_claim_id then return false; end if;\n  if job.completed_at is not null then return true; end if;\n  if job.lease_until is null or job.lease_until<=clock_timestamp() then return false; end if;\n  if public.product_image_path_referenced(p_path) then reason := 'still_referenced';\n  elsif exists(select 1 from storage.objects where bucket_id='product-images' and name=p_path) then reason := 'object_present';\n  elsif p_storage_confirmed is distinct from true then reason := 'storage_unconfirmed';\n  end if;\n  if reason is not null then\n    update public.product_image_cleanup set lease_until=null,last_error_code=reason,\n      next_attempt_at=clock_timestamp()+make_interval(secs=>least(3600,5*power(2,least(job.attempt_count,10)))::integer)\n      where storage_path=p_path;\n    return false;\n  end if;\n  update public.product_image_cleanup set completed_at=clock_timestamp(),lease_until=null,last_error_code=null\n    where storage_path=p_path;\n  return true;\nend "
+      },
+      {
+        "name": "claim_product_image_cleanup",
+        "source": " begin\n  if not public.is_admin() then raise exception 'admin_required'; end if;\n  return query with picked as (\n    select q.storage_path from public.product_image_cleanup q\n    where q.completed_at is null and q.next_attempt_at<=clock_timestamp()\n      and (q.lease_until is null or q.lease_until<=clock_timestamp())\n    order by q.next_attempt_at,q.created_at,q.storage_path\n    limit greatest(1,least(coalesce(p_limit,20),20)) for update skip locked\n  ) update public.product_image_cleanup q\n    set claim_id=gen_random_uuid(),lease_until=clock_timestamp()+interval '2 minutes',\n        next_attempt_at=clock_timestamp()+interval '2 minutes',\n        attempt_count=least(q.attempt_count,2147483646)+1\n    from picked where q.storage_path=picked.storage_path\n    returning q.storage_path,q.claim_id;\nend "
+      },
+      {
+        "name": "product_image_api_version",
+        "source": " begin\n  if not public.is_admin() then raise exception 'admin_required'; end if;\n  return 3;\nend "
+      },
+      {
+        "name": "product_image_schema_fingerprint",
+        "source": "\n select jsonb_build_object(\n 'tables',(select jsonb_agg(jsonb_build_object('name',c.relname,'owner',c.relowner,'rls',c.relrowsecurity,'force_rls',c.relforcerowsecurity,'acl',c.relacl,\n   'columns',(select jsonb_agg(jsonb_build_array(a.attname,a.atttypid,a.attnotnull,a.attacl,pg_get_expr(d.adbin,d.adrelid)) order by a.attnum)\n     from pg_attribute a left join pg_attrdef d on d.adrelid=a.attrelid and d.adnum=a.attnum where a.attrelid=c.oid and a.attnum>0 and not a.attisdropped),\n   'constraints',(select jsonb_agg(jsonb_build_array(k.conname,pg_get_constraintdef(k.oid),k.convalidated) order by k.conname) from pg_constraint k where k.conrelid=c.oid),\n   'indexes',(select jsonb_agg(jsonb_build_array(pg_get_indexdef(i.indexrelid),i.indisvalid,i.indisready) order by pg_get_indexdef(i.indexrelid)) from pg_index i where i.indrelid=c.oid)) order by c.relname)\n   from pg_class c where c.oid in ('public.product_images'::regclass,'public.product_image_cleanup'::regclass,'public.product_image_operations'::regclass,'public.product_image_contract'::regclass)),\n 'policies',(select jsonb_agg(to_jsonb(p) order by p.schemaname,p.tablename,p.policyname) from pg_policies p where\n   p.schemaname='public' and p.tablename in ('product_images','product_image_cleanup','product_image_operations','product_image_contract')\n   or p.schemaname='storage' and p.tablename='objects' and p.policyname like 'product_images_%'),\n 'functions',(select jsonb_agg(jsonb_build_array(p.proname,pg_get_function_identity_arguments(p.oid),pg_get_functiondef(p.oid),p.proowner,p.proacl) order by p.proname,p.oid)\n   from pg_proc p join pg_namespace n on n.oid=p.pronamespace where n.nspname='public' and\n     (p.proname like '%product_image%' or p.proname in ('sync_product_primary_image','is_admin','touch_updated_at'))),\n 'triggers',(select jsonb_agg(jsonb_build_array(t.tgname,pg_get_triggerdef(t.oid),t.tgenabled) order by t.tgname) from pg_trigger t\n   where not t.tgisinternal and (t.tgrelid='public.product_images'::regclass or t.tgrelid='public.products'::regclass\n     and t.tgname in ('products_normalize_image_url','products_sync_primary_image'))),\n 'bucket',(select jsonb_build_array(id,name,public,file_size_limit,allowed_mime_types) from storage.buckets where id='product-images'));\n"
+      }
+    ]
+  }
+}
