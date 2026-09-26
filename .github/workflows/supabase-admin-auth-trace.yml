@@ -376,42 +376,69 @@ jobs:
               report['auth_timeline'] = {'error': str(error)}
 
           # ── 3d. the contract version the database actually enforces ───────
-          version_sql = r"""
-          begin transaction read only;
-          select json_build_object(
-            'product_image_api_version', (
-              select public.product_image_api_version()
-              where to_regprocedure('public.product_image_api_version()') is not null
-            ),
-            'contract_table_exists', to_regclass('public.product_image_contract') is not null,
-            'contract_versions', coalesce((
-              select json_agg(t) from (
-                select (to_jsonb(c) ->> 'version')          as version,
-                       ((to_jsonb(c) -> 'fingerprint') is not null) as has_fingerprint
-                from public.product_image_contract c
-              ) t
-            ), '[]'::json),
-            'product_images_policy_kind', coalesce((
-              select json_agg(json_build_object(
-                       'policy', pol.polname,
-                       'permissive', pol.polpermissive,
-                       'cmd', case pol.polcmd when 'r' then 'SELECT' when 'a' then 'INSERT'
-                              when 'w' then 'UPDATE' when 'd' then 'DELETE' else '*' end,
-                       'roles', (select coalesce(json_agg(r::regrole::text), '[]'::json)
-                                   from unnest(pol.polroles) r)
-                     ))
-              from pg_policy pol
-              join pg_class c on c.oid = pol.polrelid
-              join pg_namespace n on n.oid = c.relnamespace
-              where n.nspname = 'public' and c.relname = 'product_images'
-            ), '[]'::json)
-          );
-          commit;
-          """
-          try:
-              report['contract_version'] = psql_json(version_sql, 'contract version')
-          except RuntimeError as error:
-              report['contract_version'] = {'error': str(error)}
+          # Split into independent queries: a missing object in one must not
+          # hide the answer of another.
+          for label, sql in (
+              ('contract_api_version', r"""
+                begin transaction read only;
+                select json_build_object(
+                  'function_exists', to_regprocedure('public.product_image_api_version()') is not null,
+                  'returned_version', public.product_image_api_version()
+                );
+                commit;
+              """),
+              ('contract_rows', r"""
+                begin transaction read only;
+                select json_build_object(
+                  'contract_table_exists', to_regclass('public.product_image_contract') is not null,
+                  'fingerprint_matches', exists (
+                    select 1 from public.product_image_contract
+                    where version = 3 and fingerprint = public.product_image_schema_fingerprint()
+                  )
+                );
+                commit;
+              """),
+              ('product_images_policy_kind', r"""
+                begin transaction read only;
+                select json_build_object('policies', coalesce((
+                  select json_agg(json_build_object(
+                           'policy', pol.polname,
+                           'permissive', pol.polpermissive,
+                           'cmd', case pol.polcmd when 'r' then 'SELECT' when 'a' then 'INSERT'
+                                  when 'w' then 'UPDATE' when 'd' then 'DELETE' else '*' end,
+                           'roles', (select coalesce(json_agg(r::regrole::text), '[]'::json)
+                                       from unnest(pol.polroles) r)
+                         ))
+                  from pg_policy pol
+                  join pg_class c on c.oid = pol.polrelid
+                  join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'public' and c.relname = 'product_images'
+                ), '[]'::json));
+                commit;
+              """),
+              ('storage_insert_policy_kind', r"""
+                begin transaction read only;
+                select json_build_object('policies', coalesce((
+                  select json_agg(json_build_object(
+                           'policy', pol.polname,
+                           'permissive', pol.polpermissive,
+                           'cmd', case pol.polcmd when 'r' then 'SELECT' when 'a' then 'INSERT'
+                                  when 'w' then 'UPDATE' when 'd' then 'DELETE' else '*' end
+                         ))
+                  from pg_policy pol
+                  join pg_class c on c.oid = pol.polrelid
+                  join pg_namespace n on n.oid = c.relnamespace
+                  where n.nspname = 'storage' and c.relname = 'objects'
+                    and (coalesce(pg_get_expr(pol.polqual, pol.polrelid), '')
+                         || coalesce(pg_get_expr(pol.polwithcheck, pol.polrelid), '')) like '%product-images%'
+                ), '[]'::json));
+                commit;
+              """),
+          ):
+              try:
+                  report[label] = psql_json(sql, label)
+              except RuntimeError as error:
+                  report[label] = {'error': str(error)}
 
           # ── 4. reconstruct what GoTrue WOULD put in a fresh JWT ───────────
           # This is a RECONSTRUCTION, not the operator's live token: it replays
