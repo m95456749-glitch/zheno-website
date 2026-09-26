@@ -115,6 +115,11 @@
     ],
     "role_like_tables": []
   },
+  "preflight_handshake": {
+    "api_version_for_admin_claim": 3,
+    "api_version_function_exists": true,
+    "upload_allowed_for_probe_path": true
+  },
   "product_images_policy_kind": {
     "policies": [
       {
