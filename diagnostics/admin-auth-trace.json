@@ -77,8 +77,12 @@
       }
     ]
   },
-  "contract_version": {
+  "contract_api_version": {
     "error": "psql_failed"
+  },
+  "contract_rows": {
+    "contract_table_exists": true,
+    "fingerprint_matches": true
   },
   "is_admin_definition": {
     "is_admin_functions": [
@@ -110,6 +114,55 @@
       }
     ],
     "role_like_tables": []
+  },
+  "product_images_policy_kind": {
+    "policies": [
+      {
+        "cmd": "DELETE",
+        "permissive": false,
+        "policy": "image_delete_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "INSERT",
+        "permissive": false,
+        "policy": "image_insert_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "UPDATE",
+        "permissive": false,
+        "policy": "image_update_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "SELECT",
+        "permissive": true,
+        "policy": "product_images_public_read",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      },
+      {
+        "cmd": "SELECT",
+        "permissive": false,
+        "policy": "product_images_read_guard",
+        "roles": [
+          "anon",
+          "authenticated"
+        ]
+      }
+    ]
   },
   "session_and_cleanup_state": {
     "product_image_cleanup_count": 0,
@@ -153,6 +206,40 @@
   },
   "simulated_plain_claim": {
     "is_admin_without_admin_claim": false
+  },
+  "storage_insert_policy_kind": {
+    "policies": [
+      {
+        "cmd": "DELETE",
+        "permissive": true,
+        "policy": "product_images_storage_delete"
+      },
+      {
+        "cmd": "DELETE",
+        "permissive": false,
+        "policy": "product_images_storage_delete_guard"
+      },
+      {
+        "cmd": "INSERT",
+        "permissive": true,
+        "policy": "product_images_storage_insert"
+      },
+      {
+        "cmd": "INSERT",
+        "permissive": false,
+        "policy": "product_images_storage_insert_guard"
+      },
+      {
+        "cmd": "SELECT",
+        "permissive": true,
+        "policy": "product_images_storage_read"
+      },
+      {
+        "cmd": "UPDATE",
+        "permissive": false,
+        "policy": "product_images_storage_update_guard"
+      }
+    ]
   },
   "upload_rules": {
     "bucket": {
