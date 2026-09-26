@@ -468,6 +468,28 @@ jobs:
           except RuntimeError as error:
               report['simulated_plain_claim'] = {'error': str(error)}
 
+          # ── 4b. the pre-flight the panel now performs, replayed ──────────
+          # The sub is the real operator id; app_metadata is replayed from the
+          # live auth.users record. This proves what the browser will get, not
+          # a grant of anything.
+          user_ids = [u.get('id') for u in (report.get('auth_users') or {}).get('users', []) if u.get('id')]
+          if user_ids:
+              handshake_sql = r"""
+              begin transaction read only;
+              set local role authenticated;
+              set local request.jwt.claims = '{"sub":"SUB","role":"authenticated","app_metadata":{"role":"admin"}}';
+              select json_build_object(
+                'api_version_function_exists', to_regprocedure('public.product_image_api_version()') is not null,
+                'api_version_for_admin_claim', public.product_image_api_version(),
+                'upload_allowed_for_probe_path', public.product_image_upload_allowed('products/__zhino_trace_probe__/handshake.png')
+              );
+              rollback;
+              """.replace('SUB', user_ids[0])
+              try:
+                  report['preflight_handshake'] = psql_json(handshake_sql, 'pre-flight handshake')
+              except RuntimeError as error:
+                  report['preflight_handshake'] = {'error': str(error)}
+
           print('::notice title=admin-auth-trace::' + json.dumps(report, sort_keys=True, ensure_ascii=False))
           summary = os.environ.get('GITHUB_STEP_SUMMARY')
           if summary:
