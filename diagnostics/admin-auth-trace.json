@@ -78,7 +78,7 @@
     ]
   },
   "contract_version": {
-    "error": "missing_object"
+    "error": "psql_failed"
   },
   "is_admin_definition": {
     "is_admin_functions": [
