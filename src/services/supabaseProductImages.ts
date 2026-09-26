@@ -299,9 +299,40 @@ export async function fetchRemoteProductImages(): Promise<ProductImage[]> {
   }
 }
 
+/**
+ * Ask the database which product-image contract it enforces — BEFORE a
+ * connected write is attempted.
+ *
+ * Why this exists (found on production, 2026-09-26): the contract is
+ * versioned inside the database (`public.product_image_api_version()`).
+ * Version 3 retired the old direct INSERT/UPDATE/DELETE path on
+ * `public.product_images` with RESTRICTIVE `with check (false)` guard
+ * policies. A panel older than the database — a stale deploy, an
+ * upgraded database — therefore fails every write with a bare
+ * «new row violates row-level security policy», and the classifier below
+ * would honestly but misleadingly report that as «دسترسی مدیر تأیید
+ * نشد». Asking the version first turns that opaque refusal into the
+ * truth.
+ *
+ * It grants nothing and bypasses nothing: the write itself is still
+ * authorised by Row Level Security and the security-definer RPCs.
+ */
+async function assertImageApiVersion(): Promise<void> {
+  const supabase = client();
+  const { data, error } = await bounded(supabase.rpc('product_image_api_version'));
+  if (error) throw describeImageError('بررسی نسخهٔ سرویس تصاویر', error);
+  if (data !== 3) {
+    throw new ProductImageError(
+      `نسخهٔ سرویس تصاویر در دیتابیس با این نسخهٔ پنل هم‌خوان نیست (نسخهٔ دیتابیس: ${String(data)}). ` +
+        'سایت را دوباره مستقر (deploy) کنید تا پنل و دیتابیس هر دو روی قرارداد نسخهٔ ۳ باشند.',
+    );
+  }
+}
+
 export async function uploadImageObject(path: string, prepared: PreparedImage, alreadyUploaded = false, retry = false): Promise<{ publicUrl: string }> {
   const supabase = client();
   if (alreadyUploaded) return { publicUrl: supabase.storage.from(PRODUCT_IMAGE_BUCKET).getPublicUrl(path).data.publicUrl };
+  await assertImageApiVersion();
   const options = { contentType: prepared.mime, cacheControl: '31536000', upsert: false };
   let { error } = await bounded(supabase.storage.from(PRODUCT_IMAGE_BUCKET).upload(path, prepared.blob, options));
   if (error && isPermissionRefusal(error)) {
@@ -356,6 +387,7 @@ export async function mutateImage(
   action: 'register' | 'primary' | 'delete' | 'alt', productId: string,
   imageId: string, expectedUrl: string | null, payload: Record<string, unknown> = {},
 ): Promise<ProductImage | null> {
+  await assertImageApiVersion();
   const { key, operation } = await imageOperation(action, productId, imageId, expectedUrl, payload);
   const sendRpc = () => bounded(client().rpc('manage_product_image', {
     p_action: action, p_product_id: productId, p_image_id: imageId,
