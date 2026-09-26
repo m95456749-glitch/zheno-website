@@ -43,7 +43,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          persist-credentials: false
+          # Needed by the final step: it pushes the trace JSON back to this
+          # branch with the ephemeral Actions token (least-privilege default).
+          persist-credentials: true
 
       - name: Ensure PostgreSQL read-only client is available
         run: |
