@@ -2,6 +2,10 @@
 
 وبسایت فروشگاهی ژینو — ساخته شده با React + TypeScript + Vite + Tailwind CSS
 
+## انتشار روی Cloudflare Workers
+
+راهنمای مهاجرت مرحله‌ای، اتصال **Worker موجود `zheno`** به GitHub، آزمون workers.dev و انتقال امن دامنه: [CLOUDFLARE-WORKERS-FA.md](./CLOUDFLARE-WORKERS-FA.md).
+
 ## راه‌اندازی
 
 ```bash

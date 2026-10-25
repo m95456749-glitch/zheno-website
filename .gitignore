@@ -38,3 +38,6 @@ Thumbs.db
 # Python automation test/import caches
 __pycache__/
 *.py[cod]
+
+# Wrangler local state (may contain bindings and auth-related metadata)
+.wrangler/
