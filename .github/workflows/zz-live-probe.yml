@@ -28,13 +28,13 @@ jobs:
 
       - name: Worker deployment (read-only)
         run: |
-          node scripts/verify-live-readonly.mjs https://zheno.m95456749.workers.dev 2>&1 | tee worker.log || true
-          sed -n 's/^/::notice title=worker::/p' worker.log | grep -E "PASS:|RESULT:|WARN:|INFO:" || true
+          node scripts/verify-live-readonly.mjs https://zheno.m95456749.workers.dev > worker.log 2>&1 || true
+          tail -n 30 worker.log | sed 's/^/::notice title=worker::/' || true
 
       - name: Production domain zheno.devs.surf (read-only)
         run: |
-          node scripts/verify-live-readonly.mjs https://zheno.devs.surf 2>&1 | tee prod.log || true
-          sed -n 's/^/::notice title=prod::/p' prod.log | grep -E "PASS:|RESULT:|WARN:|INFO:" || true
+          node scripts/verify-live-readonly.mjs https://zheno.devs.surf > prod.log 2>&1 || true
+          tail -n 30 prod.log | sed 's/^/::notice title=prod::/' || true
           echo "::notice title=prod-compare::worker-shell=$(grep -o 'shell served at / ([0-9]*' worker.log | grep -o '[0-9]*') prod-shell=$(grep -o 'shell served at / ([0-9]*' prod.log | grep -o '[0-9]*')"
 
       - name: Independent DNS check for the Supabase project host (DoH, read-only)
