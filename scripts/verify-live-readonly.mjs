@@ -155,11 +155,41 @@ if (projectList.length === 0) {
             'Either the function is not deployed or its origin list excludes this host.');
         }
       } catch (error) {
-        console.log(`WARN: ${fn}: preflight could not be completed (${error.name}). ` +
+        // Distinguish "this sandbox has no egress" from "the function answers
+        // badly". `cause.code` is a network/DNS error code, never a secret.
+        const cause = error.cause && (error.cause.code || error.cause.message) || 'no-cause';
+        console.log(`WARN: ${fn}: preflight could not be completed (${error.name}, cause=${cause}). ` +
           'Network blocked, or the function is not deployed — this is not proof of a working endpoint.');
       }
     }
   }
+  /* ── 5. reachability of the project itself (no credentials, no data) ── */
+  for (const ref of projectList) {
+    const probes = [
+      ['REST root', `https://${ref}.supabase.co/rest/v1/`],
+      ['Auth health', `https://${ref}.supabase.co/auth/v1/health`],
+      ['Functions root', `https://${ref}.supabase.co/functions/v1/`],
+    ];
+    for (const [label, url] of probes) {
+      try {
+        const response = await fetch(url, {
+          method: 'GET',
+          headers: { Origin: base.origin },
+          signal: AbortSignal.timeout(TIMEOUT),
+          redirect: 'manual',
+        });
+        console.log(`INFO: ${label} → HTTP ${response.status} ` +
+          `(access-control-allow-origin=${response.headers.get('access-control-allow-origin') || 'absent'})`);
+        if (response.status === 200 || response.status === 401 || response.status === 404) {
+          ok(`${label} reachable from this host (HTTP ${response.status}) — no data read`);
+        }
+      } catch (error) {
+        const cause = error.cause && (error.cause.code || error.cause.message) || 'no-cause';
+        console.log(`WARN: ${label} unreachable (${error.name}, cause=${cause}) — network path, not an app verdict.`);
+      }
+    }
+  }
+
   console.log('\nRESULT: this deployment ships a CONNECTED build (hosted project URL + public key).');
   console.log('  Connection is proven; data access still depends on RLS and the signed-in admin.');
   console.log('  Log in to /admin/login with a real admin account and look for the database badge');

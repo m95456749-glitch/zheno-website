@@ -1,7 +1,7 @@
 # TEMPORARY read-only probe — proves the live state of the Cloudflare deployment.
 # Same script as .github/workflows/live-verify.yml, triggered by a push so it can
 # run without `actions: write`. Read-only: GET/OPTIONS only, no secret, no write.
-# Deleted in the next commit; the run stays as evidence against its own SHA.
+# Deleted in the next commit (run 2: richer diagnostics); the run stays as evidence against its own SHA.
 name: zz-live-probe
 on:
   push:
