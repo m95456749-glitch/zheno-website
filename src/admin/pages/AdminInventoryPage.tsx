@@ -6,9 +6,10 @@
 // UI: a single editable list; the number itself is the control.
 // ============================================================
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { adjustVariantStock, isDatabaseConnected, setVariantStock, useCatalog } from '../../services/catalog';
-import { getSettings } from '../../services/settings';
+import { MAX_DB_INTEGER, isDbIntegerInRange } from '../../services/catalogValidation';
+import { useSettings } from '../../services/settings';
 import { getFlavor } from '../../data/products';
 import { SavedFlash } from '../components/ui';
 import { cn } from '../../utils/cn';
@@ -32,14 +33,18 @@ function StockInput({
 }) {
   const [text, setText] = useState(String(value));
   const [error, setError] = useState(false);
+  const editingRef = useRef(false);
+
   useEffect(() => {
+    if (editingRef.current) return;
     setText(String(value));
     setError(false);
   }, [value]);
 
   const commit = () => {
+    editingRef.current = false;
     const n = Number(text);
-    if (!Number.isSafeInteger(n) || n < 0) {
+    if (!isDbIntegerInRange(n, 0)) {
       setText(String(value));
       setError(true);
       return;
@@ -62,11 +67,15 @@ function StockInput({
       <input
         type="number"
         min={0}
-        max={Number.MAX_SAFE_INTEGER}
+        max={MAX_DB_INTEGER}
         step={1}
         dir="ltr"
         value={text}
+        onFocus={() => {
+          editingRef.current = true;
+        }}
         onChange={(e) => {
+          editingRef.current = true;
           setText(e.target.value);
           setError(false);
         }}
@@ -93,7 +102,7 @@ function StockInput({
 
 export default function AdminInventoryPage() {
   const catalog = useCatalog();
-  const settings = getSettings();
+  const settings = useSettings();
   // true when the panel writes to the real PostgreSQL database
   const connected = isDatabaseConnected();
   const [savedId, setSavedId] = useState<string | null>(null);
@@ -109,14 +118,12 @@ export default function AdminInventoryPage() {
     window.setTimeout(() => setSavedId((cur) => (cur === key ? null : cur)), 1800);
   };
 
-  const save = (productId: string, variantId: string, stock: number) => {
-    setVariantStock(productId, variantId, stock);
-    flashSaved(productId, variantId);
+  const save = async (productId: string, variantId: string, stock: number) => {
+    if (await setVariantStock(productId, variantId, stock)) flashSaved(productId, variantId);
   };
 
-  const adjust = (productId: string, variantId: string, delta: number) => {
-    adjustVariantStock(productId, variantId, delta);
-    flashSaved(productId, variantId);
+  const adjust = async (productId: string, variantId: string, delta: number) => {
+    if (await adjustVariantStock(productId, variantId, delta)) flashSaved(productId, variantId);
   };
 
   return (

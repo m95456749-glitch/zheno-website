@@ -136,6 +136,7 @@ export default function AdminAssistantPage() {
       رسیده از دیتابیس نباید ویرایش‌های روی صفحه را بازنویسی کنند. */
   const dirtyRef = useRef(false);
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
   const [testNote, setNote] = useState<{ tone: 'ok' | 'err'; text: string } | null>(null);
 
   // service status (subsection ۳) — probed on demand, never auto-loops
@@ -161,11 +162,25 @@ export default function AdminAssistantPage() {
     [],
   );
 
-  const save = () => {
-    saveVoiceSettings(form);
+  const save = async () => {
+    setSaving(true);
+    const ok = await saveVoiceSettings(form);
+    setSaving(false);
+    if (!ok) return; // keep the draft dirty; the panel-wide banner carries the error
     dirtyRef.current = false;
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
+  };
+
+  const reset = async () => {
+    if (!window.confirm('تنظیمات ربات به مقادیر اولیه بازگردد؟')) return;
+    setSaving(true);
+    const ok = await resetVoiceSettings();
+    setSaving(false);
+    if (!ok) return;
+    dirtyRef.current = false;
+    setForm({ ...DEFAULT_ASSISTANT_VOICE });
+    setNote(null);
   };
 
   /* تست صدا: همان موتور گفتگوست؛ ابتدا مقادیر روی فرم ذخیره می‌شود
@@ -207,14 +222,22 @@ export default function AdminAssistantPage() {
     setErrorNote(text);
   }, [speech.voiceProblem]);
 
-  const testVoice = () => {
+  const testVoice = async () => {
     speech.stop();
     if (!form.voiceEnabled) {
       setNote({ tone: 'err', text: 'کلید «صدای ربات» خاموش است؛ ابتدا آن را روشن کنید و دوباره تست بگیرید.' });
       return;
     }
-    dirtyRef.current = false; // تست = ذخیرهٔ همان چیزی که روی صفحه است
-    saveVoiceSettings(form);
+    // تست = ذخیرهٔ همان چیزی که روی صفحه است؛ اگر دیتابیس آن را تأیید
+    // نکرد، صدای تنظیمات قبلی به‌جای فرم فعلی پخش نمی‌شود.
+    setSaving(true);
+    const ok = await saveVoiceSettings(form);
+    setSaving(false);
+    if (!ok) {
+      setNote({ tone: 'err', text: 'تنظیمات صدا در دیتابیس تأیید نشد؛ ابتدا خطای بالای پنل را بررسی کنید.' });
+      return;
+    }
+    dirtyRef.current = false;
     pendingTest.current = true;
     // اگر ذخیره هیچ تغییری در تنظیمات زنده ندهد، افکت بالا اجرا
     // نمی‌شود؛ پس یک لحظه بعد خودمان پخش را آغاز می‌کنیم.
@@ -336,7 +359,8 @@ export default function AdminAssistantPage() {
           <div className="flex flex-wrap items-center gap-3 border-t border-espresso/8 pt-4">
             <button
               type="button"
-              onClick={testVoice}
+              onClick={() => void testVoice()}
+              disabled={saving}
               className="btn-lux btn-gold rounded-xl px-5 py-2.5 text-[0.78rem]"
             >
               تست صدا
@@ -441,20 +465,14 @@ export default function AdminAssistantPage() {
 
         {/* ─── save bar ─── */}
         <div className="flex flex-col gap-3 rounded-2xl border border-espresso/8 bg-white/70 p-4 shadow-[0_1px_2px_rgba(42,11,18,0.04)] sm:flex-row sm:items-center sm:justify-between">
-          <button type="button" onClick={save} className="btn-lux btn-wine rounded-xl sm:min-w-48">
-            ذخیره تنظیمات ربات
+          <button type="button" onClick={() => void save()} disabled={saving} className="btn-lux btn-wine rounded-xl sm:min-w-48">
+            {saving ? 'در حال ذخیره…' : 'ذخیره تنظیمات ربات'}
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('تنظیمات ربات به مقادیر اولیه بازگردد؟')) {
-                resetVoiceSettings();
-                dirtyRef.current = false;
-                setForm({ ...DEFAULT_ASSISTANT_VOICE });
-                setNote(null);
-              }
-            }}
-            className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline"
+            onClick={() => void reset()}
+            disabled={saving}
+            className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40"
           >
             بازنشانی به مقادیر اولیه
           </button>

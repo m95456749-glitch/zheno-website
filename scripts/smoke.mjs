@@ -1004,6 +1004,21 @@ function expectNoErrors(label, errors) {
           featured: true,
           special: false,
         },
+        // Regression fixture: a remote product row whose variant write
+        // never completed. The products page must label and leave it
+        // repairable, not crash dereferencing variants[0].
+        {
+          id: 'jelly-peach',
+          category: 'jelly',
+          flavor_id: 'peach',
+          name: 'پودر ژله هلو ژینو',
+          short_name: 'ژله هلو',
+          category_label: 'پودر ژله',
+          image_url: 'images/products/jelly-peach.jpg',
+          active: true,
+          featured: false,
+          special: false,
+        },
       ]);
     }
     if (url.includes('/rest/v1/product_variants')) {
@@ -1211,6 +1226,8 @@ function expectNoErrors(label, errors) {
     );
     if (onProducts) ok('connected admin — products page reached through the panel nav');
     else fail('connected admin — products page did not render: ' + text().slice(0, 200));
+    expectContains('connected admin — variantless product', text(), 'بدون تنوع');
+    expectContains('connected admin — variantless product', text(), 'نیازمند اصلاح');
 
     const toggle = document.querySelector('button[role="switch"]');
     if (!toggle) {
@@ -1225,6 +1242,9 @@ function expectNoErrors(label, errors) {
       else fail(`connected admin — unexpected product payload: ${patch ? patch.body : 'none'}`);
       if (!calls.some((c) => c.method.toUpperCase() === 'DELETE')) ok('connected admin — no DELETE request was ever sent');
       else fail('connected admin — a DELETE request was sent (must never happen)');
+      const savedShown = await waitFor(() => text().includes('ذخیره شد'));
+      if (savedShown) ok('connected admin — success feedback follows the confirmed database write');
+      else fail('connected admin — confirmed write did not produce success feedback');
     }
   }
 
@@ -1272,7 +1292,7 @@ function makeSupabaseStub({
   staleAdmin = false,
 } = {}) {
   const calls = [];
-  const flags = { bucketMissing };
+  const flags = { bucketMissing, rejectOrderStatusPatch: false };
   const createdOrderPayloads = [];
   const orderStatusPatches = [];
   const productPatches = [];
@@ -1430,6 +1450,9 @@ function makeSupabaseStub({
     if (url.includes('/rest/v1/orders') && method === 'PATCH') {
       const payload = JSON.parse(body || '{}');
       orderStatusPatches.push({ url, payload, headers });
+      if (flags.rejectOrderStatusPatch) {
+        return json({ message: 'forced order status failure', code: '400' }, 400);
+      }
       return new globalThis.Response(null, { status: 204 });
     }
     // ── Storage: product photos (bucket 'product-images') ──
@@ -2918,6 +2941,37 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
       const orderReads = stub.calls.filter((c) => c.method === 'GET' && c.url.includes('/rest/v1/orders')).length;
       if (orderReads >= 2) ok('admin orders — the authoritative re-read happened after the write');
       else fail(`admin orders — expected ≥2 orders reads, saw ${orderReads}`);
+
+      // Regression: a refused status PATCH must be visible outside the
+      // empty state, and the controlled select must return to the
+      // authoritative database value instead of keeping the optimistic one.
+      stub.flags.rejectOrderStatusPatch = true;
+      const statusSelector = 'select[aria-label="تغییر وضعیت سفارش ZH-ADM1001"]';
+      const failedSelect = document.querySelector(statusSelector);
+      if (!failedSelect) {
+        fail('admin orders — the ZH-ADM1001 status select was not found for the failure check');
+      } else {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, 'value').set.call(
+          failedSelect,
+          'shipped',
+        );
+        failedSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        const failureReported = await waitFor(
+          () =>
+            text().includes('تغییر وضعیت سفارش ZH-ADM1001') &&
+            text().includes('forced order status failure') &&
+            document.querySelector(statusSelector)?.value === 'new',
+        );
+        if (failureReported) {
+          ok('admin orders — a refused status write is visible and rolls back to the database value');
+        } else {
+          fail(
+            'admin orders — refused status write was not reported/rolled back: ' +
+              text().slice(0, 260) +
+              ` (select=${document.querySelector(statusSelector)?.value ?? 'missing'})`,
+          );
+        }
+      }
     }
 
     if (errors.length === 0) ok('admin orders flow — no runtime errors');

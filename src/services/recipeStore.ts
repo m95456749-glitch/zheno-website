@@ -97,10 +97,9 @@ export function getActiveRecipes(): Recipe[] {
 }
 
 /** Edit an existing recipe or add a new one. Database writes stay under RLS. */
-export function upsertRecipe(recipe: Recipe): void {
+export async function upsertRecipe(recipe: Recipe): Promise<boolean> {
   if (getSupabase()) {
-    runRemoteSiteWrite('ذخیره دستور تهیه', () => pushRemoteRecipe(recipe, true));
-    return;
+    return runRemoteSiteWrite('ذخیره دستور تهیه', () => pushRemoteRecipe(recipe, true));
   }
 
   const overlay = store.get();
@@ -119,12 +118,12 @@ export function upsertRecipe(recipe: Recipe): void {
       removed: overlay.removed,
     });
   }
+  return true;
 }
 
-export function removeRecipe(id: string): void {
+export async function removeRecipe(id: string): Promise<boolean> {
   if (getSupabase()) {
-    runRemoteSiteWrite('پنهان‌کردن دستور تهیه', () => setRemoteRecipeActive(id, false));
-    return;
+    return runRemoteSiteWrite('پنهان‌کردن دستور تهیه', () => setRemoteRecipeActive(id, false));
   }
 
   const overlay = store.get();
@@ -135,15 +134,16 @@ export function removeRecipe(id: string): void {
     additions: overlay.additions.filter((r) => r.id !== id),
     removed: overlay.removed.includes(id) ? overlay.removed : [...overlay.removed, id],
   });
+  return true;
 }
 
 /** Reset is non-destructive in Supabase: official rows are restored and additions hidden. */
-export function resetRecipes(): void {
+export async function resetRecipes(): Promise<boolean> {
   if (getSupabase()) {
-    runRemoteSiteWrite('بازنشانی دستورها', () => resetRemoteRecipes(RECIPES));
-    return;
+    return runRemoteSiteWrite('بازنشانی دستورها', () => resetRemoteRecipes(RECIPES));
   }
   store.reset();
+  return true;
 }
 
 /** Recipes as a hook (admin/storefront pages). */

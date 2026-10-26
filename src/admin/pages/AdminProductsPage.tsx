@@ -8,7 +8,7 @@
 // category filter, and small labeled «ویرایش» / «حذف» buttons.
 // ============================================================
 
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { FLAVORS, getFlavor } from '../../data/products';
 import type { FlavorId, Product, ProductCategory } from '../../types';
@@ -22,7 +22,16 @@ import {
   useCatalog,
   upsertProduct,
 } from '../../services/catalog';
-import { getSettings } from '../../services/settings';
+import {
+  MAX_DB_INTEGER,
+  findSkuConflict,
+  generateSku,
+  isDbIntegerInRange,
+  isValidSku,
+  normalizeSku,
+} from '../../services/catalogValidation';
+import { useCatalogSync } from '../../services/catalogSync';
+import { useSettings } from '../../services/settings';
 import { formatNumber, formatPrice, toPersianDigits } from '../../utils/format';
 import ProductVisual from '../../components/ProductVisual';
 import { Field, Modal, SavedFlash, Toggle } from '../components/ui';
@@ -59,7 +68,7 @@ const EMPTY_FORM: ProductFormState = {
 
 export default function AdminProductsPage() {
   const catalog = useCatalog();
-  const lowThreshold = getSettings().lowStockThreshold;
+  const lowThreshold = useSettings().lowStockThreshold;
   // true when the panel writes to the real PostgreSQL database
   const connected = isDatabaseConnected();
 
@@ -103,17 +112,20 @@ export default function AdminProductsPage() {
     window.setTimeout(() => setSaved(false), 2000);
   };
 
-  const doDelete = (product: Product) => {
+  const doDelete = async (product: Product) => {
     // Connected mode hides the product instead of deleting its row:
     // orders reference products, and the storefront already treats
     // «غیرفعال» as "not for sale". Nothing is ever destroyed.
     const question = connected
       ? `محصول «${product.shortName}» از فروشگاه پنهان شود؟ (داده‌ها حذف نمی‌شوند؛ فقط غیرفعال می‌شود)`
       : `محصول «${product.shortName}» حذف شود؟`;
-    if (window.confirm(question)) {
-      removeProduct(product.id);
+    if (window.confirm(question) && (await removeProduct(product.id))) {
       flashSaved();
     }
+  };
+
+  const toggleActive = async (product: Product, on: boolean) => {
+    if (await setProductActive(product.id, on)) flashSaved();
   };
 
   const stockTone = (stock: number) =>
@@ -215,27 +227,25 @@ export default function AdminProductsPage() {
                             <p className="truncate text-[0.85rem] font-bold text-espresso">{product.name}</p>
                             <p className="mt-0.5 truncate text-[0.68rem] text-mocha">
                               {product.categoryLabel} · {flavor.name} ·{' '}
-                              <span dir="ltr">{variant.sku}</span>
+                              {variant ? <span dir="ltr">{variant.sku}</span> : 'بدون تنوع'}
                             </p>
                           </div>
                         </div>
                       </td>
                       <td className="adm-td whitespace-nowrap text-[0.82rem] font-bold text-espresso">
-                        {formatPrice(variant.price)}
+                        {variant ? formatPrice(variant.price) : '—'}
                       </td>
-                      <td className={cn('adm-td text-[0.85rem] font-extrabold', stockTone(variant.stock))}>
-                        {formatNumber(variant.stock)}
+                      <td className={cn('adm-td text-[0.85rem] font-extrabold', variant && stockTone(variant.stock))}>
+                        {variant ? formatNumber(variant.stock) : <span className="adm-badge adm-badge-warning">نیازمند اصلاح</span>}
                       </td>
                       <td className="adm-td">
                         <div className="flex items-center gap-2">
                           <Toggle
                             checked={meta.active}
-                            onChange={(on) => {
-                              setProductActive(product.id, on);
-                              flashSaved();
-                            }}
+                            onChange={(on) => void toggleActive(product, on)}
                             label={`نمایش ${product.shortName} در فروشگاه`}
                           />
+                          {!variant && <span className="adm-badge adm-badge-warning">بدون تنوع</span>}
                           {!meta.active && <span className="adm-badge adm-badge-cancelled">غیرفعال</span>}
                         </div>
                       </td>
@@ -250,7 +260,7 @@ export default function AdminProductsPage() {
                           </button>
                           <button
                             type="button"
-                            onClick={() => doDelete(product)}
+                            onClick={() => void doDelete(product)}
                             className="adm-btn-sm adm-btn-sm-danger"
                           >
                             حذف
@@ -288,9 +298,11 @@ export default function AdminProductsPage() {
                         {product.categoryLabel} · {flavor.name}
                       </p>
                       <div className="mt-2 flex items-center justify-between">
-                        <span className="text-sm font-extrabold text-wine-900">{formatPrice(variant.price)}</span>
-                        <span className={cn('text-[0.72rem] font-bold', stockTone(variant.stock))}>
-                          موجودی: {formatNumber(variant.stock)}
+                        <span className="text-sm font-extrabold text-wine-900">
+                          {variant ? formatPrice(variant.price) : 'بدون تنوع'}
+                        </span>
+                        <span className={cn('text-[0.72rem] font-bold', variant && stockTone(variant.stock))}>
+                          {variant ? `موجودی: ${formatNumber(variant.stock)}` : 'نیازمند اصلاح'}
                         </span>
                       </div>
                     </div>
@@ -299,12 +311,10 @@ export default function AdminProductsPage() {
                     <div className="flex items-center gap-2">
                       <Toggle
                         checked={meta.active}
-                        onChange={(on) => {
-                          setProductActive(product.id, on);
-                          flashSaved();
-                        }}
+                        onChange={(on) => void toggleActive(product, on)}
                         label={`نمایش ${product.shortName} در فروشگاه`}
                       />
+                      {!variant && <span className="adm-badge adm-badge-warning">بدون تنوع</span>}
                       {!meta.active && <span className="adm-badge adm-badge-cancelled">غیرفعال</span>}
                     </div>
                     <div className="flex items-center gap-2">
@@ -313,7 +323,7 @@ export default function AdminProductsPage() {
                       </button>
                       <button
                         type="button"
-                        onClick={() => doDelete(product)}
+                        onClick={() => void doDelete(product)}
                         className="adm-btn-sm adm-btn-sm-danger"
                       >
                         حذف
@@ -343,7 +353,6 @@ export default function AdminProductsPage() {
             if (window.confirm(question)) {
               if (connected) void reloadCatalogFromDatabase();
               else resetCatalog();
-              flashSaved();
             }
           }}
           className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline"
@@ -356,6 +365,7 @@ export default function AdminProductsPage() {
         <ProductFormModal
           key={creating ? 'new' : editing?.id ?? 'edit'}
           product={editing}
+          existingProducts={catalog}
           onClose={closeForm}
           onSaved={() => {
             closeForm();
@@ -371,13 +381,20 @@ export default function AdminProductsPage() {
 
 function ProductFormModal({
   product,
+  existingProducts,
   onClose,
   onSaved,
 }: {
   product: Product | null;
+  existingProducts: Product[];
   onClose: () => void;
   onSaved: () => void;
 }) {
+  const catalogSync = useCatalogSync();
+  const firstVariant = product?.variants[0];
+  // Stable for the lifetime of this modal: retrying after a database
+  // failure completes the same upsert instead of creating another row.
+  const draftProductIdRef = useRef(product?.id ?? `custom-${Date.now().toString(36)}`);
   const [form, setForm] = useState<ProductFormState>(() =>
     product
       ? {
@@ -385,16 +402,18 @@ function ProductFormModal({
           shortName: product.shortName,
           category: product.category,
           flavorId: product.flavorId,
-          weightGrams: String(product.variants[0].weightGrams),
-          price: String(product.variants[0].price),
-          stock: String(product.variants[0].stock),
-          sku: product.variants[0].sku,
+          weightGrams: String(firstVariant?.weightGrams ?? EMPTY_FORM.weightGrams),
+          price: String(firstVariant?.price ?? EMPTY_FORM.price),
+          stock: String(firstVariant?.stock ?? 0),
+          sku: firstVariant?.sku ?? '',
           imageUrl: product.imageUrl ?? '',
           active: getCatalogMeta(product.id).active,
         }
       : { ...EMPTY_FORM },
   );
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [saveFailed, setSaveFailed] = useState(false);
 
   const flavors = Object.values(FLAVORS).filter((f) => f.category === form.category);
   const set = <K extends keyof ProductFormState>(key: K, value: ProductFormState[K]) =>
@@ -405,29 +424,51 @@ function ProductFormModal({
     setForm((f) => ({ ...f, category, flavorId: first ? first.id : f.flavorId }));
   };
 
-  const submit = () => {
+  const submit = async () => {
     const next: Record<string, string> = {};
     const price = Number(form.price);
     const weight = Number(form.weightGrams);
     const stock = Number(form.stock);
     const imageUrl = form.imageUrl.trim().replace(/^\//, '');
+    const currentVariantId = firstVariant?.id;
+    const sku =
+      normalizeSku(form.sku) ||
+      (isDbIntegerInRange(weight, 1) ? generateSku(form.category, form.flavorId, weight) : '');
+
     if (form.name.trim().length < 3) next.name = 'نام محصول را کامل وارد کنید';
     if (!form.shortName.trim()) next.shortName = 'نام کوتاه را وارد کنید';
-    if (!Number.isSafeInteger(price) || price <= 0) next.price = 'قیمت صحیح و مثبت وارد کنید (تومان)';
-    if (!Number.isSafeInteger(weight) || weight <= 0) next.weightGrams = 'وزن صحیح و مثبت وارد کنید (گرم)';
-    if (!Number.isSafeInteger(stock) || stock < 0) next.stock = 'موجودی صحیحِ صفر یا بیشتر وارد کنید';
+    if (!isDbIntegerInRange(price, 1)) next.price = 'قیمت صحیح و مثبت وارد کنید (تومان)';
+    if (!isDbIntegerInRange(weight, 1)) next.weightGrams = 'وزن صحیح و مثبت وارد کنید (گرم)';
+    if (!isDbIntegerInRange(stock, 0)) next.stock = 'موجودی صحیحِ صفر یا بیشتر وارد کنید';
+    if (!isValidSku(sku)) {
+      next.sku = 'SKU باید ۳ تا ۶۴ نویسه و فقط شامل حروف لاتین، عدد، خط‌تیره یا آندرلاین باشد';
+    } else {
+      const conflict = findSkuConflict(existingProducts, sku, currentVariantId);
+      if (conflict) {
+        next.sku = `این SKU قبلاً برای «${conflict.product.shortName}» استفاده شده است؛ یک SKU یکتا وارد کنید`;
+      }
+    }
     if (imageUrl && imageUrl.length > 2048) next.imageUrl = 'مسیر تصویر بیش از حد طولانی است';
     if (imageUrl && !imageUrl.startsWith('images/') && !/^https:\/\//i.test(imageUrl)) {
       next.imageUrl = 'فقط مسیر images/ یا نشانی https:// مجاز است';
     }
     setErrors(next);
+    setSaveFailed(false);
     if (Object.keys(next).length > 0) return;
 
-    const id = product?.id ?? `custom-${Date.now().toString(36)}`;
-    const variantId = product?.variants[0]?.id ?? `${id}-v1`;
-    const sku =
-      form.sku.trim() ||
-      `Z${form.category === 'jelly' ? 'J' : 'C'}-${form.flavorId.slice(0, 3).toUpperCase()}-${weight}`;
+    const id = draftProductIdRef.current;
+    const variantId = currentVariantId ?? `${id}-v1`;
+
+    const editedVariant = {
+      id: variantId,
+      productId: id,
+      weight: `${toPersianDigits(weight)} گرم`,
+      weightGrams: weight,
+      price,
+      sku,
+      stock,
+      available: firstVariant?.available ?? stock > 0,
+    };
 
     const nextProduct: Product = {
       id,
@@ -439,28 +480,32 @@ function ProductFormModal({
       imageUrl: imageUrl || undefined,
       featured: product?.featured,
       special: product?.special,
-      variants: [
-        {
-          id: variantId,
-          productId: id,
-          weight: `${toPersianDigits(weight)} گرم`,
-          weightGrams: weight,
-          price,
-          sku,
-          stock,
-          available: product ? product.variants[0].available : stock > 0,
-        },
-      ],
+      // The current form edits the first sellable variant. Preserve any
+      // additional variants instead of silently collapsing the product
+      // to one variant in the local/optimistic catalog.
+      variants: [editedVariant, ...(product?.variants.slice(1) ?? [])],
     };
-    upsertProduct(nextProduct, form.active);
+
+    setSubmitting(true);
+    const ok = await upsertProduct(nextProduct, form.active);
+    setSubmitting(false);
+    if (!ok) {
+      setSaveFailed(true);
+      return;
+    }
     onSaved();
   };
 
   const previewFlavor = getFlavor(form.flavorId);
 
   return (
-    <Modal title={product ? 'ویرایش محصول' : 'افزودن محصول'} onClose={onClose}>
+    <Modal title={product ? 'ویرایش محصول' : 'افزودن محصول'} onClose={submitting ? () => undefined : onClose}>
       <div className="space-y-4">
+        {product && !firstVariant && (
+          <p role="alert" className="rounded-xl bg-amber-50 px-4 py-3 text-xs font-bold leading-6 text-amber-800 ring-1 ring-amber-200">
+            این محصول تنوع (وزن/قیمت) ندارد و فعلاً قابل فروش نیست؛ با ذخیره این فرم، یک تنوع برای آن ساخته می‌شود.
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="نام محصول" error={errors.name}>
             <input
@@ -511,7 +556,7 @@ function ProductFormModal({
             <input
               type="number"
               min={1}
-              max={Number.MAX_SAFE_INTEGER}
+              max={MAX_DB_INTEGER}
               step={1}
               dir="ltr"
               className={cn('adm-input', errors.weightGrams && 'err')}
@@ -523,7 +568,7 @@ function ProductFormModal({
             <input
               type="number"
               min={1000}
-              max={Number.MAX_SAFE_INTEGER}
+              max={MAX_DB_INTEGER}
               step={1000}
               dir="ltr"
               className={cn('adm-input', errors.price && 'err')}
@@ -535,7 +580,7 @@ function ProductFormModal({
             <input
               type="number"
               min={0}
-              max={Number.MAX_SAFE_INTEGER}
+              max={MAX_DB_INTEGER}
               step={1}
               dir="ltr"
               className={cn('adm-input', errors.stock && 'err')}
@@ -546,10 +591,10 @@ function ProductFormModal({
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="SKU" hint="خالی بگذارید تا خودکار ساخته شود (مثلاً ZJ-POM-250).">
+          <Field label="SKU" hint="خالی بگذارید تا خودکار ساخته شود (مثلاً ZJ-POM-250)." error={errors.sku}>
             <input
               dir="ltr"
-              className="adm-input"
+              className={cn('adm-input', errors.sku && 'err')}
               value={form.sku}
               onChange={(e) => set('sku', e.target.value)}
               placeholder="ZJ-POM-250"
@@ -597,11 +642,18 @@ function ProductFormModal({
           <Toggle checked={form.active} onChange={(v) => set('active', v)} label="فعال بودن محصول" />
         </div>
 
+        {saveFailed && (
+          <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-xs font-bold leading-6 text-red-700 ring-1 ring-red-200">
+            ذخیره کامل محصول در دیتابیس تأیید نشد؛ فرم باز مانده است تا داده را اصلاح و دوباره تلاش کنید.
+            {catalogSync.error ? ` جزئیات: ${catalogSync.error}` : ''}
+          </p>
+        )}
+
         <div className="flex gap-3 pt-1">
-          <button type="button" onClick={submit} className="btn-lux btn-wine flex-1 rounded-xl">
-            {product ? 'ذخیره تغییرات' : 'افزودن محصول'}
+          <button type="button" onClick={() => void submit()} disabled={submitting} className="btn-lux btn-wine flex-1 rounded-xl">
+            {submitting ? 'در حال ذخیره…' : product ? 'ذخیره تغییرات' : 'افزودن محصول'}
           </button>
-          <button type="button" onClick={onClose} className="btn-lux btn-line-dark rounded-xl">
+          <button type="button" onClick={onClose} disabled={submitting} className="btn-lux btn-line-dark rounded-xl">
             انصراف
           </button>
         </div>

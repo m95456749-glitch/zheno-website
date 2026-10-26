@@ -206,7 +206,7 @@ function toRows(next: AssistantVoiceSettings): Record<string, string> {
 }
 
 /** ذخیره توسط مدیر — remote با همان RLS نقش admin؛ آفلاین روی همین دستگاه */
-export function saveVoiceSettings(next: AssistantVoiceSettings): void {
+export async function saveVoiceSettings(next: AssistantVoiceSettings): Promise<boolean> {
   const clean: AssistantVoiceSettings = {
     voiceEnabled: next.voiceEnabled === true,
     autoVoice: next.autoVoice === true,
@@ -218,24 +218,26 @@ export function saveVoiceSettings(next: AssistantVoiceSettings): void {
   };
   lastLocalWriteAt = Date.now();
   if (getSupabase()) {
-    runRemoteSiteWrite('ذخیره تنظیمات صدای دستیار', () => pushRemoteVoiceSettings(toRows(clean)));
+    const result = runRemoteSiteWrite('ذخیره تنظیمات صدای دستیار', () => pushRemoteVoiceSettings(toRows(clean)));
     // پیش‌نمایش فوری روی همین دستگاه تا پاسخ دیتابیس برسد
     store.set(clean);
-    return;
+    return result;
   }
   store.set(clean);
+  return true;
 }
 
-export function resetVoiceSettings(): void {
+export async function resetVoiceSettings(): Promise<boolean> {
   lastLocalWriteAt = Date.now();
   if (getSupabase()) {
-    runRemoteSiteWrite('بازنشانی تنظیمات صدای دستیار', () =>
+    const result = runRemoteSiteWrite('بازنشانی تنظیمات صدای دستیار', () =>
       pushRemoteVoiceSettings(toRows(DEFAULT_ASSISTANT_VOICE)),
     );
     store.set({ ...DEFAULT_ASSISTANT_VOICE });
-    return;
+    return result;
   }
   store.reset();
+  return true;
 }
 
 /**

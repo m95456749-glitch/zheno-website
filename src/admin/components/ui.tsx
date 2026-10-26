@@ -6,6 +6,7 @@ import { useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { orderStatusLabel, type OrderStatus } from '../../services/orderStore';
 import { useCatalogSync } from '../../services/catalogSync';
+import { useOrderSync } from '../../services/orderSync';
 import { useSiteDataSync } from '../../services/siteDataSync';
 import { cn } from '../../utils/cn';
 import { IconClose } from '../Icons';
@@ -51,7 +52,10 @@ export function SyncStatusBadge() {
 export function SyncErrorBanner() {
   const sync = useCatalogSync();
   const siteSync = useSiteDataSync();
-  const errors = [sync.error, siteSync.error].filter((error): error is string => Boolean(error));
+  const orderSync = useOrderSync();
+  const errors = [sync.error, siteSync.error, orderSync.error].filter(
+    (error): error is string => Boolean(error),
+  );
   if (errors.length === 0) return null;
   return (
     <div className="mb-5 space-y-2" role="alert">

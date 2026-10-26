@@ -116,55 +116,61 @@ export function makeRemoteCatalog(products: Product[], active: Record<string, bo
  * database answers; then the authoritative rows replace it. A refused
  * write (or a failed read) is reported in `error` — the panel shows it
  * and never pretends the value was saved.
+ *
+ * Resolves true only after the write and the authoritative re-read
+ * both succeed, so callers can delay any «saved» feedback until the
+ * database has actually confirmed the result.
  */
-export function runRemoteWrite(label: string, write: () => Promise<void>): void {
+export async function runRemoteWrite(label: string, write: () => Promise<void>): Promise<boolean> {
   ++readVersion; // invalidate catalog reads started before this mutation
   pending += 1;
   setState({ phase: 'syncing', pending, error: null });
 
-  void (async () => {
-    let failure: string | null = null;
-    try {
-      await write();
-    } catch (err) {
-      failure = `${label} — ${err instanceof Error ? err.message : String(err)}`;
-    }
+  let failure: string | null = null;
+  try {
+    await write();
+  } catch (err) {
+    failure = `${label} — ${err instanceof Error ? err.message : String(err)}`;
+  }
 
-    try {
-      const version = ++readVersion;
-      const next = await fetchRemoteCatalog();
-      if (version === readVersion) snapshot = next;
-    } catch {
-      // Keep the previous snapshot: stale data is better than none, and
-      // `failure` (if any) already tells the operator what went wrong.
+  try {
+    const version = ++readVersion;
+    const next = await fetchRemoteCatalog();
+    if (version === readVersion) snapshot = next;
+  } catch {
+    // Keep the previous snapshot: stale data is better than none, but an
+    // unconfirmed write must not be reported as a completed save.
+    if (!failure) {
+      failure = `${label} — بازخوانی از دیتابیس ناموفق بود؛ نتیجهٔ ذخیره تأیید نشد.`;
     }
+  }
 
-    pending = Math.max(0, pending - 1);
-    setState({
-      source: 'remote',
-      phase: failure ? 'error' : pending > 0 ? 'syncing' : 'ready',
-      pending,
-      error: failure,
-      lastSyncedAt: snapshot?.loadedAt ?? state.lastSyncedAt,
-    });
-  })();
+  pending = Math.max(0, pending - 1);
+  setState({
+    source: 'remote',
+    phase: failure ? 'error' : pending > 0 ? 'syncing' : 'ready',
+    pending,
+    error: failure,
+    lastSyncedAt: snapshot?.loadedAt ?? state.lastSyncedAt,
+  });
+  return failure === null;
 }
 
-/** Re-read the whole catalog from the database. */
-export async function refreshRemoteCatalog(options: { silent?: boolean } = {}): Promise<void> {
+/** Re-read the whole catalog from the database. Resolves false on a failed read. */
+export async function refreshRemoteCatalog(options: { silent?: boolean } = {}): Promise<boolean> {
   const version = ++readVersion;
   const supabase = getSupabase();
   if (!supabase) {
     snapshot = null;
     setState({ source: 'local', phase: 'offline', error: null, lastSyncedAt: null, pending: 0 });
-    return;
+    return true;
   }
 
   if (!options.silent) setState({ phase: snapshot ? 'syncing' : 'loading' });
 
   try {
     const next = await fetchRemoteCatalog();
-    if (version !== readVersion) return;
+    if (version !== readVersion) return true;
     snapshot = next;
     setState({
       source: 'remote',
@@ -172,12 +178,14 @@ export async function refreshRemoteCatalog(options: { silent?: boolean } = {}): 
       error: null,
       lastSyncedAt: next.loadedAt,
     });
+    return true;
   } catch (err) {
-    if (version !== readVersion) return;
+    if (version !== readVersion) return true;
     const message = err instanceof Error ? err.message : String(err);
     // Keep the previous snapshot (stale data beats a blank storefront)
     // but say so in the admin panel.
     setState({ phase: 'error', error: message });
+    return false;
   }
 }
 

@@ -6,7 +6,7 @@
 // UI: one form, one primary «ذخیره» button, quiet «بازنشانی».
 // ============================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_SITE_SETTINGS,
   getSettings,
@@ -57,14 +57,23 @@ export default function AdminSettingsPage() {
   const [form, setForm] = useState<SiteSettings>(() => getSettings());
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  /** While the admin is editing, a fresh remote snapshot must not replace the draft. */
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
+    if (dirtyRef.current) return;
     setForm(liveSettings);
   }, [liveSettings]);
 
-  const changed = FIELDS.some((f) => form[f.key] !== DEFAULT_SITE_SETTINGS[f.key]);
+  const canReset = FIELDS.some((f) => liveSettings[f.key] !== DEFAULT_SITE_SETTINGS[f.key]);
 
-  const save = () => {
+  const updateField = (key: keyof SiteSettings, value: number) => {
+    dirtyRef.current = true;
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const save = async () => {
     const next: Record<string, string> = {};
     for (const f of FIELDS) {
       const v = form[f.key];
@@ -74,9 +83,25 @@ export default function AdminSettingsPage() {
     }
     setErrors(next);
     if (Object.keys(next).length > 0) return;
-    saveSettings(form);
+
+    setSaving(true);
+    const ok = await saveSettings(form);
+    setSaving(false);
+    if (!ok) return; // keep the draft; the panel-wide banner carries the database error
+    dirtyRef.current = false;
+    setForm(getSettings());
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
+  };
+
+  const reset = async () => {
+    if (!window.confirm('تنظیمات به مقادیر اولیه سایت بازگردد؟')) return;
+    setSaving(true);
+    const ok = await resetSettings();
+    setSaving(false);
+    if (!ok) return;
+    dirtyRef.current = false;
+    setForm({ ...DEFAULT_SITE_SETTINGS });
   };
 
   return (
@@ -94,9 +119,8 @@ export default function AdminSettingsPage() {
               dir="ltr"
               className={cn('adm-input', errors[field.key] && 'err')}
               value={Number.isNaN(form[field.key]) ? '' : form[field.key]}
-              onChange={(e) =>
-                setForm((f) => ({ ...f, [field.key]: e.target.value === '' ? NaN : Number(e.target.value) }))
-              }
+              disabled={saving}
+              onChange={(e) => updateField(field.key, e.target.value === '' ? NaN : Number(e.target.value))}
             />
           </Field>
         ))}
@@ -108,18 +132,13 @@ export default function AdminSettingsPage() {
         )}
 
         <div className="flex flex-col gap-3 border-t border-espresso/8 pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <button type="button" onClick={save} className="btn-lux btn-wine rounded-xl sm:min-w-48">
-            ذخیره تنظیمات
+          <button type="button" onClick={() => void save()} disabled={saving} className="btn-lux btn-wine rounded-xl sm:min-w-48">
+            {saving ? 'در حال ذخیره…' : 'ذخیره تنظیمات'}
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('تنظیمات به مقادیر اولیه سایت بازگردد؟')) {
-                resetSettings();
-                setForm({ ...DEFAULT_SITE_SETTINGS });
-              }
-            }}
-            disabled={!changed}
+            onClick={() => void reset()}
+            disabled={!canReset || saving}
             className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:no-underline"
           >
             بازنشانی به مقادیر اولیه

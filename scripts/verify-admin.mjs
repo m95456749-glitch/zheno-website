@@ -22,6 +22,14 @@ const mustInclude = (file, needle, label) => {
   if (read(file).includes(needle)) pass(label);
   else fail(`${file} is missing ${label}`);
 };
+const mustNotInclude = (file, needle, label) => {
+  if (!read(file).includes(needle)) pass(label);
+  else fail(`${file} still contains ${label}`);
+};
+const mustNotExist = (file, label) => {
+  if (!existsSync(join(root, file))) pass(label);
+  else fail(`${file} still exists: ${label}`);
+};
 
 for (const file of [
   'src/admin/pages/AdminDashboardPage.tsx',
@@ -215,9 +223,9 @@ mustInclude('src/services/siteDataSync.ts', "from('site_settings')", 'remote set
 mustInclude('src/services/supabaseCatalog.ts', "'adjust_inventory'", 'atomic inventory adjustment RPC');
 mustInclude('src/admin/pages/AdminInventoryPage.tsx', 'کاهش یک عدد', 'inventory decrement control');
 mustInclude('src/admin/pages/AdminInventoryPage.tsx', 'افزایش یک عدد', 'inventory increment control');
-mustInclude('src/admin/pages/AdminProductsPage.tsx', 'Number.isSafeInteger(price)', 'price validation');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'isDbIntegerInRange(price, 1)', 'database-integer price validation');
 mustInclude('src/admin/pages/AdminProductsPage.tsx', 'فقط مسیر images/', 'safe product image path validation');
-mustInclude('src/admin/pages/AdminInventoryPage.tsx', 'Number.isSafeInteger(n)', 'inventory validation');
+mustInclude('src/admin/pages/AdminInventoryPage.tsx', 'isDbIntegerInRange(n, 0)', 'database-integer inventory validation');
 
 const migration = read('supabase/migrations/20260912000000_initial_schema.sql');
 for (const policy of ['recipes_admin_write', 'content_admin_write', 'settings_admin_write', 'orders_admin_read']) {
@@ -228,6 +236,51 @@ for (const policy of ['recipes_admin_write', 'content_admin_write', 'settings_ad
 
 for (const text of ['image_conflict', 'replacement_requires_primary', 'last_product_image', 'as restrictive', 'product_image_cleanup', 'for update']) {
   mustInclude('supabase/migrations/20260922000000_product_images_reliable_bootstrap.sql', text, `image safety v3: ${text}`);
+}
+
+/* ── audit remediation regressions (controlled admin fixes) ── */
+// The temporary production auth trace is closed: its page, route,
+// committed output and write-capable workflow must not return to the
+// public repository or the production bundle.
+mustNotExist('src/admin/pages/AdminAuthTracePage.tsx', 'temporary auth-trace page removed');
+mustNotExist('diagnostics/admin-auth-trace.json', 'temporary auth-trace output removed');
+mustNotExist('diagnostics/README.md', 'temporary diagnostics folder documentation removed');
+mustNotExist('.github/workflows/supabase-admin-auth-trace.yml', 'temporary auth-trace workflow removed');
+mustNotInclude('src/App.tsx', 'AdminAuthTracePage', 'temporary auth-trace import');
+mustNotInclude('src/App.tsx', 'path="auth-trace"', 'temporary auth-trace route');
+
+// A «saved» message may appear only after the write and authoritative
+// re-read succeed. These result contracts are the seam the admin pages
+// await instead of flashing success immediately.
+mustInclude('src/services/catalogSync.ts', 'Promise<boolean>', 'catalog writes resolve a confirmed result');
+mustInclude('src/services/catalogSync.ts', 'return failure === null', 'catalog re-read failures are not reported as saves');
+mustInclude('src/services/siteDataSync.ts', 'Promise<boolean>', 'site-data writes resolve a confirmed result');
+mustInclude('src/services/orderSync.ts', 'previousSnapshot', 'failed order status writes can roll back optimistic UI');
+mustInclude('src/services/orderSync.ts', 'return failure === null', 'order status writes resolve a confirmed result');
+mustInclude('src/admin/components/ui.tsx', 'useOrderSync', 'panel-wide error banner includes order sync errors');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'await upsertProduct', 'product form waits for database confirmation');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'draftProductIdRef', 'failed new-product retries reuse the same product id');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'ذخیره کامل محصول در دیتابیس تأیید نشد', 'failed product save stays visible in the form');
+mustInclude('src/admin/pages/AdminInventoryPage.tsx', 'await setVariantStock', 'inventory waits for database confirmation');
+mustInclude('src/admin/pages/AdminSettingsPage.tsx', 'await saveSettings', 'settings wait for database confirmation');
+mustInclude('src/admin/pages/AdminSiteContentPage.tsx', 'await saveSiteContent', 'site content waits for database confirmation');
+mustInclude('src/admin/pages/AdminRecipesPage.tsx', 'await upsertRecipe', 'recipes wait for database confirmation');
+mustInclude('src/admin/pages/AdminRecipesPage.tsx', 'draftRecipeIdRef', 'failed new-recipe retries reuse the same recipe id');
+
+// Variantless catalog rows must remain repairable instead of crashing
+// the product list/form; duplicate SKUs are caught before a write starts.
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'بدون تنوع', 'variantless products are labelled in the product list');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'firstVariant?.weightGrams', 'product form guards a missing first variant');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'findSkuConflict', 'product form checks SKU conflicts before writing');
+mustInclude('src/admin/pages/AdminProductsPage.tsx', 'variants.slice(1)', 'product form preserves variants it does not edit');
+mustInclude('src/services/catalog.ts', 'validateProductForSave', 'catalog service validates complete products before sequential writes');
+mustInclude('src/services/catalogValidation.ts', 'MAX_DB_INTEGER', 'catalog numbers respect PostgreSQL integer columns');
+
+// Draft settings/content edits must not be overwritten by a later
+// remote snapshot while the admin is still typing.
+for (const file of ['src/admin/pages/AdminSettingsPage.tsx', 'src/admin/pages/AdminSiteContentPage.tsx']) {
+  mustInclude(file, 'dirtyRef', `draft form guard: ${file}`);
+  mustInclude(file, 'if (dirtyRef.current) return;', `remote snapshots do not overwrite drafts: ${file}`);
 }
 
 if (failures > 0) {
