@@ -1,0 +1,47 @@
+# TEMPORARY read-only probe — proves the live state of the Cloudflare deployment.
+# Same script as .github/workflows/live-verify.yml, triggered by a push so it can
+# run without `actions: write`. Read-only: GET/OPTIONS only, no secret, no write.
+# Deleted in the next commit; the run stays as evidence against its own SHA.
+name: zz-live-probe
+on:
+  push:
+    branches:
+      - arena/81ab77fc-zheno-website
+    paths:
+      - ".github/workflows/zz-live-probe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TARGET: https://zheno.m95456749.workers.dev
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: DNS of the production domain and of the Worker host
+        run: |
+          echo "zheno.devs.surf ->" && getent ahosts zheno.devs.surf | awk '{print "  "$1}' | sort -u
+          echo "zheno.m95456749.workers.dev ->" && getent ahosts zheno.m95456749.workers.dev | awk '{print "  "$1}' | sort -u
+          echo "::notice title=dns::zheno.devs.surf=$(getent ahosts zheno.devs.surf | awk '{print $1}' | sort -u | head -1)"
+
+      - name: Read-only live verification
+        run: node scripts/verify-live-readonly.mjs "$TARGET" 2>&1 | tee live.log
+
+      - name: Publish every line of evidence as a readable annotation
+        if: always()
+        run: |
+          set -euo pipefail
+          grep '^PASS:' live.log | sed 's/^/::notice title=live-pass::/' || true
+          grep '^WARN:' live.log | sed 's/^/::warning title=live-warn::/' || true
+          grep 'RESULT:' live.log | sed 's/^/::notice title=live-result::/' || true
+          echo "::notice title=live-target::${TARGET}"
