@@ -16,6 +16,19 @@
 | **Cloudflare Worker `zheno`** (Workers Builds) | push روی `main` (production branch) و هر شاخه (Preview) | `*.workers.dev` (چون `workers_dev: true` و **هیچ** `routes`/Custom Domain در `wrangler.jsonc` نیست) | **هیچ** — DNS و دامنه دست نمی‌خورد | check run «Workers Builds: zheno» روی `b69a8b8`؛ Preview شاخه: `…/production/previews/arena-81ab77fc-…` |
 | **Cloudflare Pages `zheno-website`** | همان push (اتصال از قبل موجود است) | `*.pages.dev` (URL هر deployment در check run گزارش می‌شود) | **هیچ** | check run «Cloudflare Pages» روی `b69a8b8`، `7528c400.zheno-website.pages.dev` |
 
+### وضعیت تأییدشدهٔ کلید قطع GitHub Pages (۲۰۲۶-۱۰-۲۶)
+
+`DISABLE_GITHUB_PAGES=true` **واقعاً تنظیم شده است** — نه بر اساس حدس، بلکه با اجرای یک workflow موقت فقط‌خواندنی روی همین شاخه که نتیجه را به‌صورت annotation منتشر کرد:
+
+```
+DISABLE_GITHUB_PAGES=true (deploy.yml build job will be SKIPPED)
+```
+(run `40377931595` روی `d804766`، check annotation با عنوان `killswitch`)
+
+منطق `deploy.yml` نیز تأیید شد: `if: ${{ vars.DISABLE_GITHUB_PAGES != 'true' }}` روی job `build`؛ پس با مقدار `true` کل مسیر انتشار Pages (build + deploy) رد می‌شود.
+
+**استثنای مهم:** این کلید فقط انتشار **GitHub Actions → GitHub Pages** را متوقف می‌کند. پروژهٔ **Cloudflare Pages** (`zheno-website`) اتصال مستقل خودش را دارد و روی هر push به `main` مستقل از این متغیر build می‌شود؛ یعنی تا وقتی آن پروژه به مخزن وصل است، یک کپی عمومی روی `*.pages.dev` ساخته می‌شود (بدون اثر روی `zheno.devs.surf`).
+
 ### اثر دقیق merge شدن PR #99
 
 1. push روی `main` → **GitHub Pages یک انتشار جدید روی `zheno.devs.surf` انجام می‌دهد**. محتوای این انتشار از نظر کد عملاً با وضعیت فعلی یکسان است (PR #99 هیچ فایلی زیر `src/` یا `public/` را تغییر نمی‌دهد؛ فقط `vite.config.ts`، دو اسکریپت تست و دو سند)، اما از نظر فرایند **یک انتشار روی دامنهٔ اصلی است**. اگر نمی‌خواهید این اتفاق بیفتد، پیش از merge باید متغیر مخزن `DISABLE_GITHUB_PAGES=true` تنظیم شود — **این کار انجام نشده و نیازمند تصمیم شماست**.
@@ -62,7 +75,8 @@
 
 | # | اقدام | دستور/محل | معیار قبولی (شاهد) | وضعیت امروز |
 |---|---|---|---|---|
-| B1 | بررسی بستهٔ منتشرشده | `npm ci && npm run build && npm run verify:live -- https://<worker>.workers.dev` | خروجی `RESULT: this deployment ships a CONNECTED build` + «۱ URL پروژه (ماسک‌شده)» + «publishable key present» | **اجرا نشده** — شبکهٔ خروجی این محیط به `workers.dev` بسته است |
+| B1 | بررسی بستهٔ منتشرشده (از GitHub، بدون نیاز به دسترسی محلی) | Actions → **Live verify (read-only)** → Run workflow؛ `url` = آدرس واقعی Worker (یا تنظیم یک‌بارهٔ Variable عمومی `CLOUDFLARE_WORKER_URL`) | خروجی `RESULT: this deployment ships a CONNECTED build` + «۱ URL پروژه (ماسک‌شده)» + «publishable key present» | **آماده، اجرا نشده** — شبکهٔ خروجی محیط عامل به `workers.dev` بسته است؛ runner گیت‌هاب این محدودیت را ندارد |
+| B1b | همین بررسی روی ماشین خودتان | `npm run verify:live -- https://<worker>.workers.dev` | همان خروجی | **اجرا نشده** |
 | B2 | بررسی Build variables | داشبورد (بخش ۱) | A1 و A2 موجود؛ A7 برقرار | **انجام نشده** (داشبوردی) |
 | B3 | ورود مدیر روی همان URL | مرورگر → `/admin/login` با حساب مدیر Supabase | برچسب «نمایشی» دیده نشود؛ نشان وضعیت همگام‌سازی ظاهر شود؛ در Network درخواست‌های `https://<project>.supabase.co/auth/v1/…` و `/rest/v1/…` موفق (۲۰۰) | **انجام نشده** |
 
