@@ -52,50 +52,84 @@ assert.ok(base.protocol === 'https:' || localHost, 'Use https:// (or http://127.
 
 const TIMEOUT = 20_000;
 const results = [];
+const failures = [];
 function ok(message) {
   results.push(`PASS: ${message}`);
   console.log(`PASS: ${message}`);
 }
+/** Record a failed check and CONTINUE, so one bad path cannot hide the rest. */
+function bad(message) {
+  failures.push(message);
+  console.log(`FAIL: ${message}`);
+}
 
 async function get(path) {
-  const response = await fetch(new URL(path, base), {
-    headers: { 'Sec-Fetch-Mode': 'navigate' },
-    signal: AbortSignal.timeout(TIMEOUT),
-    redirect: 'follow',
-  });
-  assert.equal(response.status, 200, `${path}: HTTP ${response.status}`);
-  assert.equal(new URL(response.url).origin, base.origin, `${path}: unexpected cross-origin redirect`);
+  let response;
+  try {
+    response = await fetch(new URL(path, base), {
+      headers: { 'Sec-Fetch-Mode': 'navigate' },
+      signal: AbortSignal.timeout(TIMEOUT),
+      redirect: 'follow',
+    });
+  } catch (error) {
+    const cause = (error.cause && (error.cause.code || error.cause.message)) || 'no-cause';
+    bad(`${path}: unreachable (${error.name}, cause=${cause})`);
+    return null;
+  }
+  if (response.status !== 200) {
+    // A static host without SPA rewrites serves the shell with 404 — worth
+    // reporting precisely instead of aborting the whole run.
+    bad(`${path}: HTTP ${response.status} (not 200)`);
+    return response;
+  }
+  if (new URL(response.url).origin !== base.origin) {
+    bad(`${path}: unexpected cross-origin redirect to ${new URL(response.url).origin}`);
+  }
   return response;
 }
 
 /* ── 1. SPA shell on the real routes ───────────────────────── */
 const shell = await get('/');
-assert.match(shell.headers.get('content-type') || '', /text\/html/, '/: not HTML');
-const html = await shell.text();
+let html = '';
+if (!shell) {
+  console.log('\nRESULT: the host is unreachable from here — nothing else can be verified.');
+  process.exit(1);
+}
+if (!/text\/html/.test(shell.headers.get('content-type') || '')) {
+  bad(`/: unexpected content-type "${shell.headers.get('content-type')}"`);
+}
+html = await shell.text();
 ok(`SPA shell served at / (${html.length} characters)`);
 
+const shellHash = createHash('sha256').update(html).digest('hex');
+let deepLinkProblems = 0;
 for (const path of ['/products', '/cart', '/admin/login', '/admin/products']) {
   const response = await get(path);
-  assert.match(response.headers.get('content-type') || '', /text\/html/, `${path}: not HTML`);
+  if (!response) { deepLinkProblems++; continue; }
   const body = await response.text();
-  assert.equal(createHash('sha256').update(body).digest('hex'),
-    createHash('sha256').update(html).digest('hex'),
-    `${path}: not the built SPA shell`);
+  if (createHash('sha256').update(body).digest('hex') !== shellHash) {
+    bad(`${path}: served content differs from the built SPA shell`);
+    deepLinkProblems++;
+  }
 }
-ok('deep links return the SPA shell (products, cart, admin login, admin products)');
+if (deepLinkProblems === 0) {
+  ok('deep links return the SPA shell (products, cart, admin login, admin products)');
+}
 
 /* ── 2. static assets ──────────────────────────────────────── */
+let assetProblems = 0;
 for (const [path, pattern] of [
   ['/images/products/jelly-pomegranate.jpg', /^image\//],
   ['/fonts/vazirmatn-arabic-wght-normal.woff2', /font\/woff2|application\/font-woff2/],
 ]) {
   const response = await get(path);
+  if (!response) { assetProblems++; continue; }
   const type = response.headers.get('content-type') || '';
-  assert.match(type, pattern, `${path}: unexpected MIME "${type}"`);
+  if (!pattern.test(type)) { bad(`${path}: unexpected MIME "${type}"`); assetProblems++; continue; }
   const bytes = Buffer.from(await response.arrayBuffer());
-  assert.ok(bytes.length > 1000, `${path}: suspiciously small (${bytes.length} bytes)`);
+  if (bytes.length <= 1000) { bad(`${path}: suspiciously small (${bytes.length} bytes)`); assetProblems++; }
 }
-ok('product image and Persian font are served with the right MIME types');
+if (assetProblems === 0) ok('product image and Persian font are served with the right MIME types');
 
 /* ── 3. bundle classification (no value is ever printed) ───── */
 const PROJECT_URL = /https:\/\/([a-z]{20})\.supabase\.co/g;
@@ -104,11 +138,13 @@ for (const match of html.matchAll(PROJECT_URL)) projects.add(match[1]);
 const hasPublishable = /sb_publishable_[A-Za-z0-9_-]{8,}/.test(html);
 const hasLegacyAnon = /"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./.test(html);
 
-assert.equal(/sb_secret_[A-Za-z0-9_-]{8,}/.test(html), false,
-  'the bundle ships a service/secret key — this must never be deployed');
-assert.equal(/service_role/.test(html) && /"role"\s*:\s*"service_role"/.test(html), false,
-  'the bundle ships a service_role JWT — this must never be deployed');
-ok('bundle carries no privileged/service key');
+if (/sb_secret_[A-Za-z0-9_-]{8,}/.test(html)) {
+  bad('the bundle ships a service/secret key — this must never be deployed');
+} else if (/"role"\s*:\s*"service_role"/.test(html)) {
+  bad('the bundle ships a service_role JWT — this must never be deployed');
+} else {
+  ok('bundle carries no privileged/service key');
+}
 
 function mask(ref) {
   return `${ref.slice(0, 4)}…${ref.slice(-4)}`;
@@ -123,9 +159,11 @@ if (projectList.length === 0) {
   console.log('  and rebuild — build variables need a new build to take effect.');
 } else {
   ok(`${projectList.length} hosted project URL(s) in the bundle: ${projectList.map(mask).join(', ')} (masked)`);
-  assert.ok(hasPublishable || hasLegacyAnon,
-    'a project URL is configured but no publishable/anon key is shipped — the app will fall back to offline mode');
-  ok('a publishable/anon key is present (the browser-safe key; RLS decides data access)');
+  if (hasPublishable || hasLegacyAnon) {
+    ok('a publishable/anon key is present (the browser-safe key; RLS decides data access)');
+  } else {
+    bad('a project URL is configured but no publishable/anon key is shipped — the app will fall back to offline mode');
+  }
 
   /* ── 4. Edge Function CORS preflight (no side effects) ───── */
   const origin = base.origin;
@@ -197,5 +235,10 @@ if (projectList.length === 0) {
   console.log('  on a production-connected host until a staging project exists.');
 }
 
-console.log(`\n${results.length} read-only checks passed against ${base.origin}.`);
+console.log(`\n${results.length} read-only checks passed, ${failures.length} failed, against ${base.origin}.`);
 console.log('No data was written: no login, no save, no order, no upload, no RPC.');
+if (failures.length > 0) {
+  console.log('\nRESULT: FAIL — the checks below did not pass:');
+  for (const failure of failures) console.log(`  - ${failure}`);
+  process.exit(1);
+}

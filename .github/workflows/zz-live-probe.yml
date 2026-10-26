@@ -37,6 +37,16 @@ jobs:
           sed -n 's/^/::notice title=prod::/p' prod.log | grep -E "PASS:|RESULT:|WARN:|INFO:" || true
           echo "::notice title=prod-compare::worker-shell=$(grep -o 'shell served at / ([0-9]*' worker.log | grep -o '[0-9]*') prod-shell=$(grep -o 'shell served at / ([0-9]*' prod.log | grep -o '[0-9]*')"
 
+      - name: Independent DNS check for the Supabase project host (DoH, read-only)
+        run: |
+          for name in kijhqsyftzufydonggeb.supabase.co supabase.co; do
+            code=$(curl -s -o /tmp/d.json -w '%{http_code}' -H 'accept: application/dns-json' \
+              "https://cloudflare-dns.com/dns-query?name=$name&type=A")
+            status=$(python3 -c "import json;d=json.load(open('/tmp/d.json'));print(d.get('Status'))" 2>/dev/null || echo '?')
+            answer=$(python3 -c "import json;d=json.load(open('/tmp/d.json'));print(','.join(r['data'] for r in d.get('Answer',[])) or 'none')" 2>/dev/null || echo '?')
+            echo "::notice title=doh::$name HTTP=$code DNS-Status=$status (0=NOERROR,3=NXDOMAIN) answers=$answer"
+          done
+
       - name: Supabase project state (Management API, read-only GET)
         env:
           TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
