@@ -3,6 +3,11 @@
 # the result is read (it must not stay on main).
 name: zz-pages-killswitch-probe
 on:
+  push:
+    branches:
+      - arena/81ab77fc-zheno-website
+    paths:
+      - ".github/workflows/zz-pages-killswitch-probe.yml"
   workflow_dispatch:
 
 permissions:
