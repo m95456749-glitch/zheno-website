@@ -87,22 +87,42 @@ jobs:
       - name: Run the read-only live verification
         id: live
         continue-on-error: true
-        run: node scripts/verify-live-readonly.mjs "${{ steps.target.outputs.url }}" 2>&1 | tee live-verify.log
+        run: node scripts/verify-live-readonly.mjs "${{ steps.target.outputs.url }}" > live-verify.log 2>&1
 
-      - name: Publish the result as a reviewable annotation
+      - name: Independent DNS check of the Supabase project host (DoH, read-only)
+        run: |
+          ref=$(node -e "
+            const fs=require('fs');
+            const m=/https:\/\/([a-z]{20})\.supabase\.co/.exec(fs.readFileSync('live-verify.log','utf8'));
+            process.stdout.write(m?m[1]:'');
+          " 2>/dev/null || true)
+          if [ -z "$ref" ]; then
+            echo "::notice title=doh::no Supabase project URL in the bundle — DNS check skipped"
+            exit 0
+          fi
+          for name in "$ref.supabase.co" supabase.co; do
+            curl -s -H 'accept: application/dns-json' "https://cloudflare-dns.com/dns-query?name=$name&type=A" -o /tmp/d.json || true
+            status=$(python3 -c "import json;print(json.load(open('/tmp/d.json')).get('Status'))" 2>/dev/null || echo '?')
+            answer=$(python3 -c "import json;d=json.load(open('/tmp/d.json'));print(','.join(r['data'] for r in d.get('Answer',[])) or 'none')" 2>/dev/null || echo '?')
+            echo "$name DNS-Status=$status answers=$answer" >> doh.txt
+            echo "::notice title=doh::$name DNS-Status=$status (0=NOERROR, 3=NXDOMAIN) answers=$answer"
+          done
+          cat doh.txt >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Publish a compact verdict
         if: always()
         run: |
           set -euo pipefail
           verdict="PASS"
-          grep -q "RESULT: this deployment ships a CONNECTED build" live-verify.log || verdict="NOT CONNECTED (offline/demo or unreachable)"
-          grep -q "OFFLINE / DEMO mode" live-verify.log && verdict="CONNECTED BUILD NOT SHIPPED (deployment runs in offline/demo mode)"
-          # Annotations are the part of a run that is readable through the API,
-          # so the evidence is repeated there — one line per check, plus every
-          # warning (CORS/origin/offline) verbatim.
-          grep '^PASS:' live-verify.log | sed 's/^/::notice title=verify-live-pass::/'
-          grep '^WARN:' live-verify.log | sed 's/^/::warning title=verify-live-warn::/'
-          grep 'RESULT:' live-verify.log | sed 's/^/::notice title=verify-live-result::/' || true
-          echo "::notice title=live-verify::$verdict | $(grep -c '^PASS:' live-verify.log) read-only checks passed | $(grep -c '^WARN:' live-verify.log) warnings"
+          grep -q "RESULT: this deployment ships a CONNECTED build" live-verify.log || verdict="NOT CONNECTED"
+          grep -q "OFFLINE / DEMO mode" live-verify.log && verdict="OFFLINE/DEMO build"
+          grep -q "CONFIGURED BUT DEAD" live-verify.log && verdict="CONFIGURED BUT DEAD (project host does not resolve)"
+          # GitHub caps annotations at 10 per step, so the evidence is compacted
+          # into ONE annotation plus the full log in the job summary.
+          summary="${verdict} | $(grep -c '^PASS:' live-verify.log) passed, $(grep -c '^WARN:' live-verify.log) warnings, $(grep -c '^FAIL:' live-verify.log) failed"
+          fails=$(grep '^FAIL:' live-verify.log | head -4 | tr '\n' ' ' || true)
+          echo "::notice title=live-verify::${summary}"
+          if [ -n "$fails" ]; then echo "::warning title=live-verify-failures::${fails}"; fi
           echo "### Live verification of \`${{ steps.target.outputs.url }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "**Verdict:** $verdict" >> "$GITHUB_STEP_SUMMARY"
