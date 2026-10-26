@@ -67,25 +67,25 @@ export function getSettings(): SiteSettings {
   return getRemoteSiteData()?.settings ?? store.get();
 }
 
-export function saveSettings(next: SiteSettings): void {
-  if (!Number.isSafeInteger(next.freeShippingThreshold) || next.freeShippingThreshold < 0) return;
-  if (!Number.isSafeInteger(next.standardShippingCost) || next.standardShippingCost < 0) return;
-  if (!Number.isSafeInteger(next.expressShippingCost) || next.expressShippingCost < 0) return;
-  if (!Number.isSafeInteger(next.lowStockThreshold) || next.lowStockThreshold < 0) return;
+export async function saveSettings(next: SiteSettings): Promise<boolean> {
+  if (!Number.isSafeInteger(next.freeShippingThreshold) || next.freeShippingThreshold < 0) return false;
+  if (!Number.isSafeInteger(next.standardShippingCost) || next.standardShippingCost < 0) return false;
+  if (!Number.isSafeInteger(next.expressShippingCost) || next.expressShippingCost < 0) return false;
+  if (!Number.isSafeInteger(next.lowStockThreshold) || next.lowStockThreshold < 0) return false;
 
   if (getSupabase()) {
-    runRemoteSiteWrite('ذخیره تنظیمات', () => pushRemoteSettings(next));
-    return;
+    return runRemoteSiteWrite('ذخیره تنظیمات', () => pushRemoteSettings(next));
   }
   store.set(next);
+  return true;
 }
 
-export function resetSettings(): void {
+export async function resetSettings(): Promise<boolean> {
   if (getSupabase()) {
-    runRemoteSiteWrite('بازنشانی تنظیمات', () => pushRemoteSettings(DEFAULT_SITE_SETTINGS));
-    return;
+    return runRemoteSiteWrite('بازنشانی تنظیمات', () => pushRemoteSettings(DEFAULT_SITE_SETTINGS));
   }
   store.reset();
+  return true;
 }
 
 /** React binding used by dashboard/storefront surfaces that must refresh after a save. */

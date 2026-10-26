@@ -12,6 +12,7 @@
     "verify:data": "node scripts/verify-data.mjs",
     "verify:supabase": "node scripts/verify-supabase.mjs",
     "verify:admin": "node scripts/verify-admin.mjs",
+    "test:catalog-validation": "node scripts/test-catalog-validation.mjs",
     "smoke": "node scripts/smoke.mjs",
     "test:voice-android": "node scripts/tts-android-sim.mjs",
     "test:voice-cloud": "node scripts/tts-cloud-sim.mjs",

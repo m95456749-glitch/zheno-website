@@ -138,12 +138,12 @@ export function useSiteDataSync(): SiteDataSyncState {
 }
 
 /** Fetch all non-sensitive site-management data under the current JWT. */
-export async function refreshSiteData(options: { silent?: boolean } = {}): Promise<void> {
+export async function refreshSiteData(options: { silent?: boolean } = {}): Promise<boolean> {
   const supabase = getSupabase();
   if (!supabase) {
     snapshot = null;
     setState({ source: 'local', phase: 'offline', pending: 0, error: null, lastSyncedAt: null });
-    return;
+    return true;
   }
 
   if (!options.silent) setState({ phase: snapshot ? 'syncing' : 'loading' });
@@ -188,36 +188,43 @@ export async function refreshSiteData(options: { silent?: boolean } = {}): Promi
       loadedAt: new Date().toISOString(),
     };
     setState({ source: 'remote', phase: pending > 0 ? 'syncing' : 'ready', error: null, lastSyncedAt: snapshot.loadedAt });
+    return true;
   } catch (error) {
     setState({
       source: 'remote',
       phase: 'error',
       error: error instanceof Error ? error.message : String(error),
     });
+    return false;
   }
 }
 
-/** Run a write, then replace the optimistic/local view with database truth. */
-export function runRemoteSiteWrite(label: string, write: () => Promise<void>): void {
+/**
+ * Run a write, then replace the optimistic/local view with database truth.
+ * Resolves true only when the write and the following re-read both succeed.
+ */
+export async function runRemoteSiteWrite(label: string, write: () => Promise<void>): Promise<boolean> {
   pending += 1;
   setState({ source: 'remote', phase: 'syncing', pending, error: null });
 
-  void (async () => {
-    let failure: string | null = null;
-    try {
-      await write();
-    } catch (error) {
-      failure = `${label} — ${error instanceof Error ? error.message : String(error)}`;
-    }
-    await refreshSiteData({ silent: true });
-    pending = Math.max(0, pending - 1);
-    setState({
-      source: 'remote',
-      phase: failure ? 'error' : pending > 0 ? 'syncing' : 'ready',
-      pending,
-      error: failure,
-    });
-  })();
+  let failure: string | null = null;
+  try {
+    await write();
+  } catch (error) {
+    failure = `${label} — ${error instanceof Error ? error.message : String(error)}`;
+  }
+  const refreshed = await refreshSiteData({ silent: true });
+  if (!refreshed && !failure) {
+    failure = `${label} — بازخوانی از دیتابیس ناموفق بود؛ نتیجهٔ ذخیره تأیید نشد.`;
+  }
+  pending = Math.max(0, pending - 1);
+  setState({
+    source: 'remote',
+    phase: failure ? 'error' : pending > 0 ? 'syncing' : 'ready',
+    pending,
+    error: failure,
+  });
+  return failure === null;
 }
 
 async function requireSupabase() {

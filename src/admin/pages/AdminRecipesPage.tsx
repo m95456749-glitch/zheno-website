@@ -8,7 +8,7 @@
 // «ویرایش» / «حذف» buttons per recipe.
 // ============================================================
 
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import type { Recipe } from '../../data/recipes';
 import {
   removeRecipe,
@@ -40,6 +40,11 @@ export default function AdminRecipesPage() {
     window.setTimeout(() => setSaved(false), 2000);
   };
 
+  const reset = async () => {
+    if (!window.confirm('همه تغییرات دستورها به حالت اولیه بازگردد؟')) return;
+    if (await resetRecipes()) flashSaved();
+  };
+
   return (
     <div>
       {/* toolbar — one primary action + one quiet reset */}
@@ -50,12 +55,7 @@ export default function AdminRecipesPage() {
         <div className="flex items-center gap-3">
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('همه تغییرات دستورها به حالت اولیه بازگردد؟')) {
-                resetRecipes();
-                flashSaved();
-              }
-            }}
+            onClick={() => void reset()}
             className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline"
           >
             بازنشانی
@@ -76,10 +76,11 @@ export default function AdminRecipesPage() {
       {editingId === 'new' && (
         <RecipeForm
           recipe={null}
-          onDone={() => {
+          onSaved={() => {
             setEditingId(null);
             flashSaved();
           }}
+          onCancel={() => setEditingId(null)}
         />
       )}
 
@@ -89,10 +90,11 @@ export default function AdminRecipesPage() {
             <li key={recipe.id}>
               <RecipeForm
                 recipe={recipe}
-                onDone={() => {
+                onSaved={() => {
                   setEditingId(null);
                   flashSaved();
                 }}
+                onCancel={() => setEditingId(null)}
               />
             </li>
           ) : (
@@ -124,7 +126,7 @@ export default function AdminRecipesPage() {
                   <button
                     type="button"
                     onClick={() => {
-                      if (window.confirm(`دستور «${recipe.title}» حذف شود؟`)) removeRecipe(recipe.id);
+                      if (window.confirm(`دستور «${recipe.title}» حذف شود؟`)) void removeRecipe(recipe.id);
                     }}
                     className="adm-btn-sm adm-btn-sm-danger"
                   >
@@ -149,7 +151,15 @@ export default function AdminRecipesPage() {
   );
 }
 
-function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => void }) {
+function RecipeForm({
+  recipe,
+  onSaved,
+  onCancel,
+}: {
+  recipe: Recipe | null;
+  onSaved: () => void;
+  onCancel: () => void;
+}) {
   const [form, setForm] = useState<RecipeFormState>(() =>
     recipe
       ? {
@@ -163,8 +173,11 @@ function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => v
       : { title: '', summary: '', emoji: '🍮', category: 'jelly', ingredients: '', steps: '' },
   );
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  // Retry after an unconfirmed write must upsert the same recipe id.
+  const draftRecipeIdRef = useRef(recipe?.id ?? `recipe-${Date.now().toString(36)}`);
 
-  const submit = () => {
+  const submit = async () => {
     const title = form.title.trim();
     const ingredients = form.ingredients.split('\n').map((s) => s.trim()).filter(Boolean);
     const steps = form.steps.split('\n').map((s) => s.trim()).filter(Boolean);
@@ -180,8 +193,9 @@ function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => v
       setError('حداقل یک مرحله (هر مرحله در یک خط) وارد کنید.');
       return;
     }
-    upsertRecipe({
-      id: recipe?.id ?? `recipe-${Date.now().toString(36)}`,
+    setSubmitting(true);
+    const ok = await upsertRecipe({
+      id: draftRecipeIdRef.current,
       title,
       summary: form.summary.trim() || title,
       emoji: form.emoji.trim() || '🍮',
@@ -189,7 +203,12 @@ function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => v
       ingredients,
       steps,
     });
-    onDone();
+    setSubmitting(false);
+    if (!ok) {
+      setError('ذخیره دستور در دیتابیس تأیید نشد؛ فرم باز مانده است تا دوباره تلاش کنید.');
+      return;
+    }
+    onSaved();
   };
 
   return (
@@ -260,10 +279,10 @@ function RecipeForm({ recipe, onDone }: { recipe: Recipe | null; onDone: () => v
           </p>
         )}
         <div className="flex gap-3">
-          <button type="button" onClick={submit} className="btn-lux btn-wine flex-1 rounded-xl">
-            {recipe ? 'ذخیره تغییرات' : 'افزودن دستور'}
+          <button type="button" onClick={() => void submit()} disabled={submitting} className="btn-lux btn-wine flex-1 rounded-xl">
+            {submitting ? 'در حال ذخیره…' : recipe ? 'ذخیره تغییرات' : 'افزودن دستور'}
           </button>
-          <button type="button" onClick={onDone} className="btn-lux btn-line-dark rounded-xl">
+          <button type="button" onClick={onCancel} disabled={submitting} className="btn-lux btn-line-dark rounded-xl">
             انصراف
           </button>
         </div>

@@ -6,7 +6,7 @@
 // UI: one form, one primary «ذخیره» button, quiet «بازنشانی».
 // ============================================================
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   DEFAULT_SITE_CONTENT,
   getSiteContent,
@@ -52,17 +52,41 @@ export default function AdminSiteContentPage() {
   const liveContent = useSiteContent();
   const [form, setForm] = useState<SiteContent>(() => getSiteContent());
   const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  /** While the admin is editing, a fresh remote snapshot must not replace the draft. */
+  const dirtyRef = useRef(false);
 
   useEffect(() => {
+    if (dirtyRef.current) return;
     setForm(liveContent);
   }, [liveContent]);
 
-  const changed = FIELDS.some((f) => form[f.key] !== DEFAULT_SITE_CONTENT[f.key]);
+  const canReset = FIELDS.some((f) => liveContent[f.key] !== DEFAULT_SITE_CONTENT[f.key]);
 
-  const save = () => {
-    saveSiteContent(form);
+  const updateField = (key: keyof SiteContent, value: string) => {
+    dirtyRef.current = true;
+    setForm((current) => ({ ...current, [key]: value }));
+  };
+
+  const save = async () => {
+    setSaving(true);
+    const ok = await saveSiteContent(form);
+    setSaving(false);
+    if (!ok) return; // keep the draft; the panel-wide banner carries the database error
+    dirtyRef.current = false;
+    setForm(getSiteContent());
     setSaved(true);
     window.setTimeout(() => setSaved(false), 2000);
+  };
+
+  const reset = async () => {
+    if (!window.confirm('همه متن‌ها به حالت اولیه سایت بازگردد؟')) return;
+    setSaving(true);
+    const ok = await resetSiteContent();
+    setSaving(false);
+    if (!ok) return;
+    dirtyRef.current = false;
+    setForm({ ...DEFAULT_SITE_CONTENT });
   };
 
   return (
@@ -76,34 +100,31 @@ export default function AdminSiteContentPage() {
               <textarea
                 rows={3}
                 dir={field.ltr ? 'ltr' : 'rtl'}
+                disabled={saving}
                 className="adm-input resize-none text-start"
                 value={form[field.key]}
-                onChange={(e) => setForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                onChange={(e) => updateField(field.key, e.target.value)}
               />
             ) : (
               <input
                 dir={field.ltr ? 'ltr' : 'rtl'}
+                disabled={saving}
                 className="adm-input text-start"
                 value={form[field.key]}
-                onChange={(e) => setForm((f) => ({ ...f, [field.key]: e.target.value }))}
+                onChange={(e) => updateField(field.key, e.target.value)}
               />
             )}
           </Field>
         ))}
 
         <div className="flex flex-col gap-3 border-t border-espresso/8 pt-5 sm:flex-row sm:items-center sm:justify-between">
-          <button type="button" onClick={save} className="btn-lux btn-wine rounded-xl sm:min-w-48">
-            ذخیره تغییرات
+          <button type="button" onClick={() => void save()} disabled={saving} className="btn-lux btn-wine rounded-xl sm:min-w-48">
+            {saving ? 'در حال ذخیره…' : 'ذخیره تغییرات'}
           </button>
           <button
             type="button"
-            onClick={() => {
-              if (window.confirm('همه متن‌ها به حالت اولیه سایت بازگردد؟')) {
-                resetSiteContent();
-                setForm({ ...DEFAULT_SITE_CONTENT });
-              }
-            }}
-            disabled={!changed}
+            onClick={() => void reset()}
+            disabled={!canReset || saving}
             className="text-[0.72rem] font-bold text-mocha-light underline-offset-4 transition hover:text-wine-900 hover:underline disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:no-underline"
           >
             بازنشانی به متن‌های اولیه

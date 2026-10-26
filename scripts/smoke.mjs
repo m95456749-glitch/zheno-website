@@ -930,8 +930,52 @@ function expectNoErrors(label, errors) {
   ].join('.');
 
   const calls = [];
-  let productActive = true;
-  let currentStock = 25;
+  let ignoreNextProductActivePatch = false;
+  // Stateful catalog rows let the product-form retry checks run against
+  // the same sequence a real PostgREST backend would expose: product
+  // and variant upserts are visible to the re-read even when the later
+  // inventory insert is forced to fail once.
+  const productRows = [
+    {
+      id: 'jelly-strawberry',
+      category: 'jelly',
+      flavor_id: 'strawberry-j',
+      name: 'پودر ژله توت فرنگی ژینو',
+      short_name: 'ژله توت فرنگی',
+      category_label: 'پودر ژله',
+      image_url: 'images/products/jelly-strawberry.jpg',
+      active: true,
+      featured: true,
+      special: false,
+    },
+    // Regression fixture: a remote product row whose variant write
+    // never completed. The products page must label and leave it
+    // repairable, not crash dereferencing variants[0].
+    {
+      id: 'jelly-peach',
+      category: 'jelly',
+      flavor_id: 'peach',
+      name: 'پودر ژله هلو ژینو',
+      short_name: 'ژله هلو',
+      category_label: 'پودر ژله',
+      image_url: 'images/products/jelly-peach.jpg',
+      active: true,
+      featured: false,
+      special: false,
+    },
+  ];
+  const variantRows = [
+    {
+      id: 'jelly-strawberry-250',
+      product_id: 'jelly-strawberry',
+      weight: '۲۵۰ گرم',
+      weight_grams: 250,
+      price: 200000,
+      sku: 'ZJ-STR-250',
+    },
+  ];
+  const inventoryRows = [{ variant_id: 'jelly-strawberry-250', current_stock: 25, active: true }];
+  const failedInventoryInsertVariants = new Set();
 
   const dbFetch = async (input, init = {}) => {
     const url = typeof input === 'string' ? input : input.url;
@@ -983,43 +1027,61 @@ function expectNoErrors(label, errors) {
     if (url.includes('/rest/v1/rpc/is_admin')) return json(true);
     if (url.includes('/rest/v1/rpc/set_inventory_stock')) {
       const payload = JSON.parse(body || '{}');
-      currentStock = payload.p_current_stock;
-      return json([{ variant_id: payload.p_variant_id, current_stock: currentStock, active: true }]);
+      const row = inventoryRows.find((item) => item.variant_id === payload.p_variant_id);
+      if (row) row.current_stock = payload.p_current_stock;
+      else inventoryRows.push({ variant_id: payload.p_variant_id, current_stock: payload.p_current_stock, active: true });
+      return json([{ variant_id: payload.p_variant_id, current_stock: payload.p_current_stock, active: true }]);
     }
     if (url.includes('/rest/v1/products') && method === 'PATCH') {
-      productActive = false;
+      const payload = JSON.parse(body || '{}');
+      if (ignoreNextProductActivePatch) {
+        // HTTP success, zero changed rows: the following authoritative
+        // re-read still contains the old active value.
+        ignoreNextProductActivePatch = false;
+        return new globalThis.Response(null, { status: 204 });
+      }
+      const productId = new URL(url).searchParams.get('id')?.replace(/^eq\./, '');
+      const row = productRows.find((item) => item.id === productId);
+      if (row && typeof payload.active === 'boolean') row.active = payload.active;
       return new globalThis.Response(null, { status: 204 });
     }
-    if (url.includes('/rest/v1/products')) {
-      return json([
-        {
-          id: 'jelly-strawberry',
-          category: 'jelly',
-          flavor_id: 'strawberry-j',
-          name: 'پودر ژله توت فرنگی ژینو',
-          short_name: 'ژله توت فرنگی',
-          category_label: 'پودر ژله',
-          image_url: 'images/products/jelly-strawberry.jpg',
-          active: productActive,
-          featured: true,
-          special: false,
-        },
-      ]);
+    if (url.includes('/rest/v1/products') && method === 'POST') {
+      const payload = JSON.parse(body || '{}');
+      for (const row of Array.isArray(payload) ? payload : [payload]) {
+        const index = productRows.findIndex((item) => item.id === row.id);
+        if (index >= 0) productRows[index] = { ...productRows[index], ...row };
+        else productRows.push(row);
+      }
+      return new globalThis.Response(null, { status: 204 });
     }
-    if (url.includes('/rest/v1/product_variants')) {
-      return json([
-        {
-          id: 'jelly-strawberry-250',
-          product_id: 'jelly-strawberry',
-          weight: '۲۵۰ گرم',
-          weight_grams: 250,
-          price: 200000,
-          sku: 'ZJ-STR-250',
-        },
-      ]);
+    if (url.includes('/rest/v1/products')) return json(productRows);
+    if (url.includes('/rest/v1/product_variants') && method === 'POST') {
+      const payload = JSON.parse(body || '{}');
+      for (const row of Array.isArray(payload) ? payload : [payload]) {
+        const index = variantRows.findIndex((item) => item.id === row.id);
+        if (index >= 0) variantRows[index] = { ...variantRows[index], ...row };
+        else variantRows.push(row);
+      }
+      return new globalThis.Response(null, { status: 204 });
+    }
+    if (url.includes('/rest/v1/product_variants')) return json(variantRows);
+    if (url.includes('/rest/v1/inventory') && method === 'POST') {
+      const payload = JSON.parse(body || '{}');
+      const rowsToInsert = Array.isArray(payload) ? payload : [payload];
+      for (const row of rowsToInsert) {
+        if (!failedInventoryInsertVariants.has(row.variant_id)) {
+          failedInventoryInsertVariants.add(row.variant_id);
+          return json({ message: 'forced inventory insert failure', code: '400' }, 400);
+        }
+        const index = inventoryRows.findIndex((item) => item.variant_id === row.variant_id);
+        if (index >= 0) inventoryRows[index] = { ...inventoryRows[index], ...row, active: true };
+        else inventoryRows.push({ ...row, active: true });
+      }
+      return new globalThis.Response(null, { status: 201 });
     }
     if (url.includes('/rest/v1/inventory')) {
-      return json([{ variant_id: 'jelly-strawberry-250', current_stock: currentStock, active: true }]);
+      const variantFilter = new URL(url).searchParams.get('variant_id')?.replace(/^eq\./, '');
+      return json(variantFilter ? inventoryRows.filter((row) => row.variant_id === variantFilter) : inventoryRows);
     }
     return json([]);
   };
@@ -1211,6 +1273,165 @@ function expectNoErrors(label, errors) {
     );
     if (onProducts) ok('connected admin — products page reached through the panel nav');
     else fail('connected admin — products page did not render: ' + text().slice(0, 200));
+    expectContains('connected admin — variantless product', text(), 'بدون تنوع');
+    expectContains('connected admin — variantless product', text(), 'نیازمند اصلاح');
+
+    const productDialog = () => document.querySelector('[role="dialog"]');
+    const dialogButton = (label) =>
+      Array.from(productDialog()?.querySelectorAll('button') ?? []).find(
+        (button) => button.textContent.trim() === label,
+      );
+    const setDialogInput = async (selector, value) => {
+      const input = productDialog()?.querySelector(selector);
+      if (!input) return false;
+      setReactValue(input, value);
+      await sleep(60);
+      return true;
+    };
+
+    // Regression: a 204 PATCH that changes no row must not be reported
+    // as saved. The stub leaves active=true, so the authoritative
+    // re-read must turn this apparently successful UPDATE into a
+    // visible failure and restore the switch.
+    const strawberryToggle = () =>
+      document.querySelector('button[role="switch"][aria-label="نمایش ژله توت فرنگی در فروشگاه"]');
+    ignoreNextProductActivePatch = true;
+    strawberryToggle()?.click();
+    const zeroRowProductFailure = await waitFor(
+      () =>
+        text().includes('مقدار جدید در بازخوانی دیتابیس تأیید نشد') &&
+        strawberryToggle()?.getAttribute('aria-checked') === 'true',
+    );
+    if (zeroRowProductFailure && !text().includes('ذخیره شد') && productRows[0].active === true) {
+      ok('connected admin — a no-op product UPDATE is reported as a failure and keeps the old value');
+    } else {
+      fail(
+        'connected admin — a no-op product UPDATE was not rejected by the re-read: ' +
+          text().slice(0, 260) +
+          ` (checked=${strawberryToggle()?.getAttribute('aria-checked') ?? 'missing'})`,
+      );
+    }
+
+    // Regression: fail the inventory step after the product and
+    // variant rows have landed, then retry in the SAME modal. The
+    // catalog now contains the draft variant, but its SKU is the
+    // form's own SKU — not a conflict with another product.
+    const findCreateButton = () =>
+      Array.from(document.querySelectorAll('button')).find(
+        (button) => button.textContent.trim().endsWith('افزودن محصول') && !button.closest('[role="dialog"]'),
+      );
+    const createOpened = await clickUntil(clickEl, findCreateButton, () => Boolean(productDialog()), waitFor);
+    if (!createOpened) {
+      fail('connected admin — the new-product form did not open for the retry check');
+    } else {
+      await setDialogInput('input[placeholder="پودر ژله … ژینو"]', 'پودر ژله آزمایشی ژینو');
+      await setDialogInput('input[placeholder="ژله انار"]', 'ژله آزمایشی');
+      await setDialogInput('input[placeholder="ZJ-POM-250"]', 'ZJ-TST-250');
+      dialogButton('افزودن محصول')?.click();
+
+      const createInventoryFailed = await waitFor(
+        () =>
+          Boolean(productDialog()) &&
+          text().includes('ذخیره کامل محصول در دیتابیس تأیید نشد') &&
+          text().includes('forced inventory insert failure'),
+      );
+      const createdRows = productRows.filter((row) => row.short_name === 'ژله آزمایشی');
+      const createdVariantRows = variantRows.filter((row) => row.sku === 'ZJ-TST-250');
+      if (
+        createInventoryFailed &&
+        createdRows.length === 1 &&
+        createdVariantRows.length === 1 &&
+        !inventoryRows.some((row) => row.variant_id === createdVariantRows[0].id)
+      ) {
+        ok('connected admin — a failed inventory step leaves the product form open with the partial row visible');
+      } else {
+        fail(
+          `connected admin — the forced inventory failure did not leave the expected partial product (products=${createdRows.length}, variants=${createdVariantRows.length})`,
+        );
+      }
+
+      dialogButton('افزودن محصول')?.click();
+      const createRetryDone = await waitFor(
+        () =>
+          !productDialog() &&
+          createdVariantRows[0] &&
+          inventoryRows.some((row) => row.variant_id === createdVariantRows[0].id && row.current_stock === 50),
+      );
+      if (
+        createRetryDone &&
+        !text().includes('این SKU قبلاً') &&
+        productRows.filter((row) => row.short_name === 'ژله آزمایشی').length === 1 &&
+        variantRows.filter((row) => row.sku === 'ZJ-TST-250').length === 1
+      ) {
+        ok('connected admin — retrying a partially saved new product completes the same record without a false SKU conflict');
+      } else {
+        fail(
+          'connected admin — retrying a partially saved new product did not complete the same record: ' +
+            text().slice(0, 300),
+        );
+      }
+    }
+
+    // The same retry identity applies when repairing the seeded
+    // variantless Peach row: its first-ever variant id is draft-owned,
+    // even after that variant reaches the catalog snapshot.
+    const findPeachEditButton = () => {
+      const row = Array.from(document.querySelectorAll('tr, li')).find((item) =>
+        item.textContent.includes('ژله هلو'),
+      );
+      return Array.from(row?.querySelectorAll('button') ?? []).find(
+        (button) => button.textContent.trim() === 'ویرایش',
+      );
+    };
+    const peachEditOpened = await clickUntil(clickEl, findPeachEditButton, () => Boolean(productDialog()), waitFor);
+    if (!peachEditOpened) {
+      fail('connected admin — the variantless product edit form did not open for the retry check');
+    } else {
+      await setDialogInput('input[placeholder="ZJ-POM-250"]', 'ZJ-PCH-250');
+      const peachStockInput = productDialog()?.querySelectorAll('input[type="number"]')[2];
+      if (peachStockInput) {
+        setReactValue(peachStockInput, '12');
+        await sleep(60);
+      }
+      dialogButton('ذخیره تغییرات')?.click();
+
+      const peachInventoryFailed = await waitFor(
+        () =>
+          Boolean(productDialog()) &&
+          text().includes('ذخیره کامل محصول در دیتابیس تأیید نشد') &&
+          text().includes('forced inventory insert failure'),
+      );
+      const peachVariantRows = () => variantRows.filter((row) => row.product_id === 'jelly-peach');
+      if (
+        peachInventoryFailed &&
+        peachVariantRows().length === 1 &&
+        !inventoryRows.some((row) => row.variant_id === peachVariantRows()[0].id)
+      ) {
+        ok('connected admin — a failed variantless repair leaves the same edit form open');
+      } else {
+        fail('connected admin — the forced failure during variantless repair did not leave the expected partial variant');
+      }
+
+      dialogButton('ذخیره تغییرات')?.click();
+      const peachRetryDone = await waitFor(
+        () =>
+          !productDialog() &&
+          inventoryRows.some((row) => row.variant_id === peachVariantRows()[0]?.id && row.current_stock === 12),
+      );
+      if (
+        peachRetryDone &&
+        !text().includes('این SKU قبلاً') &&
+        productRows.filter((row) => row.id === 'jelly-peach').length === 1 &&
+        peachVariantRows().length === 1
+      ) {
+        ok('connected admin — retrying a variantless repair completes the same product without a false SKU conflict');
+      } else {
+        fail(
+          'connected admin — retrying a variantless repair did not complete the same product: ' +
+            text().slice(0, 300),
+        );
+      }
+    }
 
     const toggle = document.querySelector('button[role="switch"]');
     if (!toggle) {
@@ -1225,6 +1446,9 @@ function expectNoErrors(label, errors) {
       else fail(`connected admin — unexpected product payload: ${patch ? patch.body : 'none'}`);
       if (!calls.some((c) => c.method.toUpperCase() === 'DELETE')) ok('connected admin — no DELETE request was ever sent');
       else fail('connected admin — a DELETE request was sent (must never happen)');
+      const savedShown = await waitFor(() => text().includes('ذخیره شد'));
+      if (savedShown) ok('connected admin — success feedback follows the confirmed database write');
+      else fail('connected admin — confirmed write did not produce success feedback');
     }
   }
 
@@ -1272,7 +1496,7 @@ function makeSupabaseStub({
   staleAdmin = false,
 } = {}) {
   const calls = [];
-  const flags = { bucketMissing };
+  const flags = { bucketMissing, rejectOrderStatusPatch: false, ignoreNextOrderStatusPatch: false };
   const createdOrderPayloads = [];
   const orderStatusPatches = [];
   const productPatches = [];
@@ -1430,6 +1654,18 @@ function makeSupabaseStub({
     if (url.includes('/rest/v1/orders') && method === 'PATCH') {
       const payload = JSON.parse(body || '{}');
       orderStatusPatches.push({ url, payload, headers });
+      if (flags.rejectOrderStatusPatch) {
+        return json({ message: 'forced order status failure', code: '400' }, 400);
+      }
+      if (flags.ignoreNextOrderStatusPatch) {
+        // HTTP success, zero changed rows: the next authoritative
+        // orders read still returns the previous status.
+        flags.ignoreNextOrderStatusPatch = false;
+        return new globalThis.Response(null, { status: 204 });
+      }
+      const orderId = new URL(url).searchParams.get('id')?.replace(/^eq\./, '');
+      const row = orders.find((item) => item.id === orderId);
+      if (row && typeof payload.status === 'string') row.status = payload.status;
       return new globalThis.Response(null, { status: 204 });
     }
     // ── Storage: product photos (bucket 'product-images') ──
@@ -2918,6 +3154,76 @@ async function driveCheckoutToPayment(dom, waitFor, text) {
       const orderReads = stub.calls.filter((c) => c.method === 'GET' && c.url.includes('/rest/v1/orders')).length;
       if (orderReads >= 2) ok('admin orders — the authoritative re-read happened after the write');
       else fail(`admin orders — expected ≥2 orders reads, saw ${orderReads}`);
+
+      const statusSelector = 'select[aria-label="تغییر وضعیت سفارش ZH-ADM1001"]';
+      const successfulStatusConfirmed = await waitFor(
+        () => document.querySelector(statusSelector)?.value === 'processing' && orders[0].status === 'preparing',
+      );
+      if (successfulStatusConfirmed) {
+        ok('admin orders — a successful status write is confirmed by the authoritative re-read');
+      } else {
+        fail('admin orders — the successful status write was not confirmed by the authoritative re-read');
+      }
+
+      // Regression: a 204 PATCH that changes no row still leaves the
+      // authoritative status at «processing». That must be a visible
+      // failure, not a silent success/rollback.
+      stub.flags.ignoreNextOrderStatusPatch = true;
+      const zeroRowSelect = document.querySelector(statusSelector);
+      if (!zeroRowSelect) {
+        fail('admin orders — the ZH-ADM1001 status select was not found for the no-op update check');
+      } else {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, 'value').set.call(
+          zeroRowSelect,
+          'shipped',
+        );
+        zeroRowSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        const zeroRowFailure = await waitFor(
+          () =>
+            text().includes('تغییر وضعیت سفارش ZH-ADM1001') &&
+            text().includes('وضعیت جدید در بازخوانی دیتابیس تأیید نشد') &&
+            document.querySelector(statusSelector)?.value === 'processing',
+        );
+        if (zeroRowFailure && orders[0].status === 'preparing') {
+          ok('admin orders — a no-op status UPDATE is reported as a failure and keeps the database value');
+        } else {
+          fail(
+            'admin orders — a no-op status UPDATE was not reported/rolled back: ' +
+              text().slice(0, 300) +
+              ` (select=${document.querySelector(statusSelector)?.value ?? 'missing'}, db=${orders[0].status})`,
+          );
+        }
+      }
+
+      // Regression: a refused status PATCH must be visible outside the
+      // empty state, and the controlled select must return to the
+      // authoritative database value instead of keeping the optimistic one.
+      stub.flags.rejectOrderStatusPatch = true;
+      const failedSelect = document.querySelector(statusSelector);
+      if (!failedSelect) {
+        fail('admin orders — the ZH-ADM1001 status select was not found for the failure check');
+      } else {
+        Object.getOwnPropertyDescriptor(dom.window.HTMLSelectElement.prototype, 'value').set.call(
+          failedSelect,
+          'shipped',
+        );
+        failedSelect.dispatchEvent(new dom.window.Event('change', { bubbles: true }));
+        const failureReported = await waitFor(
+          () =>
+            text().includes('تغییر وضعیت سفارش ZH-ADM1001') &&
+            text().includes('forced order status failure') &&
+            document.querySelector(statusSelector)?.value === 'processing',
+        );
+        if (failureReported) {
+          ok('admin orders — a refused status write is visible and rolls back to the database value');
+        } else {
+          fail(
+            'admin orders — refused status write was not reported/rolled back: ' +
+              text().slice(0, 260) +
+              ` (select=${document.querySelector(statusSelector)?.value ?? 'missing'})`,
+          );
+        }
+      }
     }
 
     if (errors.length === 0) ok('admin orders flow — no runtime errors');

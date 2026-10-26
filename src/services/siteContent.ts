@@ -62,7 +62,7 @@ export function getSiteContent(): SiteContent {
   return remote ? { ...DEFAULT_SITE_CONTENT, ...remote.content } : { ...DEFAULT_SITE_CONTENT, ...store.get() };
 }
 
-export function saveSiteContent(next: SiteContent): void {
+export async function saveSiteContent(next: SiteContent): Promise<boolean> {
   // Only this module's own keys are ever written — other published
   // site_content rows (e.g. the non-secret assistant voice settings)
   // ride along in the merged snapshot for reads but must never be
@@ -72,8 +72,7 @@ export function saveSiteContent(next: SiteContent): void {
     if (typeof next[key] === 'string') own[key] = next[key];
   }
   if (getSupabase()) {
-    runRemoteSiteWrite('ذخیره محتوای سایت', () => pushRemoteContent(own));
-    return;
+    return runRemoteSiteWrite('ذخیره محتوای سایت', () => pushRemoteContent(own));
   }
   next = own;
 
@@ -82,15 +81,16 @@ export function saveSiteContent(next: SiteContent): void {
     if (next[key] !== DEFAULT_SITE_CONTENT[key]) overlay[key] = next[key];
   }
   store.set(overlay);
+  return true;
 }
 
 /** Discard changes without deleting database rows. */
-export function resetSiteContent(): void {
+export async function resetSiteContent(): Promise<boolean> {
   if (getSupabase()) {
-    runRemoteSiteWrite('بازنشانی محتوای سایت', () => pushRemoteContent(DEFAULT_SITE_CONTENT));
-    return;
+    return runRemoteSiteWrite('بازنشانی محتوای سایت', () => pushRemoteContent(DEFAULT_SITE_CONTENT));
   }
   store.reset();
+  return true;
 }
 
 /** React binding used by storefront pages that must see a remote save immediately. */

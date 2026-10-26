@@ -56,6 +56,12 @@ export default function AdminOrdersPage() {
         </select>
       </div>
 
+      {remote && state.phase === 'syncing' && (
+        <p role="status" className="mb-4 text-[0.72rem] font-bold text-mocha">
+          در حال همگام‌سازی سفارش‌ها با دیتابیس…
+        </p>
+      )}
+
       {loading ? (
         <div className="panel-lux rounded-2xl">
           <EmptyState
@@ -81,7 +87,7 @@ export default function AdminOrdersPage() {
       ) : (
         <ul className="space-y-4">
           {filtered.map((order) => (
-            <OrderCard key={order.id} order={order} />
+            <OrderCard key={order.id} order={order} statusDisabled={remote && state.pending > 0} />
           ))}
         </ul>
       )}
@@ -89,7 +95,7 @@ export default function AdminOrdersPage() {
   );
 }
 
-function OrderCard({ order }: { order: StoredOrder }) {
+function OrderCard({ order, statusDisabled }: { order: StoredOrder; statusDisabled: boolean }) {
   return (
     <li className="panel-lux overflow-hidden rounded-2xl">
       {/* header — id, date, total, and the one primary control */}
@@ -107,7 +113,8 @@ function OrderCard({ order }: { order: StoredOrder }) {
           <span className="text-sm font-extrabold text-wine-900">{formatPrice(order.total)}</span>
           <select
             value={order.status}
-            onChange={(e) => updateOrderStatus(order.id, e.target.value as OrderStatus)}
+            disabled={statusDisabled}
+            onChange={(e) => void updateOrderStatus(order.id, e.target.value as OrderStatus)}
             aria-label={`تغییر وضعیت سفارش ${order.id}`}
             className={cn('adm-status-select', `adm-status-select-${order.status}`)}
           >

@@ -95,6 +95,11 @@ export function getOrders(): StoredOrder[] {
   return state.source === 'remote' ? (snapshot ?? []) : getStoredOrders();
 }
 
+/** React binding — sync status only (used by the panel-wide error banner). */
+export function useOrderSync(): OrderSyncState {
+  return useSyncExternalStore(subscribeOrderSync, getOrderSyncState);
+}
+
 /** React binding — orders + sync state for the admin pages. */
 export function useOrders(): { orders: StoredOrder[]; state: OrderSyncState } {
   // Both bindings subscribe: the local store (so local-mode edits
@@ -148,40 +153,58 @@ export async function refreshOrders(options: { silent?: boolean } = {}): Promise
  *   - local mode → the synchronous localStorage write it always had;
  *   - remote mode → optimistic snapshot update + database UPDATE +
  *     authoritative re-read (a refused write is reported in `error`).
+ *
+ * Resolves true only after the database write and re-read confirm the
+ * status. If the write is refused and the re-read also fails, the
+ * previous snapshot is restored instead of leaving an optimistic status
+ * that the database never accepted.
  */
-export function updateOrderStatus(id: string, status: OrderStatus): void {
+export async function updateOrderStatus(id: string, status: OrderStatus): Promise<boolean> {
   if (state.source !== 'remote') {
     updateLocalOrderStatus(id, status);
-    return;
+    return true;
   }
 
+  const previousSnapshot = snapshot;
   snapshot = (snapshot ?? []).map((o) => (o.id === id ? { ...o, status } : o));
   pending += 1;
   setState({ phase: 'syncing', pending, error: null });
 
-  void (async () => {
-    let failure: string | null = null;
-    try {
-      await updateRemoteOrderStatus(id, status);
-    } catch (err) {
-      failure = `تغییر وضعیت سفارش ${id} — ${err instanceof Error ? err.message : String(err)}`;
-    }
+  let failure: string | null = null;
+  let writeSucceeded = false;
+  let readSucceeded = false;
+  try {
+    await updateRemoteOrderStatus(id, status);
+    writeSucceeded = true;
+  } catch (err) {
+    failure = `تغییر وضعیت سفارش ${id} — ${err instanceof Error ? err.message : String(err)}`;
+  }
 
-    try {
-      snapshot = await fetchRemoteOrders();
-    } catch {
-      // Keep the optimistic snapshot: `failure` already reports the problem.
+  try {
+    snapshot = await fetchRemoteOrders();
+    readSucceeded = true;
+    if (writeSucceeded && !failure) {
+      const confirmed = snapshot.find((order) => order.id === id);
+      if (!confirmed || confirmed.status !== status) {
+        failure = `تغییر وضعیت سفارش ${id} — وضعیت جدید در بازخوانی دیتابیس تأیید نشد.`;
+      }
     }
+  } catch {
+    if (!writeSucceeded) snapshot = previousSnapshot;
+    if (!failure) {
+      failure = `تغییر وضعیت سفارش ${id} — بازخوانی از دیتابیس ناموفق بود؛ نتیجهٔ ذخیره تأیید نشد.`;
+    }
+  }
 
-    pending = Math.max(0, pending - 1);
-    setState({
-      source: 'remote',
-      phase: failure ? 'error' : pending > 0 ? 'syncing' : 'ready',
-      pending,
-      error: failure,
-      lastSyncedAt: snapshot ? new Date().toISOString() : state.lastSyncedAt,
-    });
-  })();
+  pending = Math.max(0, pending - 1);
+  setState({
+    source: 'remote',
+    phase: failure ? 'error' : pending > 0 ? 'syncing' : 'ready',
+    pending,
+    error: failure,
+    lastSyncedAt: readSucceeded ? new Date().toISOString() : state.lastSyncedAt,
+  });
+  return failure === null;
 }
 
 /* ── lifecycle ─────────────────────────────────────────────── */

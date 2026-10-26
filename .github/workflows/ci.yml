@@ -51,6 +51,11 @@ jobs:
       - name: Validate Supabase structure (offline — no DB connection)
         run: npm run verify:supabase
 
+      - name: Verify admin contracts and catalog validation (offline)
+        run: |
+          npm run verify:admin
+          npm run test:catalog-validation
+
       - name: Image migration and automation security tests (offline, no secrets)
         run: |
           npm run test:images

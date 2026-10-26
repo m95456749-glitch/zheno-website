@@ -51,6 +51,12 @@ import {
   pushVariantStock,
   pushVariantStockAdjustment,
 } from './supabaseCatalog';
+import {
+  MAX_DB_INTEGER,
+  isDbIntegerInRange,
+  normalizeSku,
+  validateProductForSave,
+} from './catalogValidation';
 
 /** admin flags per product */
 export interface CatalogMeta {
@@ -132,7 +138,7 @@ export function isDatabaseConnected(): boolean {
 }
 
 /** Re-read the catalog from the database (no-op in local mode). */
-export function reloadCatalogFromDatabase(): Promise<void> {
+export function reloadCatalogFromDatabase(): Promise<boolean> {
   return refreshRemoteCatalog();
 }
 
@@ -231,35 +237,53 @@ export function getCatalogMeta(id: string): CatalogMeta {
 
 /* ── writes (admin) ────────────────────────────────────────── */
 
-/** Create or update a product (+ its active flag). */
-export function upsertProduct(product: Product, active: boolean): void {
+/**
+ * Create or update a product (+ its active flag).
+ *
+ * The current PostgREST path necessarily writes the product, variant
+ * and inventory rows in sequence. Before starting it, validate the
+ * complete product against the loaded catalog so known conflicts
+ * (missing variant, duplicate SKU, out-of-range numbers) never create
+ * a partial write. Callers await the result and may retry the same
+ * product/variant ids after a later database/network failure; those
+ * writes are upserts. A guarantee of one cross-table transaction would
+ * require a separately reviewed database RPC/migration, so it is not
+ * simulated or claimed here.
+ */
+export async function upsertProduct(product: Product, active: boolean): Promise<boolean> {
+  const normalizedProduct: Product = {
+    ...product,
+    variants: product.variants.map((variant) => ({ ...variant, sku: normalizeSku(variant.sku) })),
+  };
+  if (validateProductForSave(normalizedProduct, getEffectiveCatalog())) return false;
+
   if (isDatabaseConnected()) {
     updateRemoteCatalog((current) => {
       const products = current.products.slice();
-      const index = products.findIndex((p) => p.id === product.id);
-      if (index >= 0) products[index] = product;
-      else products.push(product);
-      return makeRemoteCatalog(products, { ...current.active, [product.id]: active });
+      const index = products.findIndex((p) => p.id === normalizedProduct.id);
+      if (index >= 0) products[index] = normalizedProduct;
+      else products.push(normalizedProduct);
+      return makeRemoteCatalog(products, { ...current.active, [normalizedProduct.id]: active });
     });
-    runRemoteWrite('ذخیره محصول', async () => {
-      await pushProductRow(product, active);
-      for (const variant of product.variants) {
+    return runRemoteWrite('ذخیره محصول', async () => {
+      await pushProductRow(normalizedProduct, active);
+      for (const variant of normalizedProduct.variants) {
         await pushVariantRow(variant);
         await pushVariantStock(variant.id, variant.stock);
       }
     });
-    return;
   }
 
   const overlay = store.get();
   store.set({
-    upserts: { ...overlay.upserts, [product.id]: product },
-    removed: overlay.removed.filter((id) => id !== product.id),
+    upserts: { ...overlay.upserts, [normalizedProduct.id]: normalizedProduct },
+    removed: overlay.removed.filter((id) => id !== normalizedProduct.id),
     meta: {
       ...overlay.meta,
-      [product.id]: { active, updatedAt: new Date().toISOString() },
+      [normalizedProduct.id]: { active, updatedAt: new Date().toISOString() },
     },
   });
+  return true;
 }
 
 /**
@@ -270,13 +294,16 @@ export function upsertProduct(product: Product, active: boolean): void {
  * destructive delete would both fail (ON DELETE RESTRICT) and lose
  * history. Local mode keeps the overlay tombstone it always had.
  */
-export function removeProduct(id: string): void {
+export async function removeProduct(id: string): Promise<boolean> {
   if (isDatabaseConnected()) {
     updateRemoteCatalog((current) => makeRemoteCatalog(current.products, { ...current.active, [id]: false }));
-    runRemoteWrite('پنهان‌کردن محصول', async () => {
-      await pushProductActive(id, false);
-    });
-    return;
+    return runRemoteWrite(
+      'پنهان‌کردن محصول',
+      async () => {
+        await pushProductActive(id, false);
+      },
+      (next) => next.active[id] === false,
+    );
   }
 
   const overlay = store.get();
@@ -284,16 +311,20 @@ export function removeProduct(id: string): void {
     ...overlay,
     removed: overlay.removed.includes(id) ? overlay.removed : [...overlay.removed, id],
   });
+  return true;
 }
 
 /** Toggle a product's active flag without touching its data. */
-export function setProductActive(id: string, active: boolean): void {
+export async function setProductActive(id: string, active: boolean): Promise<boolean> {
   if (isDatabaseConnected()) {
     updateRemoteCatalog((current) => makeRemoteCatalog(current.products, { ...current.active, [id]: active }));
-    runRemoteWrite('تغییر وضعیت نمایش', async () => {
-      await pushProductActive(id, active);
-    });
-    return;
+    return runRemoteWrite(
+      'تغییر وضعیت نمایش',
+      async () => {
+        await pushProductActive(id, active);
+      },
+      (next) => next.active[id] === active,
+    );
   }
 
   const overlay = store.get();
@@ -304,13 +335,18 @@ export function setProductActive(id: string, active: boolean): void {
       [id]: { active, updatedAt: new Date().toISOString() },
     },
   });
+  return true;
 }
 
 /** Update one variant's stock (shared with the inventory page —
  *  same data as the storefront, no second inventory system). */
-export function setVariantStock(productId: string, variantId: string, stock: number): void {
+export async function setVariantStock(
+  productId: string,
+  variantId: string,
+  stock: number,
+): Promise<boolean> {
   const product = getProductById(productId);
-  if (!product || !Number.isSafeInteger(stock) || stock < 0) return;
+  if (!product || !isDbIntegerInRange(stock, 0)) return false;
 
   if (isDatabaseConnected()) {
     const next: Product = {
@@ -323,27 +359,30 @@ export function setVariantStock(productId: string, variantId: string, stock: num
         current.active,
       ),
     );
-    runRemoteWrite('ذخیره موجودی', async () => {
+    return runRemoteWrite('ذخیره موجودی', async () => {
       await pushVariantStock(variantId, stock);
     });
-    return;
   }
 
   const next: Product = {
     ...product,
     variants: product.variants.map((v) => (v.id === variantId ? { ...v, stock } : v)),
   };
-  upsertProduct(next, getCatalogMeta(productId).active);
+  return upsertProduct(next, getCatalogMeta(productId).active);
 }
 
 /** Increase or decrease one stock row with the database's atomic RPC. */
-export function adjustVariantStock(productId: string, variantId: string, delta: number): void {
+export async function adjustVariantStock(
+  productId: string,
+  variantId: string,
+  delta: number,
+): Promise<boolean> {
   const product = getProductById(productId);
-  if (!product || !Number.isSafeInteger(delta) || delta === 0) return;
+  if (!product || !isDbIntegerInRange(delta, -MAX_DB_INTEGER) || delta === 0) return false;
   const variant = product.variants.find((item) => item.id === variantId);
-  if (!variant) return;
+  if (!variant) return false;
   const nextStock = variant.stock + delta;
-  if (!Number.isSafeInteger(nextStock) || nextStock < 0) return;
+  if (!isDbIntegerInRange(nextStock, 0)) return false;
 
   if (isDatabaseConnected()) {
     const next: Product = {
@@ -353,11 +392,10 @@ export function adjustVariantStock(productId: string, variantId: string, delta: 
     updateRemoteCatalog((current) =>
       makeRemoteCatalog(current.products.map((item) => (item.id === productId ? next : item)), current.active),
     );
-    runRemoteWrite('تغییر موجودی', () => pushVariantStockAdjustment(variantId, delta));
-    return;
+    return runRemoteWrite('تغییر موجودی', () => pushVariantStockAdjustment(variantId, delta));
   }
 
-  setVariantStock(productId, variantId, nextStock);
+  return setVariantStock(productId, variantId, nextStock);
 }
 
 /**
