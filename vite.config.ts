@@ -53,12 +53,22 @@ function browserCredentialGuard(): Plugin {
   };
 }
 
-// Workers Builds supplies the branch name. A PR must never ship production
-// backend connections, even if build variables are inherited from the dashboard.
-const isolatedWorkerPreview = process.env.WORKERS_CI === "1"
-  && !!process.env.WORKERS_CI_BRANCH
-  && process.env.WORKERS_CI_BRANCH !== "main";
-const previewDefines = isolatedWorkerPreview ? Object.fromEntries(Object.entries({
+// A branch build must never ship production backend connections, even when
+// the dashboard's build variables are inherited by the preview. TWO Cloudflare
+// build systems can build this repository, and each names the branch with its
+// own variable:
+//   • Workers Builds → WORKERS_CI=1 / WORKERS_CI_BRANCH
+//   • Pages          → CF_PAGES=1   / CF_PAGES_BRANCH
+// Covering only Workers Builds used to leave Pages branch previews — which this
+// repository also has connected — able to embed the production Supabase URL and
+// publishable key. The production branch ("main") is exempt in both systems.
+const cloudflareBuild = process.env.WORKERS_CI === "1"
+  ? { system: "workers", branch: process.env.WORKERS_CI_BRANCH }
+  : process.env.CF_PAGES === "1"
+    ? { system: "pages", branch: process.env.CF_PAGES_BRANCH }
+    : null;
+const isolatedBranchPreview = !!cloudflareBuild?.branch && cloudflareBuild.branch !== "main";
+const previewDefines = isolatedBranchPreview ? Object.fromEntries(Object.entries({
   VITE_SUPABASE_URL: "",
   VITE_SUPABASE_PUBLISHABLE_KEY: "",
   VITE_SUPABASE_ANON_KEY: "",
