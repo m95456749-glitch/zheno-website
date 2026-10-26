@@ -144,11 +144,15 @@ if (projectList.length === 0) {
         });
         const allow = (response.headers.get('access-control-allow-origin') || '').trim();
         if (allow === '*' || allow === origin) {
-          ok(`${fn}: origin ${origin} is allowed (Access-Control-Allow-Origin present)`);
+          ok(`${fn}: origin ${origin} is allowed (HTTP ${response.status}, Access-Control-Allow-Origin present)`);
+        } else if (response.status === 403) {
+          console.log(`WARN: ${fn}: origin ${origin} is REFUSED (HTTP 403, no Allow-Origin). ` +
+            'ALLOWED_ORIGINS is restricted and does not include this host, so the assistant and cloud ' +
+            'voice will fail here. Add this exact origin next to the main domain in the Supabase ' +
+            'secrets — never replace the list with *.');
         } else {
-          console.log(`WARN: ${fn}: origin ${origin} is NOT in ALLOWED_ORIGINS ` +
-            `(HTTP ${response.status}, Access-Control-Allow-Origin absent). The assistant/cloud voice ` +
-            'will fail from this host until the exact origin is added in Supabase secrets.');
+          console.log(`WARN: ${fn}: no Access-Control-Allow-Origin for ${origin} (HTTP ${response.status}). ` +
+            'Either the function is not deployed or its origin list excludes this host.');
         }
       } catch (error) {
         console.log(`WARN: ${fn}: preflight could not be completed (${error.name}). ` +

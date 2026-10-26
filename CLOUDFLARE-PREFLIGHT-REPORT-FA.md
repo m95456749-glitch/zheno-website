@@ -234,3 +234,17 @@ PASS: the production branch keeps its configured backend endpoints in both syste
 3. تصمیم دربارهٔ پروژهٔ Pages تکراری در داشبورد.
 4. ساخت staging (گزینهٔ A) برای اثبات نوشتن.
 5. فقط پس از ۱–۴: تصمیم دربارهٔ `zheno.devs.surf` و `DISABLE_GITHUB_PAGES` (نیازمند تأیید صریح شما).
+
+---
+
+## ۹. بازبینی PR #99 (دور دوم)
+
+| مورد | نتیجه |
+|---|---|
+| وضعیت PR | OPEN، `MERGEABLE`، `mergeStateStatus = CLEAN`، بدون review، بدون draft |
+| commit شاخه | `4d4b113` (یک commit روی `b69a8b8`) |
+| CI این شاخه | «checks» موفق؛ «Workers Builds: zheno» موفق (Preview)؛ «Cloudflare Pages» موفق |
+| تداخل با Worker یا Pages | هیچ: هر سه build مستقل‌اند و فقط `vite.config.ts`/اسکریپت‌ها/مستندات تغییر کرده؛ `src/` و `public/` دست‌نخورده |
+| ایرادهای یافته‌شده و اصلاح‌شده | (۱) تست ایزوله‌سازی `dist/` را با داده‌های ساختگی رها می‌کرد — حالا در پایان یک build تمیز می‌سازد؛ (۲) هر شکست assertion کل بستهٔ ۱ مگابایتی را در لاگ CI چاپ می‌کرد — به مقایسهٔ بولین تغییر کرد؛ (۳) اگر متغیر `VITE_*` جدیدی به `src/` اضافه شود و در فهرست ایزوله فراموش شود، بی‌صدا نشت می‌کرد — گارد کامل‌بودن اضافه شد (با تست منفی تأیید شد)؛ (۴) پیام preflight در `verify:live` برای حالت ۴۰۳ روشن‌تر شد |
+
+جزئیات چک‌لیست‌ها و نقشهٔ دو مسیر انتشار: `CLOUDFLARE-CUTOVER-CHECKLIST-FA.md` · برنامهٔ آزمون staging: `STAGING-ADMIN-TEST-PLAN-FA.md`
