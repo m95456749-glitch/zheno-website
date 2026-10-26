@@ -53,6 +53,20 @@ function browserCredentialGuard(): Plugin {
   };
 }
 
+// Workers Builds supplies the branch name. A PR must never ship production
+// backend connections, even if build variables are inherited from the dashboard.
+const isolatedWorkerPreview = process.env.WORKERS_CI === "1"
+  && !!process.env.WORKERS_CI_BRANCH
+  && process.env.WORKERS_CI_BRANCH !== "main";
+const previewDefines = isolatedWorkerPreview ? Object.fromEntries(Object.entries({
+  VITE_SUPABASE_URL: "",
+  VITE_SUPABASE_PUBLISHABLE_KEY: "",
+  VITE_SUPABASE_ANON_KEY: "",
+  VITE_API_BASE_URL: "",
+  VITE_ASSISTANT_API_URL: "",
+  VITE_ADMIN_AUTH_MODE: "demo",
+}).map(([name, value]) => [`import.meta.env.${name}`, JSON.stringify(value)])) : {};
+
 // https://vite.dev/config/
 export default defineConfig({
   // Root deployment: the custom domain https://zheno.devs.surf/ serves
@@ -60,6 +74,7 @@ export default defineConfig({
   // /zheno-website/ repository sub-path at runtime, so one build
   // works on both mounts — see src/utils/siteBase.ts.)
   base: "/",
+  define: previewDefines,
   build: {
     // White-screen guard: Vite 7's default target
     // (baseline-widely-available) leaves ES2022 syntax in the inline

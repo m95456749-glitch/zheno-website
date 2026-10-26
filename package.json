@@ -24,7 +24,12 @@
     "test:images:migration": "node scripts/test-product-image-migration-safety.mjs",
     "test:images:automation": "python3 scripts/test-product-image-automation.py",
     "test:images:cli": "node scripts/test-product-image-cli.mjs",
-    "verify:assistant-scene": "node scripts/verify-assistant-scene.mjs"
+    "verify:assistant-scene": "node scripts/verify-assistant-scene.mjs",
+    "deploy": "wrangler deploy",
+    "dev:worker": "wrangler dev --ip 0.0.0.0",
+    "deploy:check": "wrangler deploy --dry-run",
+    "test:worker": "node scripts/test-worker-assets.mjs",
+    "test:preview:isolation": "node scripts/test-preview-isolation.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
@@ -48,6 +53,10 @@
     "tailwindcss": "^4.1.0",
     "typescript": "~5.8.3",
     "vite": "^7.1.0",
-    "vite-plugin-singlefile": "^2.3.0"
+    "vite-plugin-singlefile": "^2.3.0",
+    "wrangler": "4.152.0"
+  },
+  "overrides": {
+    "undici@7.29.1": "7.30.1"
   }
 }

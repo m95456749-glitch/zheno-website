@@ -60,8 +60,14 @@ jobs:
       - name: Verify catalog data consistency
         run: npm run verify:data
 
+      - name: Verify Worker PR backend isolation (offline)
+        run: npm run test:preview:isolation
+
       - name: Build (production)
         run: npm run build
+
+      - name: Validate Workers Static Assets deployment (offline dry run)
+        run: npm run deploy:check
 
       - name: Runtime smoke tests
         run: npm run smoke

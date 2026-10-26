@@ -18,6 +18,9 @@ concurrency:
 
 jobs:
   build:
+    # Keep the old host available during workers.dev validation. Set this
+    # repository variable to true ONLY after successful domain cutover.
+    if: ${{ vars.DISABLE_GITHUB_PAGES != 'true' }}
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
