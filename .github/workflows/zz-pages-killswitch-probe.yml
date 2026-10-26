@@ -23,5 +23,8 @@ jobs:
           KILLSWITCH: ${{ vars.DISABLE_GITHUB_PAGES }}
         run: |
           echo "DISABLE_GITHUB_PAGES value-is-true: $([ "$KILLSWITCH" = "true" ] && echo YES || echo NO)"
-          echo "deploy.yml build job would run:      $([ "$KILLSWITCH" = "true" ] && echo NO-skipped || echo YES-deploys-to-zheno.devs.surf)"
-          echo "raw length: ${#KILLSWITCH}"
+          if [ "$KILLSWITCH" = "true" ]; then
+            echo "::notice title=killswitch::DISABLE_GITHUB_PAGES=true (deploy.yml build job will be SKIPPED)"
+          else
+            echo "::warning title=killswitch::DISABLE_GITHUB_PAGES is NOT true (deploy.yml WOULD publish to zheno.devs.surf)"
+          fi
