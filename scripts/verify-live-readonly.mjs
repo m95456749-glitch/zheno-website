@@ -1,38 +1,36 @@
 // ============================================================
 // ZHINO — READ-ONLY live verification of a deployed host
 //
-// Proves, from any machine that can reach the host, whether the
-// deployed bundle is CONNECTED to a hosted Supabase project or is
-// running in the offline/demo mode — WITHOUT writing any data and
-// WITHOUT printing any credential.
+// Answers one question with evidence: is this deployment talking to a
+// REAL hosted Supabase project, and is the host serving the built app
+// correctly? It never writes anything and never prints a credential.
 //
-// What it does (all of it read-only):
-//   1. GET / and a few deep links  → the SPA shell must be served,
-//      same origin, no cross-origin redirect.
-//   2. GET one image and one font  → bytes + MIME type.
-//   3. Classify the shipped bundle:
-//        · a hosted project URL present?          (connected build)
-//        · a publishable/anon key present?        (connected build)
-//        · a secret/sb_secret_ or service_role key present?  → FAIL
-//      Only booleans and a MASKED project reference are printed.
-//   4. When a project URL is present, send a CORS PREFLIGHT (OPTIONS)
-//      to both Edge Functions from the tested origin. The response
-//      header proves whether ALLOWED_ORIGINS already allows this
-//      host. OPTIONS has no side effects: no model call, no audio,
-//      no database write.
+// What it does (every request is GET or OPTIONS):
+//   1. GET /  → the SPA shell must be served (text/html, same origin).
+//   2. GET a few deep links → must equal the shell byte-for-byte. A host
+//      WITHOUT SPA rewrites (GitHub Pages) answers 404 with the shell in
+//      the body: that is reported as WARN (the browser still renders the
+//      app), not as a failure. Cloudflare Workers answers 200.
+//   3. GET one product image and one font → bytes + MIME type.
+//   4. Classify the bundle: hosted project URL? publishable/anon key?
+//      privileged (secret/service_role) key? Only booleans and a MASKED
+//      project reference are printed.
+//   5. Probe the project host itself (REST root, Auth health, Functions
+//      root) and the two Edge Function CORS preflights (OPTIONS) — no
+//      key, no model call, no audio, no database write.
 //
-// What it never does:
-//   · no INSERT/UPDATE/DELETE/RPC, no order, no upload, no login
-//   · no secret is read from this repository or printed
+// Output contract: PASS: / WARN: / FAIL: / INFO: lines, then a single
+// RESULT: line. Exit code 1 when any check FAILED (unreachable host,
+// leaked privileged key, non-shell deep link), so CI can gate on it.
 //
 // Usage:
-//   npm run verify:live -- https://zheno.ACCOUNT.workers.dev
+//   npm run verify:live -- https://zheno.<account>.workers.dev
+//   npm run verify:live -- https://zheno.devs.surf
 //   npm run verify:live -- http://127.0.0.1:8787      (local wrangler)
 // ============================================================
 
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 
 const raw = process.argv[2];
 if (!raw) {
@@ -51,22 +49,32 @@ const localHost = ['localhost', '127.0.0.1'].includes(base.hostname);
 assert.ok(base.protocol === 'https:' || localHost, 'Use https:// (or http://127.0.0.1 for a local wrangler).');
 
 const TIMEOUT = 20_000;
-const results = [];
+let passed = 0;
+let warned = 0;
 const failures = [];
+
 function ok(message) {
-  results.push(`PASS: ${message}`);
+  passed++;
   console.log(`PASS: ${message}`);
+}
+function warn(message) {
+  warned++;
+  console.log(`WARN: ${message}`);
 }
 /** Record a failed check and CONTINUE, so one bad path cannot hide the rest. */
 function bad(message) {
   failures.push(message);
   console.log(`FAIL: ${message}`);
 }
+function info(message) {
+  console.log(`INFO: ${message}`);
+}
+const sha = (text) => createHash('sha256').update(text).digest('hex');
 
+/** GET with a network-error guard. Status is judged by the caller. */
 async function get(path) {
-  let response;
   try {
-    response = await fetch(new URL(path, base), {
+    return await fetch(new URL(path, base), {
       headers: { 'Sec-Fetch-Mode': 'navigate' },
       signal: AbortSignal.timeout(TIMEOUT),
       redirect: 'follow',
@@ -76,47 +84,46 @@ async function get(path) {
     bad(`${path}: unreachable (${error.name}, cause=${cause})`);
     return null;
   }
-  if (response.status !== 200) {
-    // A static host without SPA rewrites serves the shell with 404 — worth
-    // reporting precisely instead of aborting the whole run.
-    bad(`${path}: HTTP ${response.status} (not 200)`);
-    return response;
-  }
-  if (new URL(response.url).origin !== base.origin) {
-    bad(`${path}: unexpected cross-origin redirect to ${new URL(response.url).origin}`);
-  }
-  return response;
 }
 
-/* ── 1. SPA shell on the real routes ───────────────────────── */
-const shell = await get('/');
-let html = '';
-if (!shell) {
+/* ── 1. the shell ─────────────────────────────────────────── */
+const shellResponse = await get('/');
+if (!shellResponse) {
   console.log('\nRESULT: the host is unreachable from here — nothing else can be verified.');
   process.exit(1);
 }
-if (!/text\/html/.test(shell.headers.get('content-type') || '')) {
-  bad(`/: unexpected content-type "${shell.headers.get('content-type')}"`);
+if (shellResponse.status !== 200) bad(`/: HTTP ${shellResponse.status}`);
+if (new URL(shellResponse.url).origin !== base.origin) {
+  bad(`/: unexpected cross-origin redirect to ${new URL(shellResponse.url).origin}`);
 }
-html = await shell.text();
-ok(`SPA shell served at / (${html.length} characters)`);
+const contentType = shellResponse.headers.get('content-type') || '';
+if (!/text\/html/.test(contentType)) bad(`/: unexpected content-type "${contentType}"`);
+const html = await shellResponse.text();
+if (html.length > 1000) ok(`SPA shell served at / (${html.length} characters)`);
+else bad(`/: response is too small to be the app (${html.length} characters)`);
+const shellHash = sha(html);
 
-const shellHash = createHash('sha256').update(html).digest('hex');
+/* ── 2. deep links ────────────────────────────────────────── */
+let softNotFound = 0;
 let deepLinkProblems = 0;
 for (const path of ['/products', '/cart', '/admin/login', '/admin/products']) {
   const response = await get(path);
   if (!response) { deepLinkProblems++; continue; }
   const body = await response.text();
-  if (createHash('sha256').update(body).digest('hex') !== shellHash) {
-    bad(`${path}: served content differs from the built SPA shell`);
-    deepLinkProblems++;
-  }
+  const isShell = sha(body) === shellHash;
+  if (response.status === 200 && isShell) continue;
+  if (response.status === 404 && isShell) { softNotFound++; continue; }
+  bad(`${path}: HTTP ${response.status}${isShell ? ' (served the app shell)' : ' (content is not the app shell)'}`);
+  deepLinkProblems++;
 }
-if (deepLinkProblems === 0) {
-  ok('deep links return the SPA shell (products, cart, admin login, admin products)');
+if (deepLinkProblems === 0) ok('deep links return the built app shell (products, cart, admin login, admin products)');
+if (softNotFound > 0) {
+  warn(`${softNotFound} deep link(s) answered HTTP 404 with the app shell in the body — ` +
+    'this host has no SPA rewrite (GitHub Pages behaviour); browsers still render the app, ' +
+    'but bots and strict clients see 404. Cloudflare Workers answers 200 here.');
 }
 
-/* ── 2. static assets ──────────────────────────────────────── */
+/* ── 3. static assets ─────────────────────────────────────── */
 let assetProblems = 0;
 for (const [path, pattern] of [
   ['/images/products/jelly-pomegranate.jpg', /^image\//],
@@ -125,16 +132,16 @@ for (const [path, pattern] of [
   const response = await get(path);
   if (!response) { assetProblems++; continue; }
   const type = response.headers.get('content-type') || '';
+  if (response.status !== 200) { bad(`${path}: HTTP ${response.status}`); assetProblems++; continue; }
   if (!pattern.test(type)) { bad(`${path}: unexpected MIME "${type}"`); assetProblems++; continue; }
   const bytes = Buffer.from(await response.arrayBuffer());
   if (bytes.length <= 1000) { bad(`${path}: suspiciously small (${bytes.length} bytes)`); assetProblems++; }
 }
 if (assetProblems === 0) ok('product image and Persian font are served with the right MIME types');
 
-/* ── 3. bundle classification (no value is ever printed) ───── */
-const PROJECT_URL = /https:\/\/([a-z]{20})\.supabase\.co/g;
+/* ── 4. bundle classification (no value is ever printed) ──── */
 const projects = new Set();
-for (const match of html.matchAll(PROJECT_URL)) projects.add(match[1]);
+for (const match of html.matchAll(/https:\/\/([a-z]{20})\.supabase\.co/g)) projects.add(match[1]);
 const hasPublishable = /sb_publishable_[A-Za-z0-9_-]{8,}/.test(html);
 const hasLegacyAnon = /"eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\./.test(html);
 
@@ -146,69 +153,30 @@ if (/sb_secret_[A-Za-z0-9_-]{8,}/.test(html)) {
   ok('bundle carries no privileged/service key');
 }
 
-function mask(ref) {
-  return `${ref.slice(0, 4)}…${ref.slice(-4)}`;
-}
-
+const mask = (ref) => `${ref.slice(0, 4)}…${ref.slice(-4)}`;
 const projectList = [...projects];
+let connected = false;
+
 if (projectList.length === 0) {
-  console.log('\nRESULT: this deployment is in OFFLINE / DEMO mode.');
-  console.log('  No hosted Supabase project URL is in the bundle, so the admin panel');
-  console.log('  cannot reach the real database. Check the build variables in the');
-  console.log('  Cloudflare dashboard (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY)');
-  console.log('  and rebuild — build variables need a new build to take effect.');
+  warn('OFFLINE / DEMO mode: no hosted Supabase project URL is in the bundle. The admin panel ' +
+    'cannot reach any database. Check the build variables (VITE_SUPABASE_URL / ' +
+    'VITE_SUPABASE_PUBLISHABLE_KEY) and rebuild — they take effect only on a new build.');
 } else {
   ok(`${projectList.length} hosted project URL(s) in the bundle: ${projectList.map(mask).join(', ')} (masked)`);
   if (hasPublishable || hasLegacyAnon) {
     ok('a publishable/anon key is present (the browser-safe key; RLS decides data access)');
   } else {
-    bad('a project URL is configured but no publishable/anon key is shipped — the app will fall back to offline mode');
+    bad('a project URL is configured but no publishable/anon key is shipped — the app falls back to offline mode');
   }
 
-  /* ── 4. Edge Function CORS preflight (no side effects) ───── */
-  const origin = base.origin;
-  for (const fn of ['zhino-assistant', 'zhino-voice']) {
-    for (const ref of projectList) {
-      const url = `https://${ref}.supabase.co/functions/v1/${fn}`;
-      try {
-        const response = await fetch(url, {
-          method: 'OPTIONS',
-          headers: {
-            Origin: origin,
-            'Access-Control-Request-Method': 'POST',
-            'Access-Control-Request-Headers': 'authorization,content-type',
-          },
-          signal: AbortSignal.timeout(TIMEOUT),
-        });
-        const allow = (response.headers.get('access-control-allow-origin') || '').trim();
-        if (allow === '*' || allow === origin) {
-          ok(`${fn}: origin ${origin} is allowed (HTTP ${response.status}, Access-Control-Allow-Origin present)`);
-        } else if (response.status === 403) {
-          console.log(`WARN: ${fn}: origin ${origin} is REFUSED (HTTP 403, no Allow-Origin). ` +
-            'ALLOWED_ORIGINS is restricted and does not include this host, so the assistant and cloud ' +
-            'voice will fail here. Add this exact origin next to the main domain in the Supabase ' +
-            'secrets — never replace the list with *.');
-        } else {
-          console.log(`WARN: ${fn}: no Access-Control-Allow-Origin for ${origin} (HTTP ${response.status}). ` +
-            'Either the function is not deployed or its origin list excludes this host.');
-        }
-      } catch (error) {
-        // Distinguish "this sandbox has no egress" from "the function answers
-        // badly". `cause.code` is a network/DNS error code, never a secret.
-        const cause = error.cause && (error.cause.code || error.cause.message) || 'no-cause';
-        console.log(`WARN: ${fn}: preflight could not be completed (${error.name}, cause=${cause}). ` +
-          'Network blocked, or the function is not deployed — this is not proof of a working endpoint.');
-      }
-    }
-  }
-  /* ── 5. reachability of the project itself (no credentials, no data) ── */
+  /* ── 5. is the backend actually there? (no credentials) ── */
   for (const ref of projectList) {
-    const probes = [
+    let reachable = 0;
+    for (const [label, url] of [
       ['REST root', `https://${ref}.supabase.co/rest/v1/`],
       ['Auth health', `https://${ref}.supabase.co/auth/v1/health`],
       ['Functions root', `https://${ref}.supabase.co/functions/v1/`],
-    ];
-    for (const [label, url] of probes) {
+    ]) {
       try {
         const response = await fetch(url, {
           method: 'GET',
@@ -216,29 +184,66 @@ if (projectList.length === 0) {
           signal: AbortSignal.timeout(TIMEOUT),
           redirect: 'manual',
         });
-        console.log(`INFO: ${label} → HTTP ${response.status} ` +
+        reachable++;
+        info(`${label} → HTTP ${response.status} ` +
           `(access-control-allow-origin=${response.headers.get('access-control-allow-origin') || 'absent'})`);
-        if (response.status === 200 || response.status === 401 || response.status === 404) {
-          ok(`${label} reachable from this host (HTTP ${response.status}) — no data read`);
+        if (response.status === 200) ok(`${label} answered 200 — the project host exists`);
+      } catch (error) {
+        const cause = (error.cause && (error.cause.code || error.cause.message)) || 'no-cause';
+        warn(`${label} unreachable (${error.name}, cause=${cause})`);
+      }
+    }
+    if (reachable === 0) {
+      bad(`project ${mask(ref)} does not resolve at all (${ref}.supabase.co) — every backend call ` +
+        'in the deployed app will fail: the admin panel cannot sign in and the storefront falls ' +
+        'back to its static catalog. This is a deployment-configuration defect, not a network issue.');
+    } else {
+      connected = true;
+    }
+
+    for (const fn of ['zhino-assistant', 'zhino-voice']) {
+      try {
+        const response = await fetch(`https://${ref}.supabase.co/functions/v1/${fn}`, {
+          method: 'OPTIONS',
+          headers: {
+            Origin: base.origin,
+            'Access-Control-Request-Method': 'POST',
+            'Access-Control-Request-Headers': 'authorization,content-type',
+          },
+          signal: AbortSignal.timeout(TIMEOUT),
+        });
+        const allow = (response.headers.get('access-control-allow-origin') || '').trim();
+        if (allow === '*' || allow === base.origin) {
+          ok(`${fn}: origin ${base.origin} is allowed (HTTP ${response.status})`);
+        } else if (response.status === 403) {
+          warn(`${fn}: origin ${base.origin} is REFUSED (HTTP 403). ALLOWED_ORIGINS is restricted and ` +
+            'does not include this host — add this exact origin next to the main domain; never use *.');
+        } else {
+          warn(`${fn}: no Access-Control-Allow-Origin for ${base.origin} (HTTP ${response.status})`);
         }
       } catch (error) {
-        const cause = error.cause && (error.cause.code || error.cause.message) || 'no-cause';
-        console.log(`WARN: ${label} unreachable (${error.name}, cause=${cause}) — network path, not an app verdict.`);
+        const cause = (error.cause && (error.cause.code || error.cause.message)) || 'no-cause';
+        warn(`${fn}: preflight could not be completed (${error.name}, cause=${cause})`);
       }
     }
   }
 
-  console.log('\nRESULT: this deployment ships a CONNECTED build (hosted project URL + public key).');
-  console.log('  Connection is proven; data access still depends on RLS and the signed-in admin.');
-  console.log('  Log in to /admin/login with a real admin account and look for the database badge');
-  console.log('  instead of the «نمایشی» badge — reads are safe, but do NOT save or place an order');
-  console.log('  on a production-connected host until a staging project exists.');
+  if (connected) {
+    console.log('\nRESULT: this deployment ships a CONNECTED build (hosted project URL + public key) ' +
+      'and the project host answers HTTP.');
+    console.log('  Data access is still decided by RLS and the signed-in admin — log in at /admin/login.');
+  } else {
+    console.log('\nRESULT: CONFIGURED BUT DEAD — the bundle points at a Supabase project whose host ' +
+      'does not resolve. Treat the panel as unusable until the build variables are corrected.');
+  }
 }
 
-console.log(`\n${results.length} read-only checks passed, ${failures.length} failed, against ${base.origin}.`);
+/* ── summary ──────────────────────────────────────────────── */
+if (projectList.length > 0 && !connected) failures.push('the configured Supabase project host does not resolve');
+console.log(`\n${passed} read-only checks passed, ${warned} warnings, ${failures.length} failed, against ${base.origin}.`);
 console.log('No data was written: no login, no save, no order, no upload, no RPC.');
 if (failures.length > 0) {
-  console.log('\nRESULT: FAIL — the checks below did not pass:');
+  console.log('\nFAILURES:');
   for (const failure of failures) console.log(`  - ${failure}`);
   process.exit(1);
 }
