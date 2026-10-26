@@ -108,3 +108,21 @@ npm run test:worker -- https://zheno.ACCOUNT-SUBDOMAIN.workers.dev
 - https://developers.cloudflare.com/workers/ci-cd/builds/configuration/
 
 متن فعلی این مستندات از مخزن رسمی `cloudflare/cloudflare-docs` شاخه production بررسی شد؛ روش مورد استفاده Workers Static Assets است، نه Cloudflare Pages.
+
+## مسیر نهایی Preview رسمی PR (بدون انتشار تولید)
+
+برای رفع خطای واقعی `wrangler preview`، بلوک `previews: {}` در Wrangler اضافه شده است. طبق مستندات رسمی برای Worker صرفاً استاتیک، assets و compatibility در سطح بالا می‌مانند و وقتی binding جداگانه نداریم، بلوک خالی صحیح است. Wrangler فعلی 4.152.0 از حداقل نسخه موردنیاز 4.135.0 جدیدتر است.
+
+- دستور خودکار شاخه PR همان `npx wrangler preview` باقی می‌ماند؛ هیچ تغییر داشبوردی لازم نیست.
+- Production branch همان `main` و دستور تولید همان `npx wrangler deploy` است؛ اجرا یا merge آن همچنان نیازمند تأیید مالک است.
+- commit محلی منتشرنشده dc17454 از مسیر نهایی حذف شده؛ scriptهای versions upload و راهنمای وابسته به Preview command مخفی وارد PR نمی‌شوند.
+- در Workers Builds، اگر `WORKERS_CI=1` و `WORKERS_CI_BRANCH` غیر از main باشد، Vite اتصال‌های Supabase، API سفارشی و endpoint دستیار را از build حذف و حالت admin را demo می‌کند. Preview عمداً به دیتابیس واقعی متصل نیست. این رفتار Production را تغییر نمی‌دهد.
+- `previews` به‌تنهایی متغیرهای Vite مرورگر را جدا نمی‌کند؛ برای همین محدودسازی build اضافه شده است. `npm run test:preview:isolation` با endpointهای ساختگی ثابت می‌کند این مقادیر وارد HTML نمی‌شوند. هیچ کلید واقعی در این تست نیست.
+- تست محلی `npm run smoke` رفتار مسیرها، cart و guardهای پنل را می‌سنجد؛ HTTP assets با `npm run test:worker` در شبیه‌ساز بررسی می‌شود. این‌ها اثبات دسترسی زنده از ایران یا اتصال Supabase نیستند.
+- با push فقط به شاخه PR، Workers Builds باید Preview رسمی را بسازد؛ URL واقعی را باید از Check یا کامنت Cloudflare دریافت و سپس مشاهده کرد. تا قبل از آن هیچ موفقیت آنلاینی ادعا نمی‌شود.
+- اتصال Supabase و تصاویر آپلودشده روی Storage در این Preview آفلاین عمداً تأیید نمی‌شوند. آزمایش بعدی آن‌ها باید با پروژه staging یا برنامه جداگانه read-only باشد؛ روی داده واقعی هیچ سفارش/آپلود/حذفی اجرا نشود.
+
+منابع رسمی بررسی‌شده:
+- https://developers.cloudflare.com/workers/previews/get-started/
+- https://developers.cloudflare.com/workers/previews/configuration/
+- https://developers.cloudflare.com/workers/ci-cd/builds/build-branches/

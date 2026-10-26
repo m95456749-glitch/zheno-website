@@ -28,7 +28,8 @@
     "deploy": "wrangler deploy",
     "dev:worker": "wrangler dev --ip 0.0.0.0",
     "deploy:check": "wrangler deploy --dry-run",
-    "test:worker": "node scripts/test-worker-assets.mjs"
+    "test:worker": "node scripts/test-worker-assets.mjs",
+    "test:preview:isolation": "node scripts/test-preview-isolation.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.116.0",
