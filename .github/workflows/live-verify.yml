@@ -96,6 +96,12 @@ jobs:
           verdict="PASS"
           grep -q "RESULT: this deployment ships a CONNECTED build" live-verify.log || verdict="NOT CONNECTED (offline/demo or unreachable)"
           grep -q "OFFLINE / DEMO mode" live-verify.log && verdict="CONNECTED BUILD NOT SHIPPED (deployment runs in offline/demo mode)"
+          # Annotations are the part of a run that is readable through the API,
+          # so the evidence is repeated there — one line per check, plus every
+          # warning (CORS/origin/offline) verbatim.
+          grep '^PASS:' live-verify.log | sed 's/^/::notice title=verify-live-pass::/'
+          grep '^WARN:' live-verify.log | sed 's/^/::warning title=verify-live-warn::/'
+          grep 'RESULT:' live-verify.log | sed 's/^/::notice title=verify-live-result::/' || true
           echo "::notice title=live-verify::$verdict | $(grep -c '^PASS:' live-verify.log) read-only checks passed | $(grep -c '^WARN:' live-verify.log) warnings"
           echo "### Live verification of \`${{ steps.target.outputs.url }}\`" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
