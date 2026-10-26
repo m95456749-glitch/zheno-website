@@ -1,7 +1,8 @@
-# TEMPORARY read-only probe — proves the live state of the Cloudflare deployment.
-# Same script as .github/workflows/live-verify.yml, triggered by a push so it can
-# run without `actions: write`. Read-only: GET/OPTIONS only, no secret, no write.
-# Deleted in the next commit (run 2: richer diagnostics); the run stays as evidence against its own SHA.
+# TEMPORARY read-only probe (deleted in a later commit).
+# 1) runs verify:live against the Worker AND the production domain,
+# 2) asks the Supabase Management API (read-only GET) whether the project ref
+#    embedded in the deployed bundle actually exists and what state it is in.
+# No write, no migration, no secret printed (only booleans, refs, names, status).
 name: zz-live-probe
 on:
   push:
@@ -14,34 +15,57 @@ permissions:
   contents: read
 
 jobs:
-  probe:
+  live:
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    env:
-      TARGET: https://zheno.m95456749.workers.dev
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: DNS of the production domain and of the Worker host
+      - name: Worker deployment (read-only)
         run: |
-          echo "zheno.devs.surf ->" && getent ahosts zheno.devs.surf | awk '{print "  "$1}' | sort -u
-          echo "zheno.m95456749.workers.dev ->" && getent ahosts zheno.m95456749.workers.dev | awk '{print "  "$1}' | sort -u
-          echo "::notice title=dns::zheno.devs.surf=$(getent ahosts zheno.devs.surf | awk '{print $1}' | sort -u | head -1)"
+          node scripts/verify-live-readonly.mjs https://zheno.m95456749.workers.dev 2>&1 | tee worker.log || true
+          sed -n 's/^/::notice title=worker::/p' worker.log | grep -E "PASS:|RESULT:|WARN:|INFO:" || true
 
-      - name: Read-only live verification
-        run: node scripts/verify-live-readonly.mjs "$TARGET" 2>&1 | tee live.log
-
-      - name: Publish every line of evidence as a readable annotation
-        if: always()
+      - name: Production domain zheno.devs.surf (read-only)
         run: |
-          set -euo pipefail
-          grep '^PASS:' live.log | sed 's/^/::notice title=live-pass::/' || true
-          grep '^WARN:' live.log | sed 's/^/::warning title=live-warn::/' || true
-          grep 'RESULT:' live.log | sed 's/^/::notice title=live-result::/' || true
-          echo "::notice title=live-target::${TARGET}"
+          node scripts/verify-live-readonly.mjs https://zheno.devs.surf 2>&1 | tee prod.log || true
+          sed -n 's/^/::notice title=prod::/p' prod.log | grep -E "PASS:|RESULT:|WARN:|INFO:" || true
+          echo "::notice title=prod-compare::worker-shell=$(grep -o 'shell served at / ([0-9]*' worker.log | grep -o '[0-9]*') prod-shell=$(grep -o 'shell served at / ([0-9]*' prod.log | grep -o '[0-9]*')"
+
+      - name: Supabase project state (Management API, read-only GET)
+        env:
+          TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+          REF: kijhqsyftzufydonggeb
+        run: |
+          set -uo pipefail
+          if [ -z "${TOKEN:-}" ]; then
+            echo "::warning title=supabase-api::SUPABASE_ACCESS_TOKEN is not configured; project state cannot be queried."
+            exit 0
+          fi
+          code=$(curl -s -o /tmp/p.json -w '%{http_code}' -H "Authorization: Bearer $TOKEN" https://api.supabase.com/v1/projects)
+          echo "::notice title=supabase-api::GET /v1/projects -> HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "::warning title=supabase-api::the token could not list projects (HTTP $code). Nothing else was attempted."
+            exit 0
+          fi
+          python3 - "$REF" <<'PY'
+          import json, sys
+          ref = sys.argv[1]
+          projects = json.load(open('/tmp/p.json'))
+          if not isinstance(projects, list):
+              print("::warning title=supabase-api::unexpected response shape")
+              raise SystemExit(0)
+          print(f"::notice title=supabase-api::token sees {len(projects)} project(s)")
+          for p in projects:
+              print(f"::notice title=supabase-api-reflist::ref={p.get('id')} name={p.get('name')} status={p.get('status')} region={p.get('region')}")
+          match = [p for p in projects if p.get('id') == ref]
+          if match:
+              print(f"::notice title=supabase-api-verdict::project {ref} EXISTS status={match[0].get('status')}")
+          else:
+              print(f"::warning title=supabase-api-verdict::project {ref} is NOT in the token's project list (deleted, moved, or a different account)")
+          PY
