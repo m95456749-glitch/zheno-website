@@ -1,0 +1,111 @@
+# ZHINO — read-only verification of a DEPLOYED host (manual only)
+#
+# Why this exists: an agent sandbox or a developer machine in Iran may be
+# unable to reach *.workers.dev. A GitHub-hosted runner can. This workflow
+# runs the same `npm run verify:live` script against the real deployment and
+# publishes the result as a check annotation, so the evidence is reviewable
+# without trusting anyone's console output.
+#
+# Safety contract:
+#   * workflow_dispatch ONLY — a pull request or push can never start it
+#   * permissions: contents: read — nothing is deployed, nothing is written
+#   * the script performs GET/OPTIONS requests only: no login, no save, no
+#     order, no upload, no RPC. It never prints a key, only booleans and a
+#     MASKED project reference.
+#   * no secret is required. The target URL is public information.
+#
+# Usage:
+#   Actions → "Live verify (read-only)" → Run workflow
+#   url = https://zheno.<ACCOUNT-SUBDOMAIN>.workers.dev
+#   (or set the repository VARIABLE CLOUDFLARE_WORKER_URL once and leave the
+#   input empty — it is public, never store it as a secret.)
+#
+# Exit status: the job FAILS when the deployment is not reachable, when the
+# bundle carries a privileged key, or when a branch-preview bundle was
+# accidentally published. It only WARNS when the bundle is in offline/demo
+# mode or when an Edge Function origin is not allowed — those are reported,
+# never silently passed.
+
+name: Live verify (read-only)
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Base URL of the deployed host (https://…)"
+        required: false
+        default: ""
+
+permissions:
+  contents: read
+
+concurrency:
+  group: live-verify
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Resolve target URL
+        id: target
+        env:
+          INPUT_URL: ${{ inputs.url }}
+          VARIABLE_URL: ${{ vars.CLOUDFLARE_WORKER_URL }}
+        run: |
+          set -euo pipefail
+          url="${INPUT_URL:-}"
+          [ -z "$url" ] && url="${VARIABLE_URL:-}"
+          url="$(printf '%s' "$url" | tr -d '\r\n ')"
+          if [ -z "$url" ]; then
+            echo "::error title=no-target::No URL. Pass the 'url' input, or set the repository variable CLOUDFLARE_WORKER_URL (public value; see the Worker in the Cloudflare dashboard → Settings → Domains & Routes)."
+            exit 1
+          fi
+          case "$url" in
+            https://*) : ;;
+            *) echo "::error title=bad-target::The URL must start with https://"; exit 1 ;;
+          esac
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "::notice title=target::Verifying $url (read-only)"
+
+      - name: DNS state of the production domain (read-only)
+        run: |
+          echo "zheno.devs.surf currently resolves to:"
+          getent ahosts zheno.devs.surf | awk '{print "  " $1}' | sort -u || true
+          echo "GitHub Pages ranges (185.199.108-111.153 / 2606:50c0:8000::153-8003::153) mean the main domain is still served by GitHub Pages."
+
+      - name: Run the read-only live verification
+        id: live
+        continue-on-error: true
+        run: node scripts/verify-live-readonly.mjs "${{ steps.target.outputs.url }}" 2>&1 | tee live-verify.log
+
+      - name: Publish the result as a reviewable annotation
+        if: always()
+        run: |
+          set -euo pipefail
+          verdict="PASS"
+          grep -q "RESULT: this deployment ships a CONNECTED build" live-verify.log || verdict="NOT CONNECTED (offline/demo or unreachable)"
+          grep -q "OFFLINE / DEMO mode" live-verify.log && verdict="CONNECTED BUILD NOT SHIPPED (deployment runs in offline/demo mode)"
+          echo "::notice title=live-verify::$verdict | $(grep -c '^PASS:' live-verify.log) read-only checks passed | $(grep -c '^WARN:' live-verify.log) warnings"
+          echo "### Live verification of \`${{ steps.target.outputs.url }}\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "**Verdict:** $verdict" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          cat live-verify.log >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Fail when the deployment is unreachable or unsafe
+        if: steps.live.outcome == 'failure'
+        run: |
+          echo "::error title=live-verify::The read-only verification failed — see the log above. No data was written."
+          exit 1
