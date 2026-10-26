@@ -183,6 +183,12 @@ export async function updateOrderStatus(id: string, status: OrderStatus): Promis
   try {
     snapshot = await fetchRemoteOrders();
     readSucceeded = true;
+    if (writeSucceeded && !failure) {
+      const confirmed = snapshot.find((order) => order.id === id);
+      if (!confirmed || confirmed.status !== status) {
+        failure = `تغییر وضعیت سفارش ${id} — وضعیت جدید در بازخوانی دیتابیس تأیید نشد.`;
+      }
+    }
   } catch {
     if (!writeSucceeded) snapshot = previousSnapshot;
     if (!failure) {

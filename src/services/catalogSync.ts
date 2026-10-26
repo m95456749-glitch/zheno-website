@@ -119,9 +119,16 @@ export function makeRemoteCatalog(products: Product[], active: Record<string, bo
  *
  * Resolves true only after the write and the authoritative re-read
  * both succeed, so callers can delay any «saved» feedback until the
- * database has actually confirmed the result.
+ * database has actually confirmed the result. Callers that target one
+ * value may also verify it in the fetched snapshot; this catches an
+ * apparently successful UPDATE that changed no row (for example when
+ * RLS hides the target row).
  */
-export async function runRemoteWrite(label: string, write: () => Promise<void>): Promise<boolean> {
+export async function runRemoteWrite(
+  label: string,
+  write: () => Promise<void>,
+  verify?: (next: RemoteCatalog) => boolean,
+): Promise<boolean> {
   ++readVersion; // invalidate catalog reads started before this mutation
   pending += 1;
   setState({ phase: 'syncing', pending, error: null });
@@ -137,6 +144,9 @@ export async function runRemoteWrite(label: string, write: () => Promise<void>):
     const version = ++readVersion;
     const next = await fetchRemoteCatalog();
     if (version === readVersion) snapshot = next;
+    if (!failure && verify && !verify(next)) {
+      failure = `${label} — مقدار جدید در بازخوانی دیتابیس تأیید نشد.`;
+    }
   } catch {
     // Keep the previous snapshot: stale data is better than none, but an
     // unconfirmed write must not be reported as a completed save.

@@ -297,9 +297,13 @@ export async function upsertProduct(product: Product, active: boolean): Promise<
 export async function removeProduct(id: string): Promise<boolean> {
   if (isDatabaseConnected()) {
     updateRemoteCatalog((current) => makeRemoteCatalog(current.products, { ...current.active, [id]: false }));
-    return runRemoteWrite('پنهان‌کردن محصول', async () => {
-      await pushProductActive(id, false);
-    });
+    return runRemoteWrite(
+      'پنهان‌کردن محصول',
+      async () => {
+        await pushProductActive(id, false);
+      },
+      (next) => next.active[id] === false,
+    );
   }
 
   const overlay = store.get();
@@ -314,9 +318,13 @@ export async function removeProduct(id: string): Promise<boolean> {
 export async function setProductActive(id: string, active: boolean): Promise<boolean> {
   if (isDatabaseConnected()) {
     updateRemoteCatalog((current) => makeRemoteCatalog(current.products, { ...current.active, [id]: active }));
-    return runRemoteWrite('تغییر وضعیت نمایش', async () => {
-      await pushProductActive(id, active);
-    });
+    return runRemoteWrite(
+      'تغییر وضعیت نمایش',
+      async () => {
+        await pushProductActive(id, active);
+      },
+      (next) => next.active[id] === active,
+    );
   }
 
   const overlay = store.get();

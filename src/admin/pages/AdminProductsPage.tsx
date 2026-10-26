@@ -430,7 +430,12 @@ function ProductFormModal({
     const weight = Number(form.weightGrams);
     const stock = Number(form.stock);
     const imageUrl = form.imageUrl.trim().replace(/^\//, '');
-    const currentVariantId = firstVariant?.id;
+    const id = draftProductIdRef.current;
+    // Resolve the retry-stable variant id before conflict checks. After a
+    // partial write (or an optimistic snapshot retained through a failed
+    // re-read), the live catalog may already contain this very variant;
+    // it must not be reported as another product's SKU on retry.
+    const variantId = firstVariant?.id ?? `${id}-v1`;
     const sku =
       normalizeSku(form.sku) ||
       (isDbIntegerInRange(weight, 1) ? generateSku(form.category, form.flavorId, weight) : '');
@@ -443,7 +448,7 @@ function ProductFormModal({
     if (!isValidSku(sku)) {
       next.sku = 'SKU باید ۳ تا ۶۴ نویسه و فقط شامل حروف لاتین، عدد، خط‌تیره یا آندرلاین باشد';
     } else {
-      const conflict = findSkuConflict(existingProducts, sku, currentVariantId);
+      const conflict = findSkuConflict(existingProducts, sku, variantId);
       if (conflict) {
         next.sku = `این SKU قبلاً برای «${conflict.product.shortName}» استفاده شده است؛ یک SKU یکتا وارد کنید`;
       }
@@ -455,9 +460,6 @@ function ProductFormModal({
     setErrors(next);
     setSaveFailed(false);
     if (Object.keys(next).length > 0) return;
-
-    const id = draftProductIdRef.current;
-    const variantId = currentVariantId ?? `${id}-v1`;
 
     const editedVariant = {
       id: variantId,
